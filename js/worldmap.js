@@ -203,14 +203,17 @@ function buildTerrain(D){
     if (i < 1 || j < 1 || i >= nx - 1 || j >= ny - 1 || !ins[idx] || dc[idx] < 5) continue;
     const h = hg[idx], sl = Math.abs(hg[idx+1] - hg[idx-1]) + Math.abs(hg[idx+nx] - hg[idx-nx]);
     const base = jy - h * LIFT, r = hash2(i * 3, j * 7);
-    if (h > .09 && h < .58 && sl < .09 && fbm(jx * .03 + 5, jy * .03) > .4 && r < .9 * (1 - sstep(.4, .58, h))) put(j, { k:0, x:jx, y:base, s:5 + hash2(i, j) * 3.4, sd:i * 131 + j });
-    else if (h > .52 && r < .22) put(j, { k:1, x:jx, y:base, s:1.5 + hash2(j, i) * 1.8, sd:i * 17 + j });
+    if (h > .09 && h < .58 && sl < .09 && fbm(jx * .03 + 5, jy * .03) > .4 && r < .9 * (1 - sstep(.4, .58, h))) put(j, { k:0, x:jx, y:base, s:5 + hash2(i, j) * 3.4, sd:i * 131 + j, gi:i, gj:j });
+    else if (h > .52 && r < .22) put(j, { k:1, x:jx, y:base, s:1.5 + hash2(j, i) * 1.8, sd:i * 17 + j, gi:i, gj:j });
   }
 
-  // 4) 地形條帶（由後往前）
+  // 4) 地形條帶（由後往前）：先畫到獨立圖層，之後柔化，避免一格一格的色塊
+  const G = mk(layer.width, layer.height), LG = G.getContext('2d');
+  const mainL = L;
   const lowStroke = [];
   for (let j = 1; j < ny - 1; j++){
-    ID(); L.beginPath(); let anyHatch = false;
+    const L = LG;
+    L.setTransform(1, 0, 0, 1, 0, 0); L.beginPath(); let anyHatch = false;
     for (let i = 1; i < nx - 1; i++){
       const idx = j*nx + i; if (!ins[idx]) continue;
       const h = hg[idx], px = x0 + i*CELL, py = y0 + j*CELL;
@@ -233,8 +236,29 @@ function buildTerrain(D){
     }
     if (anyHatch){ L.strokeStyle = 'rgba(58,42,32,.32)'; L.lineWidth = Math.max(1, .3 * q); L.stroke(); }
     if (lowStroke.length){ L.fillStyle = 'rgba(58,42,32,.13)'; for (let k = 0; k < lowStroke.length; k += 3) L.fillRect(lowStroke[k], lowStroke[k+1], lowStroke[k+2], Math.max(1, Math.round(.6 * q))); lowStroke.length = 0; }
-    const bk = buckets[j];
-    if (bk){ W2L(); bk.sort((a, b) => a.y - b.y); for (const o of bk) o.k ? drawRock(L, o.x, o.y, o.s, o.sd) : drawTree(L, o.x, o.y, o.s, o.sd); }
+  }
+  // 柔化：縮小再分段放大（多次雙線性），保留原本清楚的外形透明度
+  {
+    const W0 = G.width, H0 = G.height, k = Math.max(2.2, CELL * q * .7);
+    const a = mk(W0 / k, H0 / k); a.getContext('2d').drawImage(G, 0, 0, a.width, a.height);
+    const b = mk(W0 / 2, H0 / 2), bg = b.getContext('2d'); bg.imageSmoothingQuality = 'high'; bg.drawImage(a, 0, 0, b.width, b.height);
+    const s2 = mk(W0, H0), sg2 = s2.getContext('2d'); sg2.imageSmoothingQuality = 'high'; sg2.drawImage(b, 0, 0, W0, H0);
+    sg2.globalCompositeOperation = 'destination-in'; sg2.drawImage(G, 0, 0);
+    mainL.setTransform(1, 0, 0, 1, 0, 0); mainL.drawImage(G, 0, 0); mainL.drawImage(s2, 0, 0);
+  }
+  // 樹與岩石：統一畫在柔化後的地形上，被前方山稜擋住的就不畫
+  {
+    const all = []; for (const bk of buckets) if (bk) for (const o of bk) all.push(o);
+    all.sort((a, b) => a.y - b.y);
+    W2L();
+    for (const o of all){
+      let hidden = false;
+      for (let kk = 1; kk < 46 && !hidden; kk++){
+        const jj = o.gj + kk; if (jj >= ny) break; const id2 = jj * nx + o.gi; if (!ins[id2]) continue;
+        const yy = y0 + jj * CELL - hg[id2] * LIFT; if (yy < o.y - o.s * .25) hidden = true;
+      }
+      if (!hidden) o.k ? drawRock(L, o.x, o.y, o.s, o.sd) : drawTree(L, o.x, o.y, o.s, o.sd);
+    }
   }
   // 5) 前緣海岸墨線與沙邊
   W2L(); L.lineJoin = 'round'; L.lineCap = 'round';
@@ -279,7 +303,7 @@ function buildScene(){
     if (r() < clamp(sstep(48, 120, d) + edge, 0, 1)) S.puffs.push({ x, y, w:56 + r() * 62, v:(r() * 3) | 0, ph:r() * TAU, a:.78 + r() * .22 });
   }
   S.puffs.sort((p, q) => p.y - q.y);
-  S.drift = []; for (let i = 0; i < 9; i++) S.drift.push({ x:r() * 700 - 80, y:200 + r() * 400, w:60 + r() * 50, v:(r() * 3) | 0, sp:3 + r() * 4 });
+  S.drift = []; for (let i = 0; i < 6; i++) S.drift.push({ x:r() * 700 - 80, y:200 + r() * 400, w:60 + r() * 50, v:(r() * 3) | 0, sp:3 + r() * 4 });
   S.dirty = false;
 }
 function ensure(){
@@ -349,7 +373,7 @@ function drawDrift(c, t){
   }
   for (const d of S.drift){
     const x = ((d.x + t * d.sp) % 700) - 80, w = d.w, h = w * .55;
-    c.globalAlpha = .93; c.drawImage(S.sprites[d.v], x - w / 2, d.y - 44 - h * .6, w, h);
+    c.globalAlpha = .8; c.drawImage(S.sprites[d.v], x - w / 2, d.y - 44 - h * .6, w, h);
   }
   c.globalAlpha = 1;
 }
@@ -392,7 +416,27 @@ function drawLock(c, x, y){
   c.lineWidth = .9; c.strokeStyle = INK; c.beginPath(); c.arc(x, y - 1.6, 2.2, Math.PI, TAU); c.stroke();
   c.fillStyle = '#d9a566'; irr(c, x - 3, y - 1.6, 6, 5, 1.2, 77); c.fill(); c.stroke();
 }
-function drawPin(c, m, idx, x, y, ps, t){
+// 木牌外框（本地座標，未含偏移），用來避免名字互相重疊
+function pinBox(c, m){ const w = tw(c, m.name) + 17; return { w, x0:-w / 2 - 2, x1:w / 2 + 12, y0:-24 - 7 - 16, y1:-24 + 7 + 2 }; }
+const PIN_OFFS = [[0,0],[1,-4],[-1,-4],[1.9,-4],[-1.9,-4],[0,-20],[1,-24],[-1,-24],[1.9,-24],[-1.9,-24],[0,-40],[1,-44],[-1,-44]];
+function layoutPins(c, order, ps){
+  const placed = [], out = {};
+  // 目前挑戰的山、選中的山先放，維持在原位
+  const pri = o => (o.m.id === S.sel ? 0 : o.m.id === S.data.current ? 1 : 2);
+  const list = order.slice().sort((a, b) => pri(a) - pri(b) || b.q.y - a.q.y);
+  for (const o of list){
+    const s = ps * (S.anim[o.m.id] || 1), b = pinBox(c, o.m); let best = null;
+    for (const f of PIN_OFFS){
+      const ox = f[0] * (b.w / 2 + 8), oy = f[1];
+      const r = { x0:o.q.x + (b.x0 + ox) * s, x1:o.q.x + (b.x1 + ox) * s, y0:o.q.y + (b.y0 + oy) * s, y1:o.q.y + (b.y1 + oy) * s };
+      if (!placed.some(p => r.x0 < p.x1 + 2 && r.x1 > p.x0 - 2 && r.y0 < p.y1 + 2 && r.y1 > p.y0 - 2)){ best = { ox, oy, r }; break; }
+    }
+    if (!best){ const b0 = b; best = { ox:0, oy:0, r:{ x0:o.q.x + b0.x0 * s, x1:o.q.x + b0.x1 * s, y0:o.q.y + b0.y0 * s, y1:o.q.y + b0.y1 * s } }; }
+    placed.push(best.r); out[o.m.id] = best;
+  }
+  return out;
+}
+function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   const D = S.data, id = m.id, done = D.done[id] || 0, locked = !!D.locked[id], cur = D.current === id;
   const a = S.anim[id] || (S.anim[id] = 1), want = (S.hover === id || S.sel === id) ? 1.14 : 1; S.anim[id] = a + (want - a) * .2;
   ps *= S.anim[id];
@@ -402,10 +446,14 @@ function drawPin(c, m, idx, x, y, ps, t){
     g.addColorStop(0, 'rgba(255,226,130,.75)'); g.addColorStop(.6, 'rgba(255,214,110,.3)'); g.addColorStop(1, 'rgba(255,214,110,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, -6, r, 0, TAU); c.fill(); }
   c.fillStyle = 'rgba(40,25,10,.22)'; c.beginPath(); c.ellipse(0, 0, 12, 4.4, 0, 0, TAU); c.fill();
   c.fillStyle = 'rgba(40,25,10,.38)'; c.beginPath(); c.ellipse(0, 0, 7, 2.6, 0, 0, TAU); c.fill();
+  if (cur){ drawHiker(c, 8, 1, t); drawShiba(c, 18, 1, t); }
   if (locked) c.globalAlpha = .72;
-  if (done) drawCairn(c, -w / 2 - 3, 0);
+  if (done) drawCairn(c, -9, 0);
+  // 木樁（偏移時變成一根斜斜的引線木樁，從山頂連到木牌）
+  c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(ox, oy + py + ph / 2);
+  c.strokeStyle = INK; c.lineWidth = 4.6; c.stroke(); c.strokeStyle = '#9a6a3f'; c.lineWidth = 2.6; c.stroke();
+  c.translate(ox, oy);
   c.lineWidth = 1; c.strokeStyle = INK; c.lineJoin = 'round';
-  c.fillStyle = '#9a6a3f'; c.fillRect(-1.6, py + ph - 1, 3.2, -py - ph + 1); c.strokeRect(-1.6, py + ph - 1, 3.2, -py - ph + 1);
   // 旗桿與小旗
   const fx = w / 2 - 5, wave = Math.sin(t * 3 + idx) * 1.6;
   c.beginPath(); c.moveTo(fx, py - 1); c.lineTo(fx, py - 15); c.stroke();
@@ -424,14 +472,14 @@ function drawPin(c, m, idx, x, y, ps, t){
   const pg = D.prog[id]; if (pg && pg.dist > 0 && !done && m.dist){ const f = clamp(pg.dist / m.dist, 0, 1);
     c.fillStyle = '#fbf0d5'; irr(c, -11, 4, 22, 3.6, 1.6, 55); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#8fcf6e'; c.fillRect(-10, 5, 20 * f, 1.6); }
   c.globalAlpha = 1;
-  if (cur){ drawHiker(c, w / 2 + 11, 1, t); drawShiba(c, w / 2 + 21, 1, t); }
+  c.translate(-ox, -oy);
   if (locked){ // 手繪霧：半透明雲團覆蓋
     [[-15, -6, 58], [14, -8, 60], [0, -22, 64], [-4, 2, 56], [20, -20, 46]].forEach((f, i) => {
       const dx = Math.sin(t * .5 + i * 1.7) * 3, ww = f[2], hh = ww * .55; c.globalAlpha = .86; c.drawImage(S.sprites[i % 3], f[0] + dx - ww / 2, f[1] - hh * .6, ww, hh); });
     c.globalAlpha = 1;
   }
   c.restore();
-  S.hits.push({ id, x0:x - (w / 2 + 6) * ps, x1:x + (w / 2 + (cur ? 28 : 10)) * ps, y0:y - 42 * ps, y1:y + 8 * ps, y });
+  S.hits.push({ id, x0:x + Math.min(-12, ox - w / 2 - 6) * ps, x1:x + Math.max(cur ? 26 : 12, ox + w / 2 + 10) * ps, y0:y + (oy - 42) * ps, y1:y + 8 * ps, y });
 }
 function drawPaths(c, t, ps){
   const D = S.data;
@@ -459,17 +507,21 @@ function makeRays(){
   }
   S.rays = c;
 }
+// 移軸模糊：縮小 1/2→1/4→1/8，再一階一階放大回來（每次只放大 2 倍，邊緣才不會有鋸齒）
 function tiltBand(top){
-  const cv = S.cv, c = S.ctx, W = cv.width, H = cv.height, bh = Math.max(8, Math.round(H * .22)), sy = top ? 0 : H - bh;
-  const w1 = Math.ceil(W / 2), h1 = Math.ceil(bh / 2), w2 = Math.ceil(W / 5), h2 = Math.ceil(bh / 5);
-  if (!S.tb1 || S.tb1.width !== w1 || S.tb1.height !== h1){ S.tb1 = mk(w1, h1); S.tb2 = mk(w2, h2); }
-  const a = S.tb1.getContext('2d'), b = S.tb2.getContext('2d');
-  a.imageSmoothingEnabled = true; b.imageSmoothingEnabled = true;
-  a.clearRect(0, 0, w1, h1); a.drawImage(cv, 0, sy, W, bh, 0, 0, w1, h1);
-  b.globalCompositeOperation = 'source-over'; b.clearRect(0, 0, w2, h2); b.drawImage(S.tb1, 0, 0, w1, h1, 0, 0, w2, h2);
-  const g = b.createLinearGradient(0, top ? 0 : h2, 0, top ? h2 : 0); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(.35, 'rgba(0,0,0,.75)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  b.globalCompositeOperation = 'destination-in'; b.fillStyle = g; b.fillRect(0, 0, w2, h2); b.globalCompositeOperation = 'source-over';
-  c.setTransform(1, 0, 0, 1, 0, 0); c.imageSmoothingEnabled = true; c.drawImage(S.tb2, 0, 0, w2, h2, 0, sy, W, bh);
+  const cv = S.cv, c = S.ctx, W = cv.width, H = cv.height, bh = Math.max(8, Math.round(H * .2)), sy = top ? 0 : H - bh;
+  const sizes = [2, 4, 8].map(k => [Math.max(1, Math.ceil(W / k)), Math.max(1, Math.ceil(bh / k))]);
+  if (!S.tbs || S.tbs[0].width !== sizes[0][0] || S.tbs[0].height !== sizes[0][1]) S.tbs = sizes.map(s => mk(s[0], s[1])).concat([mk(sizes[1][0], sizes[1][1]), mk(sizes[0][0], sizes[0][1]), mk(W, bh)]);
+  const [d2, d4, d8, u4, u2, full] = S.tbs, cx = k => { const x = k.getContext('2d'); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; x.globalCompositeOperation = 'source-over'; x.clearRect(0, 0, k.width, k.height); return x; };
+  cx(d2).drawImage(cv, 0, sy, W, bh, 0, 0, d2.width, d2.height);
+  cx(d4).drawImage(d2, 0, 0, d4.width, d4.height);
+  cx(d8).drawImage(d4, 0, 0, d8.width, d8.height);
+  cx(u4).drawImage(d8, 0, 0, u4.width, u4.height);
+  cx(u2).drawImage(u4, 0, 0, u2.width, u2.height);
+  const f = cx(full); f.drawImage(u2, 0, 0, W, bh);
+  const g = f.createLinearGradient(0, top ? 0 : bh, 0, top ? bh : 0); g.addColorStop(0, 'rgba(0,0,0,.95)'); g.addColorStop(.4, 'rgba(0,0,0,.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  f.globalCompositeOperation = 'destination-in'; f.fillStyle = g; f.fillRect(0, 0, W, bh); f.globalCompositeOperation = 'source-over';
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(full, 0, sy);
 }
 
 function render(t){
@@ -488,7 +540,9 @@ function render(t){
   S.hits = [];
   drawPaths(c, t, ps);
   const order = S.data.mountains.map((m, i) => ({ m, i, p:S.pos[m.id] })).filter(o => o.p).sort((a, b) => a.p.y - b.p.y);
-  for (const o of order){ const q = w2s(o.p.x, o.p.y); if (q.x < -90 || q.x > vw + 90 || q.y < -60 || q.y > vh + 90) continue; drawPin(c, o.m, o.i, q.x, q.y, ps, t); }
+  order.forEach(o => o.q = w2s(o.p.x, o.p.y));
+  const lay = layoutPins(c, order, ps);
+  for (const o of order){ const q = o.q; if (q.x < -90 || q.x > vw + 90 || q.y < -60 || q.y > vh + 90) continue; const L2 = lay[o.m.id] || { ox:0, oy:0 }; drawPin(c, o.m, o.i, q.x, q.y, ps, t, L2.ox, L2.oy); }
   // 金色光芒（右上斜射）與暖霧
   if (S.rays){ c.save(); c.globalCompositeOperation = 'screen'; c.globalAlpha = .62 + .22 * Math.sin(t * .6); c.drawImage(S.rays, Math.sin(t * .2) * 6, 0, vw, vh); c.restore(); }
   const hz = c.createLinearGradient(0, 0, 0, vh * .2); hz.addColorStop(0, 'rgba(255,242,214,.32)'); hz.addColorStop(1, 'rgba(255,242,214,0)'); c.fillStyle = hz; c.fillRect(0, 0, vw, vh * .2);
