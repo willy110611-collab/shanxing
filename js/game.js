@@ -417,6 +417,16 @@
   const RAR_W = { '普通':70, '稀有':25, '傳說':5 };
   const RAR_BG = { '普通':'', '稀有':'background:linear-gradient(170deg,#eef7ff,#c4def4)', '傳說':'background:linear-gradient(170deg,#fff6cf,#f6d472)' };
   const RAR_COL = { '普通':'#cfe6b0', '稀有':'#bfdcf5', '傳說':'#ffe08a' };
+  const RAR_CLS = { '普通':'rar-common', '稀有':'rar-rare', '傳說':'rar-legend' };
+  // 介面美術圖：圖到了就用樣式表蓋過程式畫的圖示（之後才開的視窗也會套用）
+  SX.art.onLoad(() => {
+    const u = id => SX.art.url(id), css = [];
+    const icons = { icon_map:'.i-map', icon_bag:'.i-bag', icon_album:'.i-photo', icon_settings:'.i-gear', icon_rest:'.i-tent' };
+    for (const id in icons) if (u(id)) css.push(`${icons[id]}{background-image:url("${u(id)}")!important;filter:none!important}`);
+    for (const k of ['common', 'rare', 'legend']) if (u('rarity_' + k)) css.push(`.bag .slot.rar-${k}{background:url("${u('rarity_' + k)}") center/100% 100% no-repeat!important;border-color:transparent!important;box-shadow:none!important}`);
+    if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
+    if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }
+  });
   function trSvg(tr){ return SX.art.img(tr.id, trSvgDrawn(tr)); }
   function trSvgDrawn(tr){
     const col = ['#ee8458','#6fae68','#5aa0d8','#f2c35a','#b98ad9','#e88fa8'][C.hash(tr.id) % 6], n = tr.name, o = `stroke="${INK}" stroke-linejoin="round"`;
@@ -662,7 +672,7 @@
     modal(`<h3>背包</h3>
       ${SV.titles.length ? `<div class="grp" style="margin-top:0">稱號（點一個掛在身上）</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${SV.titles.map(x => `<button class="chip" data-title="${x}"${SV.title === x ? ' style="background:#ffe08a"' : ''}>${x}</button>`).join('')}</div>` : ''}
       <div class="grp" style="margin-top:0">寶物 ${have} / ${SX.TREASURES.length}</div>
-      <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>` : '<div class="slot empty"></div>').join('')}</div>
+      <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''} ${RAR_CLS[x.rarity] || ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>` : '<div class="slot empty"></div>').join('')}</div>
       <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點一件寶物，看看它的故事。' : '步道上會閃閃發亮的地方，點一下看看。'}</p>
       <div class="grp">隱藏任務 ${Object.keys(SV.quests).length} / ${SX.QUESTS.length}</div>
       <ul class="quest">${SX.QUESTS.map(q => SV.quests[q.id] ? `<li class="done"><span>${q.name}<small>${q.desc}</small></span></li>` : `<li class="hid"><span>？？？<small>${q.hint}</small></span></li>`).join('')}</ul>
