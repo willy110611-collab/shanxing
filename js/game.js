@@ -462,7 +462,7 @@
     else if (/雨|霧|雲|風|彩虹|星/.test(tx)) g = `<circle cx="80" cy="42" r="15" fill="#ffd166" ${o}/><path d="M30 84a15 15 0 0 1 4-29a20 20 0 0 1 38-3a16 16 0 0 1 14 32z" fill="#fffaf0" ${o}/><path d="M40 96l-3 8M58 96l-3 8M76 96l-3 8" stroke="#4f9fd6" stroke-width="3" stroke-linecap="round"/>`;
     else if (/山友|阿伯|阿姨|爺爺|奶奶|小朋友|一位|志工|管理員/.test(tx)) g = `<path d="M34 104q0-34 26-34t26 34z" fill="#ee8458" ${o}/><circle cx="60" cy="50" r="17" fill="#f6cba6" ${o}/><path d="M38 44q22-12 44 0l-4-13q-18-11-36 0z" fill="#f7e8c0" ${o}/><circle cx="54" cy="52" r="2" fill="${INK}"/><circle cx="66" cy="52" r="2" fill="${INK}"/><path d="M54 59q6 4 12 0" fill="none" ${o}/>`;
     else g = `<path d="M58 104v-70h6v70z" fill="#a8743f" ${o}/><path d="M30 40h54l10 9-10 9h-54z" fill="#e2b877" ${o}/><path d="M40 49h34" stroke="${INK}" stroke-width="2" stroke-linecap="round" opacity=".5"/><path d="M36 70h50v14h-50l-8-7z" fill="#d7a660" ${o}/><ellipse cx="60" cy="106" rx="26" ry="5" fill="rgba(58,42,32,.22)"/>`;
-    return `<svg viewBox="0 0 120 120"><path d="M120 0L70 0 20 120 80 120z" fill="rgba(255,220,130,.3)"/>${g}</svg>`;
+    return SX.art.img('enc_' + e.id, `<svg viewBox="0 0 120 120"><path d="M120 0L70 0 20 120 80 120z" fill="rgba(255,220,130,.3)"/>${g}</svg>`, 'artImg encArt');
   }
   function pickEncounter(){
     const f = st.dist / M.dist, k = WXD[wx.kind];

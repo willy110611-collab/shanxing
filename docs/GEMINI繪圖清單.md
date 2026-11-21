@@ -147,4 +147,19 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 
 ## 第七批：奇遇插圖（之後再畫也可以）
 
-奇遇卡片上方的小插圖，16:9，不用去背，每張一個場景：阿伯分享茶葉蛋、遇到帝雉、獼猴在路邊、山羌跑過、雲海突然散開、腳抽筋拉筋、挑夫背著貨上山、山屋吃泡麵、起霧找到步道路標、撿垃圾帶下山。檔名 `enc_01` ～ `enc_10`，畫好跟我說哪張是哪個場景就好。
+奇遇卡片上方的小插圖，16:9，不用去背，每張一個場景。**檔名照下表取**，放進去就會自動出現在對應的奇遇上。
+
+| 檔名 | 場景 |
+|---|---|
+| `enc_e05` | A kind elderly hiker uncle offering a tea egg to the hiker on the trail |
+| `enc_e04` | A Mikado pheasant with long barred tail feathers on a mossy branch in sunlight |
+| `enc_e03` | A group of Formosan macaques eating fruit in a tree, curious about the hiker's backpack |
+| `enc_e02` | A Reeves's muntjac deer peeking out of the grass beside the trail |
+| `enc_e09` | A sea of clouds suddenly rising up from the valley, everything turning white |
+| `enc_e06` | The hiker crouching to stretch a cramped calf, pulling the toes back |
+| `enc_e13` | A mountain porter carrying a big supply box up the trail, nodding hello |
+| `enc_e14` | A steaming bowl of instant noodles in a wooden pavilion on the mountain |
+| `enc_e10` | Thick fog on the trail, a wooden trail marker appearing through the mist |
+| `enc_e08` | The hiker picking up a dropped plastic bag of litter to carry down the mountain |
+
+（其他奇遇沒有圖時，會照舊顯示程式畫的小圖示。之後想加，檔名就是 `enc_` 加上奇遇代號。）
