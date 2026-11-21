@@ -1,0 +1,16 @@
+{
+  "name": "shanxing-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "shanxing", "database_id": "352af848-d7a5-49f9-8105-67b1667dc607" }
+  ],
+  "durable_objects": {
+    "bindings": [ { "name": "ROOM", "class_name": "Room" } ]
+  },
+  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["Room"] } ],
+  "vars": {
+    "ALLOW_ORIGINS": "https://willy110611-collab.github.io,http://localhost:8770"
+  },
+  "observability": { "enabled": true }
+}

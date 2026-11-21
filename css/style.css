@@ -328,3 +328,41 @@ input[type=range]{width:100%;accent-color:#6fb257}
 @keyframes reveal{from{clip-path:circle(0 at var(--rx) var(--ry))}to{clip-path:circle(150% at var(--rx) var(--ry))}}
 .hudFace.cold canvas{animation:shiv .18s linear infinite alternate}
 @keyframes shiv{from{transform:translateX(-1.2px) rotate(-2deg)}to{transform:translateX(1.2px) rotate(2deg)}}
+
+/* ───────── 山友大廳／連線功能 ───────── */
+[data-badge]:not([data-badge=""])::after{content:attr(data-badge);position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#e8574a;color:#fff;font-size:11px;line-height:18px;text-align:center;border:2px solid var(--ink)}
+[data-go="lobby"]{position:relative}
+.tiny{font-size:12px;color:var(--ink2);opacity:.85}
+.pTop .tiny{color:#fff7e4;text-shadow:var(--txo);opacity:1}
+.txtIn{display:block;width:100%;font:inherit;font-size:16px;padding:10px 12px;margin:10px 0;border-radius:var(--irrS);border:2.5px solid var(--ink);background:#fffdf4;color:var(--ink)}
+.codeBox{font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all;background:#fffdf4;border:2px dashed var(--ink);border-radius:10px;padding:10px;margin:10px 0;user-select:all;-webkit-user-select:all}
+.codeTag{font-family:ui-monospace,Consolas,monospace;font-size:18px;letter-spacing:2px;background:#fffdf4;border:2px solid var(--ink);border-radius:8px;padding:2px 8px}
+#scrLobby .pBody{display:flex;flex-direction:column}
+.ppl{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.pChip{font-size:12px;padding:3px 9px;border-radius:12px;background:#fff7e4;border:2px solid var(--ink);color:var(--ink)}
+.pChip.me{background:#ffe08a}
+.chatList{flex:1;min-height:200px;overflow-y:auto;padding:10px;border-radius:14px;background:rgba(255,250,236,.92);border:2.5px solid var(--ink);display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
+.msg{display:flex;flex-direction:column;max-width:82%;align-self:flex-start;background:#fff;border:2px solid var(--ink);border-radius:4px 14px 14px 14px;padding:6px 10px;font-size:14px;color:var(--ink)}
+.msg.me{align-self:flex-end;background:#e4f3cf;border-radius:14px 4px 14px 14px}
+.msg b{font-size:11px;font-weight:normal;color:var(--ink2)}
+.msg span{word-break:break-word;line-height:1.5}
+.msg i{font-style:normal;font-size:10px;color:var(--ink2);align-self:flex-end;opacity:.7}
+.chatList .empty{color:var(--ink2);text-shadow:none;padding:30px 10px}
+.chatIn{display:flex;gap:8px;margin-top:10px}
+.chatIn input{flex:1;min-width:0;font:inherit;font-size:16px;padding:9px 12px;border-radius:var(--irrS);border:2.5px solid var(--ink);background:#fffdf4;color:var(--ink)}
+.frRow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:14px;color:var(--ink)}
+.frRow:first-of-type{border-top:0}
+.frRow>span:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
+.frRow>span:last-child{display:flex;gap:6px;align-items:center;flex:none}
+.frRow small{font-size:12px;color:var(--ink2);width:100%;padding-left:16px}
+.frRow select{font:inherit;font-size:13px;max-width:84px;padding:4px;border-radius:8px;border:2px solid var(--ink);background:#fffdf4}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#bdb3a6;border:1.5px solid var(--ink)}
+.dot.on{background:#6fcf5a}
+.partyBox{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 92px);display:none;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
+.partyBox.on{display:flex}
+.partyBox b{flex:none}
+.partyBox span{flex:1;min-width:0;color:var(--ink2)}
+.repBtn{font:inherit;font-size:11px;margin-left:4px;padding:1px 6px;border-radius:8px;border:1.5px solid var(--ink);background:#fff;color:var(--ink)}
+.revRow{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:13px}
+.revRow img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:2px solid var(--ink);flex:none}
+.revRow .mBtns{margin-top:6px;justify-content:flex-start}

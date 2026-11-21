@@ -66,6 +66,7 @@
     if (name === screen) return;
     if (name === 'album' || name === 'settings') prevScreen = screen;
     if (screen === 'map') { try { WM.stop(); } catch(e){} }
+    if (screen === 'lobby' && SX.social) SX.social.close();
     ptrHold = false; keyHold = false;
     $$('.scr').forEach(s => s.classList.remove('on'));
     $('#scr' + name[0].toUpperCase() + name.slice(1)).classList.add('on');
@@ -74,6 +75,7 @@
     if (name === 'climb') { SC.resize(); catchUp(); }
     if (name === 'album') renderAlbum();
     if (name === 'settings') renderSettings();
+    if (name === 'lobby' && SX.social) SX.social.open();
     moodNow();
   }
   document.addEventListener('click', e => {
@@ -521,6 +523,7 @@
       ${wall ? `<h3>山友照片牆・${mark - 500}–${mark} m</h3>${wallHtml(wall)}` : ''}
       <div class="mBtns"><button class="cbtn go" id="pOk">${img ? '收進相簿' : '繼續走'}</button></div>`);
     $('#pOk').onclick = () => { A.pop(); closeModal(); if (mark) say(pick(SX.LINES.walk)); };
+    if (mark && SX.social) SX.social.fillWall(M.id, mark, $('#mCard'));
   }
   // 上傳山上的照片：縮到最長邊 720px 的 JPEG，記下哪座山、離登山口幾公尺、海拔
   let upCtx = null;
@@ -543,6 +546,7 @@
       // 照片牆改成向伺服器要「這座山、這個 500 公尺區段」的清單。
       SV.userPhotos.push(rec); if (SV.userPhotos.length > 24) SV.userPhotos.shift();
       imgDirty = true; save(); A.shutter();
+      if (SX.social) SX.social.uploadPhoto(c, rec);   // 有山友帳號就同時分享到伺服器（審核後公開）
       toast(bandOf(m) >= mt.dist ? `上傳好了，會出現在${mt.name}山頂的照片牆` : `上傳好了，會出現在 ${bandOf(m)} m 的照片牆`, 3000);
       if (screen === 'album') renderAlbum();
     };
@@ -917,7 +921,7 @@
 
   // ───────── 相簿 ─────────
   let albumTab = 'photos';
-  $$('.tab').forEach(b => b.onclick = () => { A.pop(); albumTab = b.dataset.tab; $$('.tab').forEach(x => x.classList.toggle('on', x === b)); renderAlbum(); });
+  $$('#scrAlbum .tab').forEach(b => b.onclick = () => { A.pop(); albumTab = b.dataset.tab; $$('#scrAlbum .tab').forEach(x => x.classList.toggle('on', x === b)); renderAlbum(); });
   function renderAlbum(){
     const body = $('#albumBody');
     if (albumTab === 'photos') {
@@ -977,6 +981,7 @@
           <button class="cbtn sm" id="dUnlock">${SV.unlockAll ? '恢復解鎖規則' : '解鎖全部山'}</button>
           <button class="cbtn sm" id="dWx">換天氣</button>
           <button class="cbtn sm" id="dTemple">直接去福德祠</button>
+          <button class="cbtn sm" id="dReview">照片審核</button>
           <button class="cbtn sm" id="dReset">清除存檔</button>
           <button class="cbtn sm" id="dLock">鎖回去</button></div>`
         : `<div class="pw"><input id="pw" type="password" inputmode="numeric" placeholder="密碼"><button class="cbtn sm" id="pwOk">解鎖</button></div>`}
@@ -997,6 +1002,7 @@
       $('#dUnlock').onclick = () => { SV.unlockAll = !SV.unlockAll; save(); renderSettings(); toast(SV.unlockAll ? '全部的山都開放了' : '恢復原本的解鎖規則'); };
       $('#dWx').onclick = () => cycleWx();
       $('#dTemple').onclick = () => openTemple();
+      $('#dReview').onclick = () => { if (SX.social) SX.social.review(); };
       $('#dReset').onclick = () => { if (confirm('確定要清除所有存檔嗎？')) { resetting = true; localStorage.removeItem(KEY); localStorage.removeItem(KEY_IMG); location.reload(); } };
       $('#dLock').onclick = () => { s.dev = false; s.devOn = false; s.fast = false; save(); renderSettings(); };
     } else {

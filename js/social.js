@@ -1,0 +1,280 @@
+// 山行小日子 — 連線功能：帳號、山友大廳聊天、好友、一起爬、共享照片牆、照片審核
+// 後端：Cloudflare Workers（server/ 資料夾）。帳號只存在這支手機上，另外給一組復原碼換手機用。
+(function(){
+  const API = 'https://shanxing-api.willy110611.workers.dev/api';
+  const WS = API.replace(/^http/, 'ws') + '/ws';
+  const KEY = 'shanxing-net-v1', KEY_PARTY = 'shanxing-party-v1', KEY_ADMIN = 'shanxing-admin-key';
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch(e){ return d; } };
+  const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+  const A = () => SX.audio || {};
+  const toast = (msg, ms = 2400) => { const t = $('#toast'); if (!t) return; t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms); };
+  const G = () => window.SXG || {};
+  const mName = id => (SX.M[id] && SX.M[id].name) || id || '';
+  const km = m => (Math.max(0, m || 0) / 1000).toFixed(2) + ' km';
+
+  let acct = load(KEY, null);          // { id, token, name, code }
+  let party = load(KEY_PARTY, null);   // { id, mountain, with:{id,name} }
+
+  // ───────── API ─────────
+  async function api(path, opt = {}){
+    const h = Object.assign({}, opt.headers || {});
+    if (acct && acct.token) h.Authorization = 'Bearer ' + acct.token;
+    if (opt.json !== undefined) { h['Content-Type'] = 'application/json'; opt.body = JSON.stringify(opt.json); }
+    let r;
+    try { r = await fetch(API + path, { method: opt.method || (opt.body ? 'POST' : 'GET'), headers: h, body: opt.body }); }
+    catch(e){ throw new Error('連不上伺服器，檢查一下網路'); }
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401 && acct) { throw new Error('登入失效，請到「我的帳號」用復原碼重新登入'); }
+    if (!r.ok) throw new Error(d.error || ('伺服器錯誤 ' + r.status));
+    return d;
+  }
+  async function register(name){
+    const d = await api('/register', { json: { name } });
+    acct = { id: d.id, token: d.token, name: d.name, code: d.code }; store(KEY, acct);
+    return acct;
+  }
+  async function restore(token){
+    const old = acct; acct = { token: token.trim() };
+    try { const me = await api('/me'); acct = { id: me.id, token: token.trim(), name: me.name, code: me.code }; store(KEY, acct); return acct; }
+    catch(e){ acct = old; throw new Error('復原碼不對，或帳號已停用'); }
+  }
+
+  // ───────── 即時房間（WebSocket，自動重連）─────────
+  function room(name, on){
+    let ws = null, alive = true, tries = 0, ping = null;
+    const R = { send: d => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(d)); }, close: () => { alive = false; clearInterval(ping); if (ws) try { ws.close(); } catch(e){} }, get open(){ return !!ws && ws.readyState === 1; } };
+    const connect = () => {
+      if (!alive || !acct) return;
+      ws = new WebSocket(`${WS}?room=${encodeURIComponent(name)}&t=${encodeURIComponent(acct.token)}`);
+      ws.onopen = () => { tries = 0; clearInterval(ping); ping = setInterval(() => R.send({ type: 'ping' }), 25000); on({ type: 'open' }); };
+      ws.onmessage = e => { let d; try { d = JSON.parse(e.data); } catch(_){ return; } on(d); };
+      ws.onclose = () => { clearInterval(ping); on({ type: 'closed' }); if (alive) setTimeout(connect, Math.min(15000, 1000 * 2 ** tries++)); };
+      ws.onerror = () => {};
+    };
+    connect();
+    return R;
+  }
+
+  // ───────── 大廳畫面 ─────────
+  let tab = 'chat', lobby = null, msgs = [], people = [], friends = [], invites = [];
+  function ensureAccount(then){
+    if (acct) return then();
+    const mc = $('#mCard'); mc.innerHTML = `<h3>第一次來到山友大廳</h3>
+      <p class="summitBig">取一個暱稱，其他山友會看到這個名字。</p>
+      <input id="nmIn" class="txtIn" maxlength="12" placeholder="暱稱（最多 12 個字）">
+      <div class="mBtns"><button class="cbtn go" id="nmOk">進入大廳</button></div>
+      <p class="tiny">已經有帳號（換新手機）？到大廳的「我的帳號」輸入復原碼。</p>`;
+    $('#modal').classList.add('on');
+    $('#nmOk').onclick = async () => {
+      const v = $('#nmIn').value.trim(); if (!v) { toast('先取個暱稱吧'); return; }
+      $('#nmOk').disabled = true;
+      try { await register(v); showRecovery(true, then); } catch(e){ toast(e.message, 3200); $('#nmOk').disabled = false; }
+    };
+  }
+  function showRecovery(first, then){
+    const mc = $('#mCard'); mc.innerHTML = `<h3>${first ? '帳號建好了！' : '我的復原碼'}</h3>
+      <p class="summitBig">這是你的<b>復原碼</b>，換手機或清掉瀏覽器資料時，要用它找回帳號。<br>請截圖或抄下來，不要給別人。</p>
+      <div class="codeBox" id="rcBox">${esc(acct.token)}</div>
+      <div class="mBtns"><button class="cbtn" id="rcCopy">複製</button><button class="cbtn go" id="rcOk">我存好了</button></div>`;
+    $('#modal').classList.add('on');
+    $('#rcCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(acct.token).then(() => toast('已複製'), () => toast('請長按文字複製')); };
+    $('#rcOk').onclick = () => { $('#modal').classList.remove('on'); then && then(); };
+  }
+  function open(){
+    ensureAccount(() => {
+      render(); refresh();
+      if (!lobby) lobby = room('lobby', onLobby);
+      clearInterval(open._t); open._t = setInterval(refresh, 20000);
+    });
+  }
+  function close(){ clearInterval(open._t); if (lobby) { lobby.close(); lobby = null; } }
+  function onLobby(d){
+    if (d.type === 'hello') { msgs = d.history || []; people = d.people || []; }
+    else if (d.type === 'chat') { msgs.push(d); if (msgs.length > 80) msgs.shift(); if (d.who.id !== acct.id && A().pop) A().pop(); }
+    else if (d.type === 'join') { if (!people.some(p => p.id === d.who.id)) people.push(d.who); }
+    else if (d.type === 'leave') { people = people.filter(p => p.id !== d.who.id); }
+    else if (d.type === 'open' || d.type === 'closed') {}
+    if (tab === 'chat') renderChat(d.type === 'chat' || d.type === 'hello');
+    const on = $('#lbOnline'); if (on) on.textContent = lobby && lobby.open ? `${people.length} 人在線` : '連線中…';
+  }
+  async function refresh(){
+    if (!acct) return;
+    try {
+      const [f, i] = await Promise.all([api('/friends'), api('/invites')]);
+      friends = f.friends || []; invites = i.invites || [];
+      checkParty();
+      if (tab === 'friends') renderFriends();
+      updateBadge();
+    } catch(e){ if (tab !== 'chat') toast(e.message, 3000); }
+  }
+  function updateBadge(){
+    const n = invites.filter(v => v.guest === (acct && acct.id) && v.status === 'pending').length;
+    $$('[data-go="lobby"]').forEach(b => b.dataset.badge = n ? String(n) : '');
+  }
+  function render(){
+    $$('#scrLobby .tab').forEach(b => { b.classList.toggle('on', b.dataset.lt === tab); b.onclick = () => { if (A().pop) A().pop(); tab = b.dataset.lt; render(); if (tab === 'friends') refresh(); }; });
+    if (tab === 'chat') renderChat(true); else if (tab === 'friends') renderFriends(); else renderMe();
+  }
+  function renderChat(scroll){
+    const body = $('#lobbyBody'); if (!body) return;
+    if (!body.querySelector('#chatList')) {
+      body.innerHTML = `<div class="ppl" id="pplRow"></div><div class="chatList" id="chatList"></div>
+        <form class="chatIn" id="chatForm"><input id="chatTxt" maxlength="200" placeholder="跟山友打聲招呼…" autocomplete="off"><button class="cbtn go sm">送出</button></form>`;
+      $('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatTxt').value.trim(); if (!v) return; if (!lobby || !lobby.open) { toast('還在連線，等一下'); return; } lobby.send({ type: 'chat', text: v }); $('#chatTxt').value = ''; };
+    }
+    $('#pplRow').innerHTML = people.slice(0, 30).map(p => `<span class="pChip${p.id === acct.id ? ' me' : ''}">${esc(p.name)}</span>`).join('') || '<span class="tiny">大廳目前沒有別人</span>';
+    const L = $('#chatList');
+    L.innerHTML = msgs.length ? msgs.map(m => `<div class="msg${m.who.id === acct.id ? ' me' : ''}"><b>${esc(m.who.name)}</b><span>${esc(m.text)}</span><i>${new Date(m.t).toLocaleTimeString('zh-TW', { hour:'2-digit', minute:'2-digit' })}</i></div>`).join('')
+      : '<div class="empty">還沒有人說話，當第一個吧！</div>';
+    if (scroll) L.scrollTop = L.scrollHeight;
+  }
+  function renderFriends(){
+    const body = $('#lobbyBody'); if (!body) return;
+    const inc = invites.filter(v => v.guest === acct.id && v.status === 'pending');
+    const opts = SX.MOUNTAINS.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    body.innerHTML = `
+      <div class="setRow"><h4>我的好友碼 <span class="codeTag">${esc(acct.code)}</span></h4>
+        <p>把好友碼給朋友，對方輸入後就會互相成為好友。</p>
+        <form class="pw" id="addF"><input id="fcIn" maxlength="8" placeholder="輸入朋友的好友碼" autocapitalize="characters"><button class="cbtn sm">加好友</button></form></div>
+      ${inc.length ? `<div class="setRow"><h4>收到的邀請</h4>${inc.map(v => `<div class="frRow"><span><b>${esc(v.host_name)}</b> 邀你一起爬 <b>${esc(mName(v.mountain))}</b></span>
+        <span><button class="cbtn go sm" data-acc="${v.id}">一起去</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
+      ${party ? `<div class="setRow"><h4>正在一起爬</h4><div class="frRow"><span>和 <b>${esc(party.with.name)}</b> 爬 <b>${esc(mName(party.mountain))}</b></span>
+        <span><button class="cbtn go sm" id="pGo">出發</button><button class="cbtn sm" id="pEnd">結束</button></span></div></div>` : ''}
+      <div class="setRow"><h4>好友（${friends.length}）</h4>
+        ${friends.length ? friends.map(f => `<div class="frRow"><span><i class="dot${f.online ? ' on' : ''}"></i><b>${esc(f.name)}</b>
+          <small>${f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : (f.online ? '在線上' : '休息中')}</small></span>
+          <span><select data-sel="${f.id}">${opts}</select><button class="cbtn sm" data-inv="${f.id}">邀請</button></span></div>`).join('')
+        : '<p>還沒有好友，先把好友碼傳給朋友吧。</p>'}</div>`;
+    $('#addF').onsubmit = async e => { e.preventDefault(); const v = $('#fcIn').value.trim(); if (!v) return;
+      try { const d = await api('/friends', { json: { code: v } }); toast(`和 ${d.friend.name} 成為好友了！`); if (A().sparkle) A().sparkle(); refresh(); } catch(err){ toast(err.message, 3000); } };
+    $$('[data-inv]').forEach(b => b.onclick = async () => { const fid = b.dataset.inv, mt = $(`[data-sel="${fid}"]`).value;
+      try { await api('/invites', { json: { friend: fid, mountain: mt } }); toast('邀請送出了，對方接受後就能一起爬'); refresh(); } catch(err){ toast(err.message, 3000); } });
+    $$('[data-acc]').forEach(b => b.onclick = () => answer(b.dataset.acc, true));
+    $$('[data-dec]').forEach(b => b.onclick = () => answer(b.dataset.dec, false));
+    if ($('#pGo')) $('#pGo').onclick = () => { if (G().startClimb) G().startClimb(party.mountain); };
+    if ($('#pEnd')) $('#pEnd').onclick = () => { setParty(null); renderFriends(); };
+  }
+  async function answer(id, yes){
+    try {
+      const d = await api('/invites/' + id, { json: { accept: yes } });
+      const v = invites.find(x => x.id === id);
+      if (yes && v) { setParty({ id, mountain: d.mountain, with: { id: v.host, name: v.host_name } }); toast(`出發！和 ${v.host_name} 一起爬${mName(d.mountain)}`); if (G().startClimb) G().startClimb(d.mountain); }
+      refresh();
+    } catch(e){ toast(e.message, 3000); }
+  }
+  // 邀請人：看到對方接受了，就自動組隊
+  function checkParty(){
+    if (!acct || party) return;
+    const ok = invites.find(v => v.host === acct.id && v.status === 'accepted' && Date.now() - v.created < 3 * 864e5 && !(load('shanxing-party-done', [])).includes(v.id));
+    if (ok) { setParty({ id: ok.id, mountain: ok.mountain, with: { id: ok.guest, name: ok.guest_name } }); toast(`${ok.guest_name} 接受邀請了！一起去爬${mName(ok.mountain)}吧`, 3600); }
+  }
+  function setParty(p){
+    if (!p && party) { const done = load('shanxing-party-done', []); done.push(party.id); store('shanxing-party-done', done.slice(-30)); }
+    party = p; store(KEY_PARTY, p); if (pRoom) { pRoom.close(); pRoom = null; } partyBox();
+  }
+  function renderMe(){
+    const body = $('#lobbyBody'); if (!body) return;
+    body.innerHTML = `
+      <div class="setRow"><h4>暱稱</h4><form class="pw" id="nmF"><input id="nmIn2" maxlength="12" value="${esc(acct.name)}"><button class="cbtn sm">改名</button></form></div>
+      <div class="setRow"><h4>復原碼</h4><p>換手機時用來找回帳號，不要給別人。</p><button class="cbtn sm" id="showRc">顯示復原碼</button></div>
+      <div class="setRow"><h4>換手機：用復原碼登入</h4><form class="pw" id="rsF"><input id="rsIn" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>
+      <div class="setRow"><h4>我上傳的照片</h4><div id="myPh"><p>讀取中…</p></div></div>`;
+    $('#nmF').onsubmit = async e => { e.preventDefault(); const v = $('#nmIn2').value.trim(); if (!v) return;
+      try { const d = await api('/me', { json: { name: v } }); acct.name = d.name; store(KEY, acct); toast('改好了'); } catch(err){ toast(err.message, 3000); } };
+    $('#showRc').onclick = () => showRecovery(false);
+    $('#rsF').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn').value.trim(); if (!v) return;
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); } catch(err){ toast(err.message, 3000); } };
+    api('/photos?mine=1').then(d => {
+      const L = d.photos || [], st = { pending: '審核中', ok: '已公開', hidden: '未通過' };
+      $('#myPh').innerHTML = L.length ? '<div class="grid">' + L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}?t=${encodeURIComponent(acct.token)}" loading="lazy"><p>${esc(mName(p.mountain))}・${p.alt} m・${st[p.status] || p.status}</p></div>`).join('') + '</div>'
+        : '<p>還沒有上傳過。休息時按「上傳這裡的照片」，審核通過後其他山友走到同一段就看得到。</p>';
+    }).catch(e => { const el = $('#myPh'); if (el) el.innerHTML = `<p>${esc(e.message)}</p>`; });
+  }
+
+  // ───────── 一起爬：登山畫面上的隊友面板 ─────────
+  let pRoom = null, mate = null, stateT = 0;
+  function partyBox(){
+    let el = $('#partyBox');
+    const M = G().M, on = party && M && M.id === party.mountain && $('#scrClimb.on');
+    if (!on) { if (el) el.classList.remove('on'); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'partyBox'; el.className = 'partyBox'; $('#scrClimb').appendChild(el); }
+    el.classList.add('on');
+    const me = G().st, d = mate && me ? mate.dist - me.dist : null;
+    el.innerHTML = `<b>和 ${esc(party.with.name)} 一起爬</b>
+      <span>${!pRoom || !pRoom.open ? '連線中…' : mate ? `${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}` : '等對方上線…'}</span>
+      <button class="cbtn sm" id="cheerBtn">幫他加油</button>`;
+    $('#cheerBtn').onclick = () => { if (pRoom) pRoom.send({ type: 'cheer', to: party.with.id }); if (A().sparkle) A().sparkle(); toast('加油送出了！'); };
+  }
+  function tick(){
+    const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
+    // 一起爬：連到隊伍房間，每 4 秒回報自己的進度
+    if (party && climbing && M.id === party.mountain) {
+      if (!pRoom) pRoom = room('party:' + party.id, d => {
+        if (d.type === 'hello') { const p = (d.people || []).find(x => x.id !== acct.id && x.state); if (p) mate = p.state; }
+        else if (d.type === 'state' && d.who.id !== acct.id) mate = d.state;
+        else if (d.type === 'cheer' && d.who.id !== acct.id) { toast(`${d.who.name} 幫你加油！體力 +5`, 2600); if (st) st.stam = Math.min(100, st.stam + 5); if (A().chime) A().chime(); }
+        else if (d.type === 'leave' && d.who.id !== acct.id) mate = mate ? Object.assign({}, mate, { rest: true }) : mate;
+        partyBox();
+      });
+      if (Date.now() - stateT > 4000) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep) }); }
+    } else if (pRoom && !climbing) { pRoom.close(); pRoom = null; mate = null; }
+    partyBox();
+  }
+  setInterval(tick, 1000);
+  // 每分鐘回報一次自己在爬哪座山（好友列表看得到）
+  setInterval(() => { const M = G().M, st = G().st; if (!acct || !M || !st || !$('#scrClimb.on')) return; api('/me', { json: { mountain: M.id, dist: Math.round(st.dist) } }).catch(() => {}); }, 60000);
+  setInterval(() => { if (acct && !$('#scrLobby.on')) api('/invites').then(i => { invites = i.invites || []; checkParty(); updateBadge(); }).catch(() => {}); }, 45000);
+
+  // ───────── 共享照片：上傳、500 m 照片牆、檢舉 ─────────
+  function uploadPhoto(canvas, rec){
+    if (!acct) { toast('照片先存在手機裡；到山友大廳建帳號後，上傳的照片才會分享給其他山友', 3600); return; }
+    canvas.toBlob(async blob => {
+      if (!blob) return;
+      try {
+        const q = `?mountain=${encodeURIComponent(rec.mountainId)}&m=${rec.m}&alt=${rec.alt}`;
+        await api('/photos' + q, { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
+        toast('照片送出了，審核通過後其他山友走到這一段就看得到', 3600);
+      } catch(e){ toast('分享沒成功：' + e.message, 3600); }
+    }, 'image/jpeg', 0.75);
+  }
+  async function fillWall(mountainId, mark, root){
+    if (!acct || !root) return;
+    try {
+      const d = await api(`/photos?mountain=${encodeURIComponent(mountainId)}&band=${Math.max(0, mark / 500 - 1)}`);
+      const L = (d.photos || []).filter(p => p.status === 'ok' && p.owner !== acct.id);
+      if (!L.length || !root.isConnected) return;
+      const box = document.createElement('div');
+      box.innerHTML = `<h3>其他山友在這一段拍的</h3><div class="grid">${L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}" loading="lazy"><p>${esc(p.by || '山友')}・${p.alt} m <button class="repBtn" data-rep="${p.id}">檢舉</button></p></div>`).join('')}</div>`;
+      const btns = root.querySelector('.mBtns'); btns ? root.insertBefore(box, btns) : root.appendChild(box);
+      box.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { if (!confirm('這張照片不恰當，要檢舉嗎？')) return; try { await api(`/photos/${b.dataset.rep}/report`, { method: 'POST' }); b.textContent = '已檢舉'; b.disabled = true; } catch(e){ toast(e.message); } });
+    } catch(e){}
+  }
+
+  // ───────── 照片審核（開發者選項裡）─────────
+  async function review(status = 'pending'){
+    let k = load(KEY_ADMIN, '');
+    if (!k) { k = prompt('輸入審核金鑰（在 server\\.dev.vars 裡的 ADMIN_KEY）') || ''; if (!k) return; store(KEY_ADMIN, k.trim()); k = k.trim(); }
+    const mc = $('#mCard'); $('#modal').classList.add('on'); mc.innerHTML = '<h3>照片審核</h3><p>讀取中…</p>';
+    try {
+      const r = await fetch(`${API}/admin/photos?status=${status}`, { headers: { 'X-Admin-Key': k } });
+      if (r.status === 403) { store(KEY_ADMIN, null); throw new Error('審核金鑰不對'); }
+      const L = (await r.json()).photos || [];
+      mc.innerHTML = `<h3>照片審核</h3><div class="mBtns"><button class="cbtn sm" data-st="pending">待審核</button><button class="cbtn sm" data-st="reported">被檢舉</button><button class="cbtn sm" data-st="hidden">已隱藏</button></div>
+        ${L.length ? L.map(p => `<div class="revRow" data-id="${p.id}"><img src="${API}/photo/${p.id}?k=${encodeURIComponent(k)}"><div><b>${esc(mName(p.mountain))}</b>・${p.alt} m・${esc(p.by || '')}${p.reports ? `・檢舉 ${p.reports}` : ''}
+          <div class="mBtns"><button class="cbtn go sm" data-a="ok">通過</button><button class="cbtn sm" data-a="hidden">隱藏</button><button class="cbtn red sm" data-a="delete">刪除</button></div></div></div>`).join('') : '<p class="summitBig">沒有要處理的照片。</p>'}
+        <div class="mBtns"><button class="cbtn" id="revX">關閉</button></div>`;
+      mc.querySelectorAll('[data-st]').forEach(b => b.onclick = () => review(b.dataset.st));
+      mc.querySelectorAll('.revRow [data-a]').forEach(b => b.onclick = async () => {
+        const row = b.closest('.revRow');
+        const r2 = await fetch(`${API}/admin/photo/${row.dataset.id}`, { method: 'POST', headers: { 'X-Admin-Key': k, 'Content-Type': 'application/json' }, body: JSON.stringify({ status: b.dataset.a }) });
+        if (r2.ok) row.remove(); else toast('沒成功');
+      });
+      $('#revX').onclick = () => $('#modal').classList.remove('on');
+    } catch(e){ mc.innerHTML = `<h3>照片審核</h3><p>${esc(e.message)}</p><div class="mBtns"><button class="cbtn" id="revX">關閉</button></div>`; $('#revX').onclick = () => $('#modal').classList.remove('on'); }
+  }
+
+  SX.social = { open, close, uploadPhoto, fillWall, review, get acct(){ return acct; }, get party(){ return party; } };
+  if (acct) { refresh(); }
+})();
