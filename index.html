@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
 <div id="app">
@@ -20,37 +20,39 @@
     <header class="mapTop">
       <div class="logo"><span>山行</span><small>小日子</small></div>
       <div class="topBtns">
+        <button class="cbtn sm" data-go="bag">背包</button>
         <button class="cbtn sm" data-go="album">相簿</button>
         <button class="cbtn sm" data-go="settings">設定</button>
       </div>
     </header>
-    <div class="mapHint">點一座山，看看路線</div>
+    <div class="mapHint">點一座山看路線，拖曳可以移動地圖</div>
     <div id="mapWrap"></div>
-    <div id="routeCard" class="sheet"></div>
+    <div id="routeCard" class="sheet infoCard"></div>
   </section>
 
   <!-- 登山 -->
   <section id="scrClimb" class="scr">
     <canvas id="cv"></canvas>
-    <div class="hud">
-      <div class="hudCard">
-        <div class="row1"><b id="hName">象山</b><button id="wxChip" class="chip">晴</button></div>
-        <div class="alt"><span id="hAlt">40</span><small> m</small></div>
-        <div class="track"><div class="fill" id="hFill"></div><div class="walker" id="hWalker"></div></div>
-        <div class="row2"><span id="hDist">0.00 / 1.5 km</span><span id="hEta"></span></div>
-        <div class="stam"><span class="ico">體力</span><div class="sbar"><div id="hStam"></div></div></div>
-      </div>
-      <div class="radar" id="radar"></div>
-    </div>
+    <div class="hud" id="hudRoot"></div>
     <div id="bubble" class="bubble"></div>
-    <div id="tapHint" class="tapHint">點畫面可以走快一點</div>
+    <button id="propTag" class="tag" style="display:none"></button>
+    <div id="tapHint" class="tapHint">長按畫面可以走快一點</div>
     <div id="gpsTag" class="gpsTag"></div>
     <nav class="dock">
       <button class="dbtn" data-go="map"><i class="i-map"></i>地圖</button>
-      <button class="dbtn" id="restBtn"><i class="i-tent"></i><span>休息</span></button>
+      <button class="dbtn" data-go="bag"><i class="i-bag"></i>背包</button>
       <button class="dbtn" data-go="album"><i class="i-photo"></i>相簿</button>
       <button class="dbtn" data-go="settings"><i class="i-gear"></i>設定</button>
     </nav>
+    <div id="restSheet">
+      <h4 id="rsTitle">要休息一下嗎？</h4>
+      <div class="rsBtns" style="grid-template-columns:1fr 1fr">
+        <button class="cbtn" id="rsPhoto">拍張風景照<small>收進相簿</small></button>
+        <button class="cbtn" id="rsStone">疊石頭許願<small>留下一座小石堆</small></button>
+        <button class="cbtn" id="rsUp">上傳這裡的照片<small>給之後的山友看</small></button>
+        <button class="cbtn go" id="rsGo">繼續出發<small>體力和體溫回來了</small></button>
+      </div>
+    </div>
   </section>
 
   <!-- 廟宇 -->
@@ -73,7 +75,7 @@
   <!-- 相簿 -->
   <section id="scrAlbum" class="scr">
     <header class="pTop"><button class="cbtn sm" data-back>← 返回</button><b>我的相簿</b><span></span></header>
-    <div class="tabs"><button class="tab on" data-tab="photos">拍立得</button><button class="tab" data-tab="stamps">集印帳</button><button class="tab" data-tab="lots">籤詩冊</button></div>
+    <div class="tabs"><button class="tab on" data-tab="photos">拍立得</button><button class="tab" data-tab="wall">照片牆</button><button class="tab" data-tab="stamps">集印帳</button><button class="tab" data-tab="lots">籤詩冊</button></div>
     <div class="pBody" id="albumBody"></div>
   </section>
 
@@ -86,12 +88,15 @@
   <div id="modal" class="modal"><div class="mCard" id="mCard"></div></div>
   <div id="toast" class="toast"></div>
   <div id="rotate" class="rotate"><div>把手機轉成直的玩比較舒服喔</div></div>
+  <input type="file" id="upFile" accept="image/*" hidden>
 </div>
 
-<script src="js/data.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/clay.js"></script>
-<script src="js/scene.js"></script>
-<script src="js/game.js"></script>
+<script src="js/data.js?v=2"></script>
+<script src="js/audio.js?v=2"></script>
+<script src="js/clay.js?v=2"></script>
+<script src="js/trail.js?v=2"></script>
+<script src="js/worldmap.js?v=2"></script>
+<script src="js/hud.js?v=2"></script>
+<script src="js/game.js?v=2"></script>
 </body>
 </html>
