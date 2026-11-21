@@ -16,8 +16,8 @@ Get-ChildItem $raw -File | Where-Object { $_.Extension -match '^\.(png|jpe?g|web
   } else {
     $out = Join-Path $here "$name.png"
     $max = if ($name -match '_walk$|^frame_') { 2400 } else { 1200 }
-    # 去洋紅底：colorkey 去背（容許 Gemini 畫得不是很純的洋紅），再縮圖
-    ffmpeg -v error -y -i $_.FullName -vf "format=rgba,colorkey=0xFF00FF:0.34:0.10,scale='min($max,iw)':-2" $out
+    # 去洋紅底：colorkey 只去掉很接近洋紅的底（太強會連粉紅杜鵑花一起吃掉），殘邊交給遊戲載入時的 despill 清
+    ffmpeg -v error -y -i $_.FullName -vf "format=rgba,colorkey=0xFF00FF:0.22:0.06,scale='min($max,iw)':-2" $out
   }
   Write-Host "完成 $name"
 }

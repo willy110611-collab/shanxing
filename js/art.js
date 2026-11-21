@@ -19,12 +19,31 @@ function bounds(g, x0, y0, w, h){
   }
   return maxX < 0 ? null : { x:x0 + minX, y:y0 + minY, w:maxX - minX + 1, h:maxY - minY + 1 };
 }
+// 清掉洋紅殘邊：Gemini 的洋紅底常常不是純 #FF00FF，邊緣會留一圈粉紅
+function despill(g, w, h){
+  const im = g.getImageData(0, 0, w, h), d = im.data, mg = i => Math.min(d[i], d[i + 2]) - d[i + 1];
+  // 把一個帶洋紅的像素：紅、藍往綠拉（去粉紅），並變得較透明
+  const despix = (i, m) => { const k = Math.min(1, (m - 25) / 85), gg = d[i + 1]; d[i] -= (d[i] - gg) * k * 0.8; d[i + 2] -= (d[i + 2] - gg) * k * 0.8; d[i + 3] *= 1 - k * 0.7; };
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] && mg(i) > 110 && Math.abs(d[i] - d[i + 2]) < 90) d[i + 3] = 0;   // 幾乎是洋紅：直接透明
+  // 貼著透明處的邊緣像素，往內剝三圈
+  for (let pass = 0; pass < 3; pass++) {
+    const a0 = new Uint8Array(w * h); for (let p = 0; p < w * h; p++) a0[p] = d[p * 4 + 3];
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const p = y * w + x, i = p * 4; if (!a0[p] || (a0[p - 1] && a0[p + 1] && a0[p - w] && a0[p + w])) continue;
+      const m = mg(i); if (m > 25) despix(i, m);
+    }
+  }
+  // 紅藍差不多、明顯高於綠的「洋紅混色」：不管在不在邊緣都清（粉紅杜鵑紅遠大於藍，不會被動到）
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] && Math.abs(d[i] - d[i + 2]) < 50) { const m = mg(i); if (m > 40) despix(i, m); }
+  g.putImageData(im, 0, 0);
+}
 function prep(name, img){
   const opaque = /\.jpg$/i.test(name.file);
   const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
   const g = c.getContext('2d', { willReadFrequently:true }); g.drawImage(img, 0, 0);
   const e = { img:c, w:c.width, h:c.height, frames:[] };
   if (opaque) { e.frames.push({ x:0, y:0, w:c.width, h:c.height }); return e; }
+  despill(g, c.width, c.height);
   const n = /_walk$/.test(name.id) ? 4 : 1, cw = Math.floor(c.width / n);
   const fr = [];
   for (let i = 0; i < n; i++) fr.push(bounds(g, i * cw, 0, cw, c.height) || { x:i * cw, y:0, w:cw, h:c.height });
