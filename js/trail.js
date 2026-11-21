@@ -98,6 +98,16 @@ function sprite(wm, hm, ppm, fn){
   hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
   return { c:c, h:h, w:wm, hm:hm, ax:0.5 };
 }
+// Gemini 美術圖做成同樣格式的貼圖；hm 是實際高度（公尺）。沒有這張圖就回 null
+const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, onLoad(){} };
+function artSpr(id, hm){
+  const c = ART.crop(id); if (!c) return null;
+  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
+  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
+  return { c:c, h:h, w:hm * c.width / c.height, hm:hm, ax:0.5 };
+}
+// 有美術圖就用圖（一張），沒有就用程式畫的那組
+function artOr(id, hm, list){ const a = artSpr(id, hm); return a ? [a] : list; }
 function blade(g, x, ang, len, wid, col, lw){
   const tx = x + Math.sin(ang) * len, ty = -Math.cos(ang) * len, mx = x + Math.sin(ang * 0.4) * len * 0.55, my = -Math.cos(ang * 0.4) * len * 0.55;
   g.beginPath(); g.moveTo(x - wid, 0); g.quadraticCurveTo(mx - wid, my, tx, ty); g.quadraticCurveTo(mx + wid, my, x + wid, 0); g.closePath();
@@ -252,24 +262,24 @@ function buildSprites(){
   const r = mkrng(seed ^ 0x7f4a7c15), th = TH, a = [];
   SPR = {}; signSpr = {};
   const tL = VG.treeL, tS = VG.treeS;
-  SPR.conifer = [0, 1, 2].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, tL, tS); }); });
-  if (th.snow) SPR.coniferS = [0, 1].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }); });
+  SPR.conifer = artOr('tree_pine', 6.8, [0, 1, 2].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, tL, tS); }); }));
+  if (th.snow && !ART.get('tree_pine')) SPR.coniferS = [0, 1].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }); });
   SPR.broad = [0, 1].map(function(){ return sprite(4.2, 4.8, 44, function(g){ pBroad(g, r); }); });
   if (th.bigtree) SPR.bigtree = [sprite(7.2, 10.6, 30, function(g){ pBigTree(g, r); })];
   if (th.sakura) SPR.sakura = [sprite(4.6, 4.4, 44, function(g){ pSakura(g, r); })];
-  SPR.rhodo = ['#f08fb0', '#f7b4c8', '#e9769e'].map(function(col){ return sprite(2.3, 1.4, 80, function(g){ pRhodo(g, r, col); }); });
-  SPR.rock = [0, 1, 2].map(function(){ return sprite(1.7, 0.8, 80, function(g){ pRock(g, r); }); });
-  SPR.bamboo = [0, 1].map(function(){ return sprite(1.5, 1.2, 80, function(g){ pTuft(g, r, 13, 1.05, 2.0, 0.03, mixs(VG.grassL, '#e4dc7a', 0.3), VG.grassS); }); });
-  SPR.fern = [0, 1].map(function(){ return sprite(1.7, 0.9, 80, function(g){ pFern(g, r); }); });
+  SPR.rhodo = artOr('bush_rhodo', 1.4, ['#f08fb0', '#f7b4c8', '#e9769e'].map(function(col){ return sprite(2.3, 1.4, 80, function(g){ pRhodo(g, r, col); }); }));
+  SPR.rock = artOr('rock_moss', 0.8, [0, 1, 2].map(function(){ return sprite(1.7, 0.8, 80, function(g){ pRock(g, r); }); }));
+  SPR.bamboo = artOr('bamboo_dwarf', 1.2, [0, 1].map(function(){ return sprite(1.5, 1.2, 80, function(g){ pTuft(g, r, 13, 1.05, 2.0, 0.03, mixs(VG.grassL, '#e4dc7a', 0.3), VG.grassS); }); }));
+  SPR.fern = artOr('fern', 0.9, [0, 1].map(function(){ return sprite(1.7, 0.9, 80, function(g){ pFern(g, r); }); }));
   SPR.grass = [0, 1].map(function(){ return sprite(0.9, 0.55, 80, function(g){ pTuft(g, r, 7, 0.45, 1.7, 0.024, VG.grassL, VG.grassS); }); });
-  SPR.flower = ['#ffe07a', '#ffffff', '#b99ae6'].map(function(col){ return sprite(0.8, 0.5, 80, function(g){ pFlowers(g, r, col); }); });
-  SPR.silver = [0, 1].map(function(){ return sprite(1.9, 1.9, 80, function(g){ pSilver(g, r); }); });
-  SPR.note = [sprite(0.9, 1.5, 80, pNote)];
-  SPR.btree = [sprite(3.6, 3.7, 60, function(g){ pBTree(g, r); })];
-  SPR.cairn = [sprite(1.0, 0.95, 80, function(g){ pCairn(g, true); })];
-  SPR.mycairn = [sprite(0.6, 0.45, 80, function(g){ pCairn(g, false); })];
-  SPR.bench = [sprite(1.9, 0.9, 80, pBench)];
-  SPR.view = [sprite(3.7, 1.75, 70, pView)];
+  SPR.flower = artOr('flowers', 0.5, ['#ffe07a', '#ffffff', '#b99ae6'].map(function(col){ return sprite(0.8, 0.5, 80, function(g){ pFlowers(g, r, col); }); }));
+  SPR.silver = artOr('grass_silver', 1.9, [0, 1].map(function(){ return sprite(1.9, 1.9, 80, function(g){ pSilver(g, r); }); }));
+  SPR.note = artOr('note_post', 1.5, [sprite(0.9, 1.5, 80, pNote)]);
+  SPR.btree = artOr('wish_tree', 3.7, [sprite(3.6, 3.7, 60, function(g){ pBTree(g, r); })]);
+  SPR.cairn = artOr('cairn', 0.95, [sprite(1.0, 0.95, 80, function(g){ pCairn(g, true); })]);
+  SPR.mycairn = artOr('cairn', 0.45, [sprite(0.6, 0.45, 80, function(g){ pCairn(g, false); })]);
+  SPR.bench = artOr('bench', 0.9, [sprite(1.9, 0.9, 80, pBench)]);
+  SPR.view = artOr('deck_view', 1.75, [sprite(3.7, 1.75, 70, pView)]);
   SPR.treasure = [sprite(0.7, 0.55, 80, pTreasure)];
   SPR.summit = [sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
@@ -467,7 +477,29 @@ function tile(img, off, y, h, a){
   ctx.globalAlpha = a; for (; x < W; x += w) ctx.drawImage(img, x, y, w + 1, h); ctx.globalAlpha = 1;
 }
 function layer(TA, TB, grp, idx, off, y, h){ tile(TA[grp][idx], off, y, h, 1); if (TB) tile(TB[grp][idx], off, y, h, palK); }
+// 遠景美術圖：依時段挑一張；左右鏡射接續，轉彎時跟著視差平移
+const SKY_ART = { day:'sky_day', sunset:'sky_sunset', dusk:'sky_sunset', dawn:'sky_dawn', night:'sky_night' };
+function skyArt(key){ const e = ART.get(SKY_ART[key]); return e && e.frames.length ? e : null; }
+function drawSkyArt(e, off, a){
+  if (a <= 0.01) return;
+  const f = e.frames[0], h = HOR + 150 * U, w = Math.max(W * 1.05, h * f.w / f.h);
+  let k = Math.floor(off / w), x = -(off - k * w);
+  ctx.globalAlpha = a;
+  for (; x < W; x += w, k++) {
+    if (k & 1) { ctx.save(); ctx.translate(x + w, 0); ctx.scale(-1, 1); ctx.drawImage(e.img, f.x, f.y, f.w, f.h, 0, 0, w + 1, h); ctx.restore(); }
+    else ctx.drawImage(e.img, f.x, f.y, f.w, f.h, x, 0, w + 1, h);
+  }
+  ctx.globalAlpha = 1;
+}
 function drawBG(t, dist){
+  const SA = skyArt(palA);
+  if (SA) {
+    const SB = palB !== palA ? skyArt(palB) : null, hd = headAt(dist) * F * 0.35;
+    ctx.fillStyle = PAL[palA].valley; ctx.fillRect(0, 0, W, H);
+    drawSkyArt(SA, hd, 1); if (SB) drawSkyArt(SB, hd, palK);
+    if (isCloudy || isRain) tile(getTiles(palA).c[1], hd + t * 5, -40 * U, 190 * U, 0.62);
+    return;
+  }
   const g = ctx.createLinearGradient(0, 0, 0, HOR + 30 * U);
   g.addColorStop(0, css(cSkyT)); g.addColorStop(1, css(cSkyB)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   const sx = cSun[0] * W, sy = cSun[1] * H; let i;
@@ -548,14 +580,28 @@ function buildFG(){
     FG.push({ c:s2, w:w, h:h });
   }
 }
+// 前景美術圖（frame_top：上方垂下的枝葉；frame_bottom：下方兩角的花草），寬度撐滿畫面
+function drawFGArt(id, top, t){
+  const e = ART.get(id); if (!e) return false;
+  const f = e.frames[0], w = W + 16, h = Math.min(H * (top ? 0.32 : 0.36), w * f.h / f.w);
+  ctx.save(); ctx.translate(W / 2, top ? 0 : H); ctx.rotate(Math.sin(t * (top ? 0.6 : 0.8)) * 0.012);
+  ctx.drawImage(e.img, f.x, f.y, f.w, f.h, -w / 2, top ? -6 : -h + 6, w, h);
+  ctx.restore();
+  return true;
+}
 function drawFG(t){
   if (FG.length < 3) return;
-  let f = FG[0];
-  ctx.save(); ctx.translate(0, H); ctx.rotate(Math.sin(t * 0.8) * 0.018); ctx.drawImage(f.c, -6, -f.h + 6, f.w, f.h); ctx.restore();
-  f = FG[1];
-  ctx.save(); ctx.translate(W, H); ctx.rotate(Math.sin(t * 0.7 + 1.3) * 0.02); ctx.drawImage(f.c, -f.w + 6, -f.h + 6, f.w, f.h); ctx.restore();
-  f = FG[2];
-  ctx.save(); ctx.rotate(Math.sin(t * 0.6 + 2.1) * 0.015); ctx.drawImage(f.c, -6, -6, f.w, f.h); ctx.restore();
+  let f;
+  if (!drawFGArt('frame_bottom', false, t)) {
+    f = FG[0];
+    ctx.save(); ctx.translate(0, H); ctx.rotate(Math.sin(t * 0.8) * 0.018); ctx.drawImage(f.c, -6, -f.h + 6, f.w, f.h); ctx.restore();
+    f = FG[1];
+    ctx.save(); ctx.translate(W, H); ctx.rotate(Math.sin(t * 0.7 + 1.3) * 0.02); ctx.drawImage(f.c, -f.w + 6, -f.h + 6, f.w, f.h); ctx.restore();
+  }
+  if (!drawFGArt('frame_top', true, t)) {
+    f = FG[2];
+    ctx.save(); ctx.rotate(Math.sin(t * 0.6 + 2.1) * 0.015); ctx.drawImage(f.c, -6, -6, f.w, f.h); ctx.restore();
+  }
 }
 
 // ═════════ 對外：初始化／尺寸／換山 ═════════
@@ -585,6 +631,8 @@ S.setMountain = function(m){
   buildCurves(m); buildElev(m); cairns = []; buildProps(); buildPalettes(); buildSprites();
   tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers();
 };
+// 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
+ART.onLoad(function(){ if (M && TH) buildSprites(); });
 S.props = function(fromM, toM){
   const out = [];
   for (let i = 0; i < AP.length; i++) { const o = AP[i]; if (o.m >= fromM && o.m <= toM && HIT[o.type]) out.push({ type:o.type, m:o.m, side:o.side }); }
@@ -787,7 +835,11 @@ function drawMate(mt, j, f, t, fade){
   ctx.globalAlpha = fade;
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
-  try { if (mt.rest) heroRest(ctx, t); else heroWalk(ctx, t); } finally {
+  try {
+    ctx.filter = 'hue-rotate(' + (150 + hashStr(mt.name) % 3 * 60) + 'deg)';     // 美術圖版本：隊友換個衣服色調，跟自己分得出來
+    const drawn = heroArt(ctx, { rest:mt.rest }, t); ctx.filter = 'none';
+    if (!drawn) { if (mt.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
+  } finally {
     ctx.restore();
     [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols; Object.assign(hero, sv);
   }
@@ -805,8 +857,22 @@ const PET_COL = {
   bear:       ['#4a413c', '#2a2422', '#f1e6cf', '#c9b89a'],
   leopardcat: ['#d2a464', '#9a7040', '#fbf0dc', '#d8c2a0'],
 };
+// 寵物美術圖：pet_<id>_walk（四格）；柴犬也接受第一批的 shiba_walk／shiba_sit。高度單位公分
+const PET_H = { shiba:46, bear:58, leopardcat:40, magpie:34 };
+function petArt(s, x, y, u, t){
+  const id = s.pet, walk = ART.get('pet_' + id + '_walk') ? 'pet_' + id + '_walk' : (id === 'shiba' && ART.get('shiba_walk') ? 'shiba_walk' : null);
+  if (!walk) return false;
+  const sitting = hero.mv < 0.3 || s.sleep, sit = id === 'shiba' && sitting && ART.get('shiba_sit') ? 'shiba_sit' : null, h = PET_H[id] || 44;
+  ctx.drawImage(SHADOW, x - 27 * u, y - 10 * u, 50 * u, 20 * u);
+  ctx.save(); ctx.translate(x, y); ctx.scale(u, u);
+  if (sit) ART.drawFrame(ctx, sit, 0, 0, 0, h * 0.95);
+  else ART.drawFrame(ctx, walk, sitting ? 0 : Math.floor(hero.ph / TAU * 8), 0, 0, h);   // 小跑步：一個步伐循環跑兩輪
+  ctx.restore();
+  return true;
+}
 function drawPet(s, x, y, u, t){
   if (!s.pet) return;
+  if (petArt(s, x, y, u, t)) return;
   if (s.pet === 'shiba') { drawDog(x, y, u * 0.98, s, t); return; }
   if (s.pet === 'magpie') { drawBird(x, y, u, s, t); return; }
   const pc = PET_COL[s.pet]; if (!pc) return;
@@ -830,6 +896,14 @@ function drawBird(x, y, u, s, t){
   c.strokeStyle = '#e2463a'; c.lineWidth = 2.2; seg(c, -2.5, -8, -3.5, -1); seg(c, 2.5, -8, 3.5, -1);   // 紅腳
   c.restore();
 }
+// 走路循環的第幾格（四格 = 一個完整步伐循環）；停下來時用第一格
+function walkFrame(){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * 4) : 0; }
+// 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
+function heroArt(c, s, t){
+  if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, 112);
+  if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, 115);
+  return ART.drawFrame(c, 'hiker_walk', walkFrame(), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176);
+}
 function drawHero(s, t){
   proj(jhG, fhG, false);
   const X = gx, Y = gy, u = gs / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
@@ -838,7 +912,7 @@ function drawHero(s, t){
   drawPet(s, X + 68 * u, Y - 6 * u, u, t);
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
-  if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t);
+  if (!heroArt(ctx, s, t)) { if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
   ctx.restore();
 }
 
