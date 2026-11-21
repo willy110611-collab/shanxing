@@ -86,3 +86,65 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 - 同一批最好在**同一個 Gemini 對話**裡連續畫，風格比較一致。
 - 走路連續動作（sprite sheet）如果四格大小不一樣，可以請它「make all four frames exactly the same size and aligned on the same baseline」重畫。
 - 畫出來覺得不像影片，可以直接把影片截圖丟給 Gemini，說「照這張的畫風」。
+
+---
+
+## 第四批：背包寶物（23 張，全部 1:1、洋紅底）
+
+每張提示詞：`Isolated single collectible item illustration for a cozy game inventory, ` + 下面的內容 + 去背規則。
+同一批請在同一個對話裡畫，風格會一致。**檔名 = 前面的英文 id**（例如 `t_cloud_bottle.png`）。
+
+| 檔名 | 名稱 | 內容 |
+|---|---|---|
+| `t_clean_pledge` | 環保小卡 | a small paper card with a leaf and a tiny trash bag doodle |
+| `t_cairn_stone` | 石堆祝福卡 | a paper card with a drawing of a small stone cairn |
+| `t_thanks_postcard` | 道謝明信片 | a handwritten thank-you postcard with a mountain doodle |
+| `t_hut_stamp` | 山屋紀念章 | a round red rubber-stamp impression of a mountain hut on paper |
+| `t_summit_stamp` | 登頂紀念章 | a round red rubber-stamp impression of a mountain peak with a flag |
+| `t_tea_card` | 山茶花小卡 | a small card with a camellia flower and a cup of tea |
+| `t_fog_note` | 霧中便條 | a slightly damp paper note in soft mist |
+| `t_sunset_photo` | 夕陽照片 | a polaroid photo of a golden sunset over a cloud sea |
+| `t_rain_card` | 雨後小卡 | a card with raindrops and a small rainbow over the mountains |
+| `t_hiker_postcard` | 舊明信片 | an old sepia vintage postcard of hikers on a ridge |
+| `t_bird_photo` | 藍鵲的一瞥 | a polaroid photo of a Taiwan blue magpie on a branch |
+| `t_cone_card` | 玉山圓柏毬果圖鑑卡 | a botanical field-guide card of a juniper cone and twig |
+| `t_rubbing` | 古老三角點拓印 | a charcoal rubbing on paper of an old survey triangulation marker |
+| `t_bird_feather_photo` | 帝雉的尾羽照片 | a photo of a Mikado pheasant's long barred tail feathers |
+| `t_deer_track_card` | 山羌足跡拓印卡 | a card with an ink rubbing of small muntjac deer hoof prints |
+| `t_cloud_bottle` | 雲海瓶 | a small corked glass bottle with a swirling sea of clouds inside, glowing softly |
+| `t_rhodo_card` | 高山杜鵑明信卡 | a postcard of pink-white Yushan rhododendron flowers |
+| `t_lake_map` | 嘉明湖湖畔地圖 | a hand-drawn treasure-style map of an oval blue alpine lake |
+| `t_angel_tear_card` | 天使的眼淚明信片 | a postcard of a sapphire-blue alpine lake shaped like a teardrop, sparkling (legendary feel, golden border) |
+| `t_starlight_stamp` | 滿天星空紀念章 | a deep-blue stamp impression with a starry sky and mountain silhouette, golden glow |
+| `t_old_triangle` | 百年三角點的回憶 | a weathered old stone survey marker with moss, golden glow (legendary) |
+| `t_summit_dawn` | 晨光山頂照片 | a polaroid of a summit at sunrise with golden light rays (legendary) |
+| `t_forest_bell` | 林間風鈴卡 | a card with a small glass wind chime hanging in a forest, sparkling (legendary) |
+
+## 第五批：寵物（每隻 2 張，洋紅底）
+
+每隻一張「背影走路四格」（16:9，同 `shiba_walk` 的寫法）和一張「正面大頭照」（1:1，用在寵物選擇畫面）。
+
+| 檔名 | 內容 |
+|---|---|
+| `pet_shiba_walk` / `pet_shiba_face` | 柴犬（用柴犬設定） |
+| `pet_bear_walk` / `pet_bear_face` | a cute Formosan black bear cub with the white V-shaped chest mark, small backpack |
+| `pet_leopardcat_walk` / `pet_leopardcat_face` | a cute Taiwan leopard cat (spotted, white stripes on forehead, round ears) |
+| `pet_magpie_walk` / `pet_magpie_face` | a cute Taiwan blue magpie (long blue tail, red beak), hopping / flying low |
+
+## 第六批：介面（洋紅底，除非另外寫）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `ui_panel` | 16:9 | An empty rectangular hand-crafted wooden sign board frame with rounded corners and nail heads, warm wood grain, the center is a light parchment panel, no text. |
+| `ui_button` | 16:9 | An empty small rounded wooden button plank with ink outline, no text. |
+| `ui_card` | 9:16 | An empty vertical wooden-framed parchment card (for a mountain info card), no text. |
+| `icon_map` `icon_bag` `icon_album` `icon_settings` `icon_rest` `icon_camera` `icon_upload` | 1:1 | Each one a separate small round game icon in the same style: folded trail map / canvas hiking bag / photo album / brass gear / small tent / vintage camera / photo with an up arrow. |
+| `face_happy` `face_ok` `face_tired` `face_cold` `face_sleep` | 1:1 | The hiker's face as a round portrait icon (same hat), expressions: happy smiling / calm / tired and sweating / shivering cold with blue cheeks / sleeping with Zzz. |
+| `badge_quest` | 1:1 | An empty round brass medal badge with a mountain relief and laurel, no text. |
+| `rarity_common` `rarity_rare` `rarity_legend` | 1:1 | Three empty item-slot frames: plain wood / silver-blue with small gems / gold with sparkles. |
+| `encounter_frame` | 9:16 | An empty storybook-style illustrated frame with leaves and flowers around the edges for event cards, parchment center, no text. |
+| `title_logo` | 16:9 | A title logo plate: wooden sign with carved Chinese characters 「山行小日子」, small mountain and cloud decorations. （這張可以有字） |
+
+## 第七批：奇遇插圖（之後再畫也可以）
+
+奇遇卡片上方的小插圖，16:9，不用去背，每張一個場景：阿伯分享茶葉蛋、遇到帝雉、獼猴在路邊、山羌跑過、雲海突然散開、腳抽筋拉筋、挑夫背著貨上山、山屋吃泡麵、起霧找到步道路標、撿垃圾帶下山。檔名 `enc_01` ～ `enc_10`，畫好跟我說哪張是哪個場景就好。
