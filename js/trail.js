@@ -108,6 +108,22 @@ function artSpr(id, hm){
 }
 // 有美術圖就用圖（一張），沒有就用程式畫的那組
 function artOr(id, hm, list){ const a = artSpr(id, hm); return a ? [a] : list; }
+// 路面／草地貼圖（俯視、可無縫拼接）：m 是一張圖代表幾公尺
+const TRAIL_TEX = { dirt:'ground_dirt', stairs:'ground_stone', scree:'ground_scree' };
+let TEX = {};
+function mkTex(id, m){
+  const c = ART.crop(id); if (!c || !ctx) return null;
+  const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, m:m } : null;
+}
+function buildTex(){
+  TEX = { road:mkTex(TRAIL_TEX[TH.trail || 'dirt'], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2) };
+}
+// 把貼圖對準這一段路：左緣 xl、近端 y1、遠端 y2、這段的世界位置 z0
+function texFill(T, xl, s1, y1, y2, z0, a){
+  const kx = s1 * T.m / T.w, ky = Math.max(0.0001, (y1 - y2) / SEG * T.m / T.w), v = (z0 % T.m) / T.m * T.w;
+  T.p.setTransform(new DOMMatrix([kx, 0, 0, -ky, xl, y1 + v * ky]));
+  ctx.fillStyle = T.p; ctx.globalAlpha = a;
+}
 function blade(g, x, ang, len, wid, col, lw){
   const tx = x + Math.sin(ang) * len, ty = -Math.cos(ang) * len, mx = x + Math.sin(ang * 0.4) * len * 0.55, my = -Math.cos(ang * 0.4) * len * 0.55;
   g.beginPath(); g.moveTo(x - wid, 0); g.quadraticCurveTo(mx - wid, my, tx, ty); g.quadraticCurveTo(mx + wid, my, x + wid, 0); g.closePath();
@@ -263,6 +279,7 @@ function buildSprites(){
   SPR = {}; signSpr = {};
   const tL = VG.treeL, tS = VG.treeS;
   SPR.conifer = artOr('tree_pine', 6.8, [0, 1, 2].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, tL, tS); }); }));
+  buildTex();
   if (th.snow && !ART.get('tree_pine')) SPR.coniferS = [0, 1].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }); });
   SPR.broad = [0, 1].map(function(){ return sprite(4.2, 4.8, 44, function(g){ pBroad(g, r); }); });
   if (th.bigtree) SPR.bigtree = [sprite(7.2, 10.6, 30, function(g){ pBigTree(g, r); })];
@@ -972,6 +989,9 @@ function drawWorld(b, t){
       // 草地（左右各一塊，各自的光影）
       ctx.fillStyle = LUT[(gk * 3 + lvL) * FOGN + fi]; quad(gl1, yb, x1 + 1, yb, x2 + 1, y2, gl2, y2);
       ctx.fillStyle = LUT[(gk * 3 + lvR) * FOGN + fi]; quad(x1, yb, gr1, yb, gr2, y2, x2, y2);
+      const ta = fade * (1 - fq) * 0.85;
+      if (TEX.grass && ta > 0.03) { texFill(TEX.grass, x1, s1, yb, y2, z0, ta); quad(gl1, yb, gr1, yb, gr2, y2, gl2, y2); ctx.globalAlpha = fade; }
+      const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road;
       // 步道
       const w1 = RW * s1, w2 = RW * s2, e1 = w1 * 1.07 + 0.6, e2 = w2 * 1.07 + 0.6, rk = 2 + (i & 1), stp = sAt(i) === 1 && j < 70;
       if (stp) {
@@ -979,6 +999,7 @@ function drawWorld(b, t){
         ctx.fillStyle = LUT[(15 + (lvL ? 1 : 0)) * FOGN + fi]; ctx.fillRect(x2 - w2 * 1.04, y2, w2 * 2.08, yt - y2 + 0.7);
         ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, yt, x2 - e2, yt);
         ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt);
+        if (RT && ta > 0.03) { texFill(RT, x1 - w1, s1, yb, yt, z0, ta); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt); ctx.globalAlpha = fade; }
         if (j < 44) {
           ctx.globalAlpha = 1 - j / 46; ctx.strokeStyle = INK; ctx.lineWidth = clamp(s2 * 0.022, 0.5, 2.2);
           ctx.beginPath(); ctx.moveTo(x2 - w2 * 1.04, y2); ctx.lineTo(x2 + w2 * 1.04, y2); ctx.moveTo(x2 - w2 * 1.04, yt); ctx.lineTo(x2 + w2 * 1.04, yt); ctx.stroke(); ctx.globalAlpha = fade;
@@ -986,6 +1007,7 @@ function drawWorld(b, t){
       } else {
         ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2, x2 - e2, y2);
         ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2, x2 - w2, y2);
+        if (RT && ta > 0.03) { texFill(RT, x1 - w1, s1, yb, y2, z0, ta); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2, x2 - w2, y2); ctx.globalAlpha = fade; }
         if (j < 46 && Hh(i, 50) < 0.62) {             // 斷斷續續的手繪墨線路緣
           ctx.globalAlpha = 0.55 * (1 - j / 48); ctx.strokeStyle = INK; ctx.lineWidth = clamp(s1 * 0.02, 0.5, 2);
           ctx.beginPath(); ctx.moveTo(x1 - w1, y1); ctx.lineTo(x2 - w2, y2); ctx.moveTo(x1 + w1, y1); ctx.lineTo(x2 + w2, y2); ctx.stroke(); ctx.globalAlpha = fade;

@@ -206,7 +206,7 @@
       leopardcat: `<path d="M12 20l1-12 9 6M40 20l-1-12-9 6" fill="#c9a26a" ${o}/><circle cx="26" cy="28" r="15" fill="#c9a26a" ${o}/><path d="M23 14v8M29 14v8" stroke="#fff7e4" stroke-width="2.2" stroke-linecap="round"/><circle cx="15" cy="32" r="1.5" fill="${INK}"/><circle cx="37" cy="32" r="1.5" fill="${INK}"/><circle cx="17" cy="37" r="1.3" fill="${INK}"/><circle cx="35" cy="37" r="1.3" fill="${INK}"/>${eyes}<path d="M24 33h4l-2 2.4z" fill="#d9788a" ${o}/>`,
       magpie: `<path d="M34 34q14 4 14 12q-10 0-18-6z" fill="#4f86c8" ${o}/><ellipse cx="25" cy="32" rx="13" ry="11" fill="#5c9ad8" ${o}/><circle cx="19" cy="20" r="9" fill="#3d3a44" ${o}/><path d="M11 20l-8 2 8 3z" fill="#e2573f" ${o}/><circle cx="17" cy="18.5" r="2" fill="#ffe27a" stroke="${INK}" stroke-width="1"/>`
     }[id || ''] || '';
-    return `<svg viewBox="0 0 52 52">${body}</svg>`;
+    return SX.art.img(id ? 'pet_' + id + '_face' : 'face_happy', `<svg viewBox="0 0 52 52">${body}</svg>`);
   }
   function showRoute(id){
     const m = SX.M[id]; if (!m) return;
@@ -417,7 +417,8 @@
   const RAR_W = { '普通':70, '稀有':25, '傳說':5 };
   const RAR_BG = { '普通':'', '稀有':'background:linear-gradient(170deg,#eef7ff,#c4def4)', '傳說':'background:linear-gradient(170deg,#fff6cf,#f6d472)' };
   const RAR_COL = { '普通':'#cfe6b0', '稀有':'#bfdcf5', '傳說':'#ffe08a' };
-  function trSvg(tr){
+  function trSvg(tr){ return SX.art.img(tr.id, trSvgDrawn(tr)); }
+  function trSvgDrawn(tr){
     const col = ['#ee8458','#6fae68','#5aa0d8','#f2c35a','#b98ad9','#e88fa8'][C.hash(tr.id) % 6], n = tr.name, o = `stroke="${INK}" stroke-linejoin="round"`;
     if (n.includes('章')) return `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="23" fill="#fff7e2" ${o} stroke-width="2.5"/><circle cx="30" cy="30" r="17.5" fill="none" stroke="${col}" stroke-width="2.5" stroke-dasharray="3 3"/><path d="M18 38l8-13 5 6 5-10 8 17z" fill="${col}" ${o} stroke-width="1.6"/></svg>`;
     if (/照片|一瞥|合照|留影|相片/.test(n)) return `<svg viewBox="0 0 60 60"><g transform="rotate(-5 30 30)"><rect x="10" y="8" width="40" height="46" rx="2" fill="#fff" ${o} stroke-width="2.5"/><rect x="14" y="12" width="32" height="28" fill="${col}" opacity=".55"/><path d="M14 40l10-14 7 8 6-11 9 17z" fill="${col}" ${o} stroke-width="1.5"/><circle cx="40" cy="18" r="3.5" fill="#ffe27a" ${o} stroke-width="1.2"/></g></svg>`;

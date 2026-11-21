@@ -56,12 +56,18 @@
     if (H.world) drawRadar(0, true);
   }
 
+  // 美術圖晚一點才載完：重畫一次臉
+  if (SX.art) SX.art.onLoad(() => { if (H.els.faceCv) drawFace(H.mood || 'happy'); });
+
   /* ───────── 表情臉 ───────── */
   function drawFace(mood) {
     const c = H.els.faceCv, g = c.getContext('2d'), S = c.width;
     g.setTransform(S / 46, 0, 0, S / 46, 0, 0);
     g.clearRect(0, 0, 46, 46);
     const cold = mood === 'cold';
+    // 美術圖版本：face_happy / face_ok / face_tired / face_cold / face_sleep
+    const art = SX.art && SX.art.get('face_' + (['happy', 'tired', 'cold', 'sleep'].includes(mood) ? mood : 'ok'));
+    if (art) { const f = art.frames[0], k = Math.min(44 / f.w, 44 / f.h); g.drawImage(art.img, f.x, f.y, f.w, f.h, 23 - f.w * k / 2, 23 - f.h * k / 2, f.w * k, f.h * k); H.els.face.classList.toggle('cold', cold); return; }
     // 臉
     const grd = g.createLinearGradient(0, 0, 46, 46);
     grd.addColorStop(0, cold ? '#d6ecfa' : '#ffeccb'); grd.addColorStop(1, cold ? '#a9cdea' : '#f3c995');

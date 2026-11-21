@@ -39,6 +39,11 @@ function prep(name, img){
 function clampN(v, a, b){ return b < a ? a : Math.max(a, Math.min(b, v)); }
 
 A.get = function(id){ return lib[id] || null; };
+// 給 HTML 用的圖片網址（背包、寵物選擇等）；沒有這張圖回 null
+const urls = {};
+A.url = function(id){ return urls[id] || null; };
+// 有圖就回 <img>，沒有就回 fallback（原本程式畫的 SVG）
+A.img = function(id, fallback, cls){ const u = urls[id]; return u ? `<img class="${cls || 'artImg'}" src="${u}" alt="" draggable="false">` : fallback; };
 A.has = function(id){ return !!lib[id]; };
 A.ready = function(){ return loaded; };
 // 圖到了之後通知畫面重建（例如步道的樹、石頭貼圖）
@@ -64,9 +69,10 @@ function load(){
     if (!Array.isArray(list) || !list.length) { loaded = true; return; }
     return Promise.all(list.map(it => new Promise(res => {
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
-      img.onload = () => { try { lib[id] = prep({ id, file }, img); } catch (e) {} res(); };
+      const u = 'art/' + file + '?v=' + it.v;      // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
+      img.onload = () => { try { lib[id] = prep({ id, file }, img); urls[id] = u; } catch (e) {} res(); };
       img.onerror = () => res();
-      img.src = 'art/' + file + '?v=' + it.v;     // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
+      img.src = u;
     }))).then(() => { loaded = true; listeners.forEach(fn => { try { fn(); } catch (e) {} }); });
   });
 }
