@@ -601,7 +601,7 @@ S.setCairns = function(list){
 let JK_L = '#ee8458', JK_S = '#bb5540', PANT_L = '#6a8a9c', PANT_S = '#44607a', BOOT_L = '#8a5c40', BOOT_S = '#5a3a2c', SOLE_L = '#57423a', SOLE_S = '#3a2a24';
 let BAG_L = '#f4bd58', BAG_S = '#c98a3c', LID_L = '#e9a244', LID_S = '#b9742f', BGP_L = '#f7cf7c', BGP_S = '#cf9a48', MAT_L = '#9cc4ac', MAT_S = '#628e80';
 let BOT_L = '#8fd0e4', BOT_S = '#5398b8', MUG_L = '#e2e6e8', MUG_S = '#9aa4b0', HAT_L = '#f7e8c0', HAT_S = '#cfb38a', HAIR_L = '#6a4632', HAIR_S = '#4a2f24', SKIN = '#f6cba6';
-const PON_L = '#f6d968', PON_S = '#cba740', DOG_L = '#e9a55c', DOG_S = '#b9743f', CRM_L = '#fff3de', CRM_S = '#dcc3a0';
+let PON_L = '#f6d968', PON_S = '#cba740', DOG_L = '#e9a55c', DOG_S = '#b9743f', CRM_L = '#fff3de', CRM_S = '#dcc3a0';
 const LEAFC = ['#8fbf5a', '#d9a441', '#c9703f', '#6fa85a'];
 
 function updHero(s, t, dt, dist, sp){
@@ -800,12 +800,42 @@ function drawMate(mt, j, f, t, fade){
   ctx.fillStyle = INK; ctx.fillText(mt.name, X, ty + 0.5);
   ctx.globalAlpha = 1;
 }
+// ───────── 寵物：柴犬原樣；黑熊、石虎先用換色的四腳獸，藍鵲畫一隻跳著走的小鳥（之後換成 Gemini 美術） ─────────
+const PET_COL = {
+  bear:       ['#4a413c', '#2a2422', '#f1e6cf', '#c9b89a'],
+  leopardcat: ['#d2a464', '#9a7040', '#fbf0dc', '#d8c2a0'],
+};
+function drawPet(s, x, y, u, t){
+  if (!s.pet) return;
+  if (s.pet === 'shiba') { drawDog(x, y, u * 0.98, s, t); return; }
+  if (s.pet === 'magpie') { drawBird(x, y, u, s, t); return; }
+  const pc = PET_COL[s.pet]; if (!pc) return;
+  const keep = [DOG_L, DOG_S, CRM_L, CRM_S];
+  [DOG_L, DOG_S, CRM_L, CRM_S] = pc;
+  try { drawDog(x, y, u * (s.pet === 'bear' ? 1.12 : 0.92), s, t); } finally { [DOG_L, DOG_S, CRM_L, CRM_S] = keep; }
+}
+function drawBird(x, y, u, s, t){
+  const c = ctx, mv = hero.mv, hop = mv > 0.3 ? Math.abs(Math.sin(hero.ph * 1.5)) * 9 : Math.abs(Math.sin(t * 1.7)) * 2;
+  c.drawImage(SHADOW, x - 16 * u, y - 6 * u, 30 * u, 12 * u);
+  c.save(); c.translate(x, y - hop * u); c.scale(u, u);
+  // 長尾巴（藍色帶白尖）
+  c.save(); c.translate(0, -14); c.rotate(0.15 + Math.sin(t * 3) * 0.08);
+  cel(c, pR(-3.2, -2, 6.4, 30, 3), '#3f73c9', '#2a4f94', 1, -1, 1.8); cel(c, pR(-3.2, 24, 6.4, 6, 3), '#ffffff', '#cfd6e0', 0.6, -0.6, 1.5);
+  c.restore();
+  cel(c, pE(0, -16, 10, 9, 0), '#4a84d8', '#2c58a2', 2, -1.5, 2);              // 身體
+  cel(c, pE(-7, -16, 4, 7, 0.3), '#2c58a2', '#1f3f78', 1, -1, 1.6);             // 翅膀
+  cel(c, pE(0, -27, 7, 6.5, 0), '#22252e', '#111318', 1.5, -1, 1.8);            // 黑色頭
+  cel(c, pP([4.5, -27, 11, -25.5, 4.5, -24]), '#e2463a', '#a62c24', 0.6, -0.6, 1.5);   // 紅嘴
+  c.fillStyle = '#ffe9a0'; c.beginPath(); c.arc(2.5, -28.5, 1.2, 0, TAU); c.fill();
+  c.strokeStyle = '#e2463a'; c.lineWidth = 2.2; seg(c, -2.5, -8, -3.5, -1); seg(c, 2.5, -8, 3.5, -1);   // 紅腳
+  c.restore();
+}
 function drawHero(s, t){
   proj(jhG, fhG, false);
   const X = gx, Y = gy, u = gs / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
   hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? 110 : 168) * u;
   ctx.globalAlpha = 1;
-  if (s.pet === 'shiba') drawDog(X + 68 * u, Y - 6 * u, u * 0.98, s, t);
+  drawPet(s, X + 68 * u, Y - 6 * u, u, t);
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t);
