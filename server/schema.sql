@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS players (
   seen INTEGER NOT NULL,
   mountain TEXT, dist REAL DEFAULT 0, -- 目前在爬的山與進度（給好友看）
   pet TEXT,
+  walked REAL DEFAULT 0, summits INTEGER DEFAULT 0,  -- 累積走了幾公尺、登頂幾次
+  wk INTEGER DEFAULT 0, wk_base REAL DEFAULT 0,        -- 本週起點（週排行 = walked - wk_base）
   banned INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS friends (
@@ -44,3 +46,8 @@ CREATE TABLE IF NOT EXISTS invites (
   created INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS invites_guest ON invites (guest, status);
+
+-- v2：雲端存檔、累積距離（好友週排行）
+CREATE TABLE IF NOT EXISTS saves (
+  id TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER NOT NULL
+);

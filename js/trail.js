@@ -598,9 +598,9 @@ S.setCairns = function(list){
 };
 
 // ═════════ 角色：登山客（背影）與柴犬 ═════════
-const JK_L = '#ee8458', JK_S = '#bb5540', PANT_L = '#6a8a9c', PANT_S = '#44607a', BOOT_L = '#8a5c40', BOOT_S = '#5a3a2c', SOLE_L = '#57423a', SOLE_S = '#3a2a24';
-const BAG_L = '#f4bd58', BAG_S = '#c98a3c', LID_L = '#e9a244', LID_S = '#b9742f', BGP_L = '#f7cf7c', BGP_S = '#cf9a48', MAT_L = '#9cc4ac', MAT_S = '#628e80';
-const BOT_L = '#8fd0e4', BOT_S = '#5398b8', MUG_L = '#e2e6e8', MUG_S = '#9aa4b0', HAT_L = '#f7e8c0', HAT_S = '#cfb38a', HAIR_L = '#6a4632', HAIR_S = '#4a2f24', SKIN = '#f6cba6';
+let JK_L = '#ee8458', JK_S = '#bb5540', PANT_L = '#6a8a9c', PANT_S = '#44607a', BOOT_L = '#8a5c40', BOOT_S = '#5a3a2c', SOLE_L = '#57423a', SOLE_S = '#3a2a24';
+let BAG_L = '#f4bd58', BAG_S = '#c98a3c', LID_L = '#e9a244', LID_S = '#b9742f', BGP_L = '#f7cf7c', BGP_S = '#cf9a48', MAT_L = '#9cc4ac', MAT_S = '#628e80';
+let BOT_L = '#8fd0e4', BOT_S = '#5398b8', MUG_L = '#e2e6e8', MUG_S = '#9aa4b0', HAT_L = '#f7e8c0', HAT_S = '#cfb38a', HAIR_L = '#6a4632', HAIR_S = '#4a2f24', SKIN = '#f6cba6';
 const PON_L = '#f6d968', PON_S = '#cba740', DOG_L = '#e9a55c', DOG_S = '#b9743f', CRM_L = '#fff3de', CRM_S = '#dcc3a0';
 const LEAFC = ['#8fbf5a', '#d9a441', '#c9703f', '#6fa85a'];
 
@@ -766,6 +766,40 @@ function drawDog(x, y, u, s, t){
   }
   c.restore();
 }
+// ───────── 一起爬的隊友：換一套衣服顏色，用同一套走路動畫畫在他實際走到的位置 ─────────
+let mates = [];
+S.setMates = function(list){
+  mates = (list || []).map(m => {
+    const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0);
+    return { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest: !!m.rest };
+  });
+};
+function stepMates(dt){ for (const mt of mates) mt.d += (mt.target - mt.d) * Math.min(1, dt * 1.5); }
+function drawMate(mt, j, f, t, fade){
+  const d0 = curS ? curS.dist || 0 : 0, near = Math.abs(mt.d - d0) < 1.6;
+  proj(j, f, false);
+  const X = gx + (near ? 0.95 : -0.35) * gs, Y = gy, u = gs / 100;
+  if (Y > H + 40 || u < 0.08) return;
+  const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
+  const cols = [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S];
+  JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
+  hero.ph = mt.d / STRIDE * TAU + 1.3; hero.mv = mt.rest ? 0 : 1; hero.lean = mt.rest ? 0 : 0.45; hero.py = 0; hero.mga = Math.sin(t * 2) * 0.3;
+  ctx.globalAlpha = fade;
+  ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
+  ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
+  try { if (mt.rest) heroRest(ctx, t); else heroWalk(ctx, t); } finally {
+    ctx.restore();
+    [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols; Object.assign(hero, sv);
+  }
+  // 名牌
+  const ty = Y - (mt.rest ? 118 : 182) * u - 6, fs = clamp(22 * u, 9, 14);
+  ctx.font = `${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(mt.name).width + 12;
+  ctx.fillStyle = 'rgba(255,248,230,.92)'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+  ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(X - w / 2, ty - fs * 0.8, w, fs * 1.6, fs * 0.8); else ctx.rect(X - w / 2, ty - fs * 0.8, w, fs * 1.6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = INK; ctx.fillText(mt.name, X, ty + 0.5);
+  ctx.globalAlpha = 1;
+}
 function drawHero(s, t){
   proj(jhG, fhG, false);
   const X = gx, Y = gy, u = gs / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
@@ -888,6 +922,8 @@ function drawWorld(b, t){
     }
     // 互動道具與路標
     while (pi >= 0 && AP[pi].m >= z0) { const o = AP[pi--]; if (o.m < z0 + SEG) drawProp(o, j, (o.m - z0) / SEG, fq, t); }
+    // 一起爬的隊友（在自己這一段畫）
+    for (k = 0; k < mates.length; k++) { const mt = mates[k]; if (mt.d >= z0 && mt.d < z0 + SEG && j > 0) drawMate(mt, j, (mt.d - z0) / SEG, t, fade); }
   }
   if (!heroDone) { drawHero(s, t); heroDone = true; }
   ctx.globalAlpha = 1;
@@ -995,7 +1031,7 @@ S.render = function(s){
   const t = s.t || 0, dt = clamp(s.dt || 0.016, 0, 0.05), dist = Math.max(0, s.dist || 0), sp = s.speed || 0, wx = s.wx || DEFWX;
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
-  updPalette(wx, frac); updHero(s, t, dt, dist, sp);
+  updPalette(wx, frac); updHero(s, t, dt, dist, sp); stepMates(dt);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
   const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b;

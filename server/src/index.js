@@ -32,7 +32,11 @@ async function auth(env, req, token){
   return p;
 }
 const isAdmin = (env, req) => env.ADMIN_KEY && (req.headers.get('X-Admin-Key') === env.ADMIN_KEY || new URL(req.url).searchParams.get('k') === env.ADMIN_KEY);
-const pub = p => ({ id: p.id, name: p.name, code: p.code, mountain: p.mountain, dist: p.dist, pet: p.pet, online: now() - p.seen < ONLINE_MS, seen: p.seen });
+// 台灣時間每週一 00:00 換週
+const weekNo = () => Math.floor((now() + 8 * 3600e3 - 4 * 864e5) / (7 * 864e5));
+const pub = p => ({ id: p.id, name: p.name, code: p.code, mountain: p.mountain, dist: p.dist, pet: p.pet, online: now() - p.seen < ONLINE_MS, seen: p.seen,
+  walked: Math.round(p.walked || 0), summits: p.summits || 0, week: p.wk === weekNo() ? Math.max(0, Math.round((p.walked || 0) - (p.wk_base || 0))) : 0 });
+const MAX_SAVE = 400 * 1024;
 
 // ───────── 路由 ─────────
 export default {
@@ -116,9 +120,25 @@ export default {
       if (path === '/api/me' && M === 'POST') {
         const b = await req.json().catch(() => ({}));
         const name = b.name !== undefined ? (cleanName(b.name) || me.name) : me.name;
-        await env.DB.prepare('UPDATE players SET name = ?, mountain = ?, dist = ?, pet = ?, seen = ? WHERE id = ?')
-          .bind(name, b.mountain === undefined ? me.mountain : (b.mountain ? String(b.mountain).slice(0, 24) : null), +b.dist >= 0 ? +b.dist : me.dist, b.pet === undefined ? me.pet : (b.pet ? String(b.pet).slice(0, 16) : null), now(), me.id).run();
-        return J(env, req, { ok: true, name });
+        // 累積距離只會往上加（避免換手機、清存檔把排行洗掉）；換週時把本週起點設成上週結束時的累積值
+        const walked = Math.max(me.walked || 0, Math.min(+b.walked || 0, 5e7)), summits = Math.max(me.summits || 0, Math.min(+b.summits || 0, 1e5));
+        const wk = weekNo(), wkBase = me.wk === wk ? (me.wk_base || 0) : (me.walked || 0);
+        await env.DB.prepare('UPDATE players SET name = ?, mountain = ?, dist = ?, pet = ?, seen = ?, walked = ?, summits = ?, wk = ?, wk_base = ? WHERE id = ?')
+          .bind(name, b.mountain === undefined ? me.mountain : (b.mountain ? String(b.mountain).slice(0, 24) : null), +b.dist >= 0 ? +b.dist : me.dist, b.pet === undefined ? me.pet : (b.pet ? String(b.pet).slice(0, 16) : null), now(), walked, summits, wk, wkBase, me.id).run();
+        return J(env, req, { ok: true, name, week: Math.round(walked - wkBase) });
+      }
+
+      // 雲端存檔（不含照片圖檔）
+      if (path === '/api/save' && M === 'GET') {
+        const s = await env.DB.prepare('SELECT data, updated FROM saves WHERE id = ?').bind(me.id).first();
+        return J(env, req, s ? { data: s.data, updated: s.updated } : { data: null });
+      }
+      if (path === '/api/save' && M === 'POST') {
+        const txt = await req.text();
+        if (txt.length > MAX_SAVE) return E(env, req, '存檔太大');
+        try { JSON.parse(txt); } catch (e) { return E(env, req, '存檔格式不對'); }
+        await env.DB.prepare('INSERT INTO saves (id, data, updated) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated = excluded.updated').bind(me.id, txt, now()).run();
+        return J(env, req, { ok: true, updated: now() });
       }
 
       // 好友

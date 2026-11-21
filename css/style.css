@@ -366,3 +366,38 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .revRow{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:13px}
 .revRow img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:2px solid var(--ink);flex:none}
 .revRow .mBtns{margin-top:6px;justify-content:flex-start}
+
+/* ───────── 每日任務、好友週排行 ───────── */
+[data-go="daily"]{position:relative}
+.streakBox{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;margin:6px 0 12px;border-radius:14px;background:#fff7e4;border:2.5px solid var(--ink)}
+.streakBox b{font-size:17px;color:var(--ink)}
+.streakBox small{font-size:12px;color:var(--ink2)}
+.streakDots{display:flex;gap:7px}
+.streakDots i{width:14px;height:14px;border-radius:50%;background:#e6dccb;border:2px solid var(--ink)}
+.streakDots i.on{background:#f2c94c}
+.streakDots i.big{width:20px;height:20px;margin-top:-3px;background:#e9d7ff}
+.streakDots i.big.on{background:#b98ad9}
+.dyTask{display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1.5px dashed rgba(58,42,32,.25);text-align:left}
+.dyTask>div{flex:1;min-width:0}
+.dyTask b{font-size:14px;font-weight:normal;color:var(--ink)}
+.dyTask small{font-size:11px;color:var(--ink2)}
+.dyTask.done b{color:#3f7a45}
+.dyBar{height:8px;margin:4px 0 2px;border-radius:5px;background:#e6dccb;border:1.5px solid var(--ink);overflow:hidden}
+.dyBar i{display:block;height:100%;background:linear-gradient(#b8ec7c,#74b944)}
+.rankRow{display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:14px;color:var(--ink)}
+.rankRow i{font-style:normal;width:22px;height:22px;border-radius:50%;background:#e6dccb;border:2px solid var(--ink);text-align:center;line-height:19px;font-size:12px;flex:none}
+.rankRow:nth-of-type(1) i{background:#f2c94c}.rankRow:nth-of-type(2) i{background:#d9dde2}.rankRow:nth-of-type(3) i{background:#e2a46a}
+.rankRow b{flex:1;font-weight:normal;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rankRow span{color:var(--ink2)}
+.rankRow.me b{color:#3f7a45}
+
+/* 地圖頂列：按鈕變多，窄螢幕縮小 logo 與間距、按鈕不換行 */
+.topBtns .cbtn{white-space:nowrap}
+@media (max-width:420px){
+  .mapTop{padding-left:8px;padding-right:8px;gap:6px}
+  .logo{padding:4px 10px 6px}
+  .logo span{font-size:20px;letter-spacing:1px}
+  .logo small{display:none}
+  .topBtns{gap:5px}
+  .topBtns .cbtn.sm{padding-left:8px;padding-right:8px;font-size:13px}
+}

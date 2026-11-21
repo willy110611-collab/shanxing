@@ -20,8 +20,8 @@
   // ───────── 存檔 ─────────
   // 資料形狀先照之後接後端的樣子放：userPhotos、cairns、bag、quests 都是可以直接同步的清單／對照表
   const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[],
-    bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false,
-    stats:{ notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{} },
+    bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
+    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{} },
     set:{ sound:true, vol:0.7, gps:false, dev:false, devOn:false, fast:false } });
   let SV = blank();
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
@@ -79,7 +79,7 @@
     moodNow();
   }
   document.addEventListener('click', e => {
-    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else go(g.dataset.go); }
+    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else go(g.dataset.go); }
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
 
@@ -297,7 +297,7 @@
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
     if (p.stopAt != null && p.stopAt - 1 - p.dist <= d) { d = Math.max(0, p.stopAt - 1 - p.dist); stop = true; }
-    p.dist += d; p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
+    p.dist += d; SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) daily('walk', d); p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
     p.temp = clamp(p.temp + ((boost ? 0.15 : 0) - chill(m, p.dist / m.dist, wx) * 0.08) * dt, 0, 100);
     if (stop) { p.rest = true; p.stopAt = null; p.stam = Math.max(0, p.stam); return d; }
     if (p.stam <= 0 || p.temp <= 0) { p.stam = Math.max(0, p.stam); p.sleep = true; }
@@ -366,7 +366,7 @@
     say(o.type === 'view' ? '去觀景台看看！' : '去那張長椅坐一下');
   }
   function onRest(){
-    SV.stats.rests++; A.chime();
+    SV.stats.rests++; daily('rest'); A.chime();
     say(st.restType === 'view' ? '哇，風景好漂亮' : '呼～喝口熱茶');
     $('#rsTitle').textContent = st.restType === 'view' ? '觀景台到了，慢慢看' : '坐下來喝口熱茶';
     $('#restSheet').classList.add('on');
@@ -395,7 +395,7 @@
     A.paper();
     const title = o.type === 'note' ? '山友留下的便條' : o.type === 'btree' ? '祈福樹上的小卡' : '笑臉疊石下壓著一張紙條';
     const days = 1 + C.hash(o.m + 'd') % 3;
-    SV.stats.notes++;
+    SV.stats.notes++; daily('note');
     modal(`<h3>${title}</h3>
       <div class="noteP">${notePick(o)}<small>— 匿名山友・${days} 天後會風化</small></div>
       <div class="mBtns"><button class="cbtn" id="nHeart">給愛心</button><button class="cbtn" id="nClean">${o.type === 'btree' ? '澆澆水' : '清清泥'}</button></div>
@@ -435,6 +435,7 @@
     if (!tr) return;
     SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1;
     if (M && tr.name.includes('紀念章')) SV.stats.magpie[M.id] = 1;
+    if (mode === 'show' && !rewarding) daily('treasure');
     save();
     if (mode === 'show') {
       A.sparkle(); if (tr.rarity === '傳說') { confetti(30); A.chime(); }
@@ -515,6 +516,7 @@
     const cap = label ? `${M.name}・${label}` : `${M.name}・${(m/1000).toFixed(1)} km`, wt = wxText(wx) || '晴';
     if (img) { SV.photos.push({ id:M.id, m:Math.round(m), alt:Math.round(altAt(M, m / M.dist)), img, cap, wx:wt, date:today() }); if (SV.photos.length > 60) SV.photos.shift(); imgDirty = true; save(); }
     if (quiet) return;
+    if (img) daily('photo');
     if (!img && !mark) { toast('鏡頭起霧了，這張沒拍成'); return; }
     A.shutter();
     const wall = mark ? SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) === mark) : null;
@@ -546,6 +548,7 @@
       // 照片牆改成向伺服器要「這座山、這個 500 公尺區段」的清單。
       SV.userPhotos.push(rec); if (SV.userPhotos.length > 24) SV.userPhotos.shift();
       imgDirty = true; save(); A.shutter();
+      daily('photo');
       if (SX.social) SX.social.uploadPhoto(c, rec);   // 有山友帳號就同時分享到伺服器（審核後公開）
       toast(bandOf(m) >= mt.dist ? `上傳好了，會出現在${mt.name}山頂的照片牆` : `上傳好了，會出現在 ${bandOf(m)} m 的照片牆`, 3000);
       if (screen === 'album') renderAlbum();
@@ -577,7 +580,7 @@
       alive = false;
       const side = Math.random() < 0.5 ? -1 : 1, m = Math.round(st.dist + 2), wish = pick(WISHES);
       SC.addCairn(m, side); (SV.cairns[M.id] = SV.cairns[M.id] || []).push({ m, side });
-      SV.stats.cairns++; save(); A.chime();
+      SV.stats.cairns++; daily('cairn'); save(); A.chime();
       const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width / 2, r.top + r.height * 0.4, 18);
       modal(`<h3>石頭疊好了</h3><div class="noteP">${wish}<small>— 你在${M.name}留下的願望</small></div>
         <p class="summitBig">步道旁多了一座你的小石堆。</p><div class="mBtns"><button class="cbtn go" id="sgOk">好</button></div>`);
@@ -623,7 +626,7 @@
   function questOk(q){
     const c = q.cond || {}, S = SV.stats, n = c.n || 1, ids = Object.keys(SV.done).filter(k => SV.done[k] > 0 && SX.M[k]);
     switch (c.type) {
-      case 'climbs': return c.withFriends ? false : (c.distinct ? ids.length : ids.reduce((a, k) => a + SV.done[k], 0)) >= n;   // withFriends 要等連線功能
+      case 'climbs': return c.withFriends ? (SV.stats.withFriends || 0) >= n : (c.distinct ? ids.length : ids.reduce((a, k) => a + SV.done[k], 0)) >= n;
       case 'mountain': return c.id ? !!SV.done[c.id] : ids.some(k => SX.M[k].alt >= (c.minAlt || 0));
       case 'time': return S.night >= n;
       case 'wx': return (c.kind === 'rain' ? S.rain : c.kind === 'fog' ? S.fog : c.kind === 'night' ? S.deer : 0) >= n;
@@ -668,6 +671,73 @@
     $('#bagOk').onclick = () => { A.pop(); closeModal(); };
   }
 
+  // ───────── 每日任務與連續上山天數 ─────────
+  const DAILY_POOL = [
+    { id:'walk',  name:'走 400 公尺', goal:400, unit:'m' },
+    { id:'walk2', kind:'walk', name:'走 1,200 公尺', goal:1200, unit:'m' },
+    { id:'rest',  name:'在長椅或觀景台休息一次', goal:1 },
+    { id:'note',  name:'讀一張樹洞便條', goal:1 },
+    { id:'cairn', name:'疊一座許願石堆', goal:1 },
+    { id:'photo', name:'拍一張風景照', goal:1 },
+    { id:'treasure', name:'撿到一件寶物', goal:1 },
+    { id:'chat',  name:'在山友大廳打聲招呼', goal:1 },
+    { id:'cheer', name:'幫一起爬的好友加油', goal:1 },
+    { id:'summit', name:'登頂一座山', goal:1 },
+  ];
+  const dayKey = (t = Date.now()) => { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  let dailyNow = 0;
+  function dailyState(){
+    const t = Date.now();
+    if (SV.daily && t - dailyNow < 30000) return SV.daily;   // 每 30 秒才重新檢查一次換日
+    dailyNow = t; const k = dayKey(t);
+    if (!SV.daily || SV.daily.day !== k) {
+      const prev = SV.daily, streak = prev && prev.day === dayKey(t - 864e5) ? (prev.streak || 0) + 1 : 1;
+      const r = C.rng(C.hash('daily' + k));
+      const others = DAILY_POOL.filter(x => !x.id.startsWith('walk') && x.id !== 'summit' && (x.id !== 'cheer' || (SX.social && SX.social.party)) && (x.id !== 'chat' || (SX.social && SX.social.acct)));
+      const pick = []; while (pick.length < 2 && pick.length < others.length) { const x = others[Math.floor(r() * others.length)]; if (!pick.includes(x)) pick.push(x); }
+      const big = r() < 0.25 ? DAILY_POOL.find(x => x.id === 'summit') : DAILY_POOL[r() < 0.5 ? 0 : 1];
+      SV.daily = { day:k, streak, streakGot:false, tasks:[big, ...pick].map(x => ({ id:x.id, n:0, done:false, got:false })) };
+      save(); setTimeout(updateDailyBadge, 0);
+    }
+    return SV.daily;
+  }
+  function daily(kind, amt = 1){
+    const D = dailyState();
+    for (const tk of D.tasks) {
+      if (tk.done) continue;
+      const def = DAILY_POOL.find(x => x.id === tk.id); if (!def || (def.kind || def.id) !== kind) continue;
+      tk.n = Math.min(def.goal, tk.n + amt);
+      if (tk.n >= def.goal) { tk.done = true; toast(`每日任務完成：${def.name}，到「每日」領獎勵`); A.sparkle(); updateDailyBadge(); save(); }
+    }
+  }
+  function updateDailyBadge(){
+    const D = SV.daily; if (!D) return;
+    const n = D.tasks.filter(t => t.done && !t.got).length + (D.streakGot ? 0 : 1);
+    $$('[data-go="daily"]').forEach(b => b.dataset.badge = n ? String(n) : '');
+  }
+  let rewarding = false;
+  function giveReward(rare){
+    const pool = rare ? SX.TREASURES.filter(x => x.rarity !== '普通') : null;
+    const tr = pool && pool.length ? pool[Math.floor(Math.random() * pool.length)] : rollTreasure(M ? M.id : 'any');
+    rewarding = true; gainTreasure(tr, 'show'); rewarding = false;
+  }
+  function openDaily(){
+    const D = dailyState(), s = D.streak, wk = ((s - 1) % 7) + 1;
+    modal(`<h3>每日任務</h3>
+      <div class="streakBox"><b>連續上山 ${s} 天</b><div class="streakDots">${[1,2,3,4,5,6,7].map(i => `<i class="${i <= wk ? 'on' : ''}${i === 7 ? ' big' : ''}"></i>`).join('')}</div>
+        <small>${wk === 7 ? '今天是第 7 天，簽到可以拿稀有寶物！' : `再 ${7 - wk} 天可以拿稀有寶物`}</small>
+        <button class="cbtn ${D.streakGot ? '' : 'go'} sm" id="dyIn" ${D.streakGot ? 'disabled' : ''}>${D.streakGot ? '今天簽到過了' : '簽到'}</button></div>
+      ${D.tasks.map((tk, i) => { const def = DAILY_POOL.find(x => x.id === tk.id) || { name:tk.id, goal:1 }; const f = Math.min(1, tk.n / def.goal);
+        return `<div class="dyTask${tk.done ? ' done' : ''}"><div><b>${def.name}</b><div class="dyBar"><i style="width:${f * 100}%"></i></div>
+          <small>${def.unit ? `${Math.floor(tk.n).toLocaleString('en-US')} / ${def.goal.toLocaleString('en-US')} m` : `${tk.n} / ${def.goal}`}</small></div>
+          <button class="cbtn sm ${tk.done && !tk.got ? 'go' : ''}" data-dy="${i}" ${tk.done && !tk.got ? '' : 'disabled'}>${tk.got ? '已領取' : tk.done ? '領取' : '進行中'}</button></div>`; }).join('')}
+      <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務。完成後領取，會拿到一件寶物。</p>
+      <div class="mBtns"><button class="cbtn" id="dyX">關閉</button></div>`);
+    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; save(); updateDailyBadge(); closeModal(); giveReward(wk === 7); };
+    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; save(); updateDailyBadge(); closeModal(); giveReward(false); });
+    $('#dyX').onclick = () => { A.pop(); closeModal(); };
+  }
+
   // ───────── 登頂 ─────────
   function arrive(){
     arrived = true; st.dist = M.dist; st.fin = true; st.rest = false; st.stopAt = null;
@@ -675,6 +745,8 @@
     SV.done[M.id] = (SV.done[M.id] || 0) + 1;
     if (!M.temple) SV.stamps[M.id] = SV.stamps[M.id] || today();
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
+    if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
+    daily('summit');
     const stamp = SX.TREASURES.find(x => x.id === 't_summit_stamp'); if (stamp) gainTreasure(stamp, 'quiet');
     save(); A.yay();
     const m = M;
@@ -1044,7 +1116,11 @@
   requestAnimationFrame(loop);
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
-  window.SXG = { go, startClimb, openTemple, openBag, checkQuests,
+  // 給連線模組用：雲端存檔、每日任務
+  SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0),
+    applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
+  setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
+  window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests,
     tick:(n = 30) => { for (let i=0;i<n;i++) frame(0.033); },
     encounter:id => { if (!st) return null; const e = id ? SX.ENCOUNTERS.find(x => x.id === id) : null; openEncounter(e); return lastEnc; },
     treasure:id => { const tr = id ? SX.TREASURES.find(x => x.id === id) : rollTreasure(M ? M.id : 'xiangshan'); gainTreasure(tr, 'show'); return tr && tr.id; },

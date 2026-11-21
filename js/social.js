@@ -102,7 +102,7 @@
   async function refresh(){
     if (!acct) return;
     try {
-      const [f, i] = await Promise.all([api('/friends'), api('/invites')]);
+      const [f, i] = await Promise.all([api('/friends'), api('/invites'), report()]);
       friends = f.friends || []; invites = i.invites || [];
       checkParty();
       if (tab === 'friends') renderFriends();
@@ -122,7 +122,7 @@
     if (!body.querySelector('#chatList')) {
       body.innerHTML = `<div class="ppl" id="pplRow"></div><div class="chatList" id="chatList"></div>
         <form class="chatIn" id="chatForm"><input id="chatTxt" maxlength="200" placeholder="跟山友打聲招呼…" autocomplete="off"><button class="cbtn go sm">送出</button></form>`;
-      $('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatTxt').value.trim(); if (!v) return; if (!lobby || !lobby.open) { toast('還在連線，等一下'); return; } lobby.send({ type: 'chat', text: v }); $('#chatTxt').value = ''; };
+      $('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatTxt').value.trim(); if (!v) return; if (!lobby || !lobby.open) { toast('還在連線，等一下'); return; } lobby.send({ type: 'chat', text: v }); $('#chatTxt').value = ''; if (SX.game) SX.game.daily('chat'); };
     }
     $('#pplRow').innerHTML = people.slice(0, 30).map(p => `<span class="pChip${p.id === acct.id ? ' me' : ''}">${esc(p.name)}</span>`).join('') || '<span class="tiny">大廳目前沒有別人</span>';
     const L = $('#chatList');
@@ -142,6 +142,9 @@
         <span><button class="cbtn go sm" data-acc="${v.id}">一起去</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
       ${party ? `<div class="setRow"><h4>正在一起爬</h4><div class="frRow"><span>和 <b>${esc(party.with.name)}</b> 爬 <b>${esc(mName(party.mountain))}</b></span>
         <span><button class="cbtn go sm" id="pGo">出發</button><button class="cbtn sm" id="pEnd">結束</button></span></div></div>` : ''}
+      ${friends.length ? `<div class="setRow"><h4>本週誰走最多</h4>${[{ id: acct.id, name: acct.name + '（我）', week: myWeek }, ...friends].sort((a, b) => (b.week || 0) - (a.week || 0)).slice(0, 10)
+        .map((p, i) => `<div class="rankRow${p.id === acct.id ? ' me' : ''}"><i>${i + 1}</i><b>${esc(p.name)}</b><span>${((p.week || 0) / 1000).toFixed(1)} km</span></div>`).join('')}
+        <p class="tiny">每週一凌晨重新計算。</p></div>` : ''}
       <div class="setRow"><h4>好友（${friends.length}）</h4>
         ${friends.length ? friends.map(f => `<div class="frRow"><span><i class="dot${f.online ? ' on' : ''}"></i><b>${esc(f.name)}</b>
           <small>${f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : (f.online ? '在線上' : '休息中')}</small></span>
@@ -180,12 +183,16 @@
       <div class="setRow"><h4>暱稱</h4><form class="pw" id="nmF"><input id="nmIn2" maxlength="12" value="${esc(acct.name)}"><button class="cbtn sm">改名</button></form></div>
       <div class="setRow"><h4>復原碼</h4><p>換手機時用來找回帳號，不要給別人。</p><button class="cbtn sm" id="showRc">顯示復原碼</button></div>
       <div class="setRow"><h4>換手機：用復原碼登入</h4><form class="pw" id="rsF"><input id="rsIn" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>
+      <div class="setRow"><h4>雲端存檔</h4><p>有帳號時，進度每 3 分鐘自動備份到雲端（照片不備份）。換手機登入後，可以把進度載回來。</p>
+        <div class="mBtns" style="justify-content:flex-start"><button class="cbtn sm" id="cdUp">立刻備份</button><button class="cbtn sm" id="cdDown">從雲端載入</button></div></div>
       <div class="setRow"><h4>我上傳的照片</h4><div id="myPh"><p>讀取中…</p></div></div>`;
     $('#nmF').onsubmit = async e => { e.preventDefault(); const v = $('#nmIn2').value.trim(); if (!v) return;
       try { const d = await api('/me', { json: { name: v } }); acct.name = d.name; store(KEY, acct); toast('改好了'); } catch(err){ toast(err.message, 3000); } };
     $('#showRc').onclick = () => showRecovery(false);
     $('#rsF').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn').value.trim(); if (!v) return;
-      try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); } catch(err){ toast(err.message, 3000); } };
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); } };
+    $('#cdUp').onclick = () => { lastSaved = ''; cloudSave(false); toast('備份好了'); };
+    $('#cdDown').onclick = () => offerCloudLoad();
     api('/photos?mine=1').then(d => {
       const L = d.photos || [], st = { pending: '審核中', ok: '已公開', hidden: '未通過' };
       $('#myPh').innerHTML = L.length ? '<div class="grid">' + L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}?t=${encodeURIComponent(acct.token)}" loading="lazy"><p>${esc(mName(p.mountain))}・${p.alt} m・${st[p.status] || p.status}</p></div>`).join('') + '</div>'
@@ -198,14 +205,20 @@
   function partyBox(){
     let el = $('#partyBox');
     const M = G().M, on = party && M && M.id === party.mountain && $('#scrClimb.on');
-    if (!on) { if (el) el.classList.remove('on'); return; }
-    if (!el) { el = document.createElement('div'); el.id = 'partyBox'; el.className = 'partyBox'; $('#scrClimb').appendChild(el); }
+    if (!on) { if (el) el.classList.remove('on'); if (SX.scene && SX.scene.setMates) SX.scene.setMates([]); return; }
+    if (!el) {
+      el = document.createElement('div'); el.id = 'partyBox'; el.className = 'partyBox'; $('#scrClimb').appendChild(el);
+      el.innerHTML = '<b id="pbName"></b><span id="pbInfo"></span><button class="cbtn sm" id="cheerBtn">幫他加油</button>';
+      $('#cheerBtn').onclick = () => {
+        if (!party) return; const t = Date.now(); if (t - (partyBox._c || 0) < 3000) { toast('剛剛才加油過，等一下下'); return; } partyBox._c = t;
+        if (pRoom) pRoom.send({ type: 'cheer', to: party.with.id }); if (A().sparkle) A().sparkle(); toast('加油送出了！'); if (SX.game) SX.game.daily('cheer');
+      };
+    }
     el.classList.add('on');
     const me = G().st, d = mate && me ? mate.dist - me.dist : null;
-    el.innerHTML = `<b>和 ${esc(party.with.name)} 一起爬</b>
-      <span>${!pRoom || !pRoom.open ? '連線中…' : mate ? `${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}` : '等對方上線…'}</span>
-      <button class="cbtn sm" id="cheerBtn">幫他加油</button>`;
-    $('#cheerBtn').onclick = () => { if (pRoom) pRoom.send({ type: 'cheer', to: party.with.id }); if (A().sparkle) A().sparkle(); toast('加油送出了！'); };
+    $('#pbName').textContent = `和 ${party.with.name} 一起爬`;
+    $('#pbInfo').textContent = !pRoom || !pRoom.open ? '連線中…' : mate ? `${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}` : '等對方上線…';
+    if (SX.scene && SX.scene.setMates) SX.scene.setMates(mate && me ? [{ dist: mate.dist, name: party.with.name, rest: !!mate.rest }] : []);
   }
   function tick(){
     const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
@@ -223,8 +236,33 @@
     partyBox();
   }
   setInterval(tick, 1000);
-  // 每分鐘回報一次自己在爬哪座山（好友列表看得到）
-  setInterval(() => { const M = G().M, st = G().st; if (!acct || !M || !st || !$('#scrClimb.on')) return; api('/me', { json: { mountain: M.id, dist: Math.round(st.dist) } }).catch(() => {}); }, 60000);
+  // 每分鐘回報一次：在爬哪座山、累積距離、登頂次數（好友列表與週排行用）
+  let myWeek = 0;
+  function report(){
+    if (!acct || !SX.game) return Promise.resolve();
+    const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
+    const body = { walked: Math.round(SX.game.stats().walked || 0), summits: SX.game.summits() };
+    if (climbing) { body.mountain = M.id; body.dist = Math.round(st.dist); }
+    return api('/me', { json: body }).then(d => { myWeek = d.week || 0; }).catch(() => {});
+  }
+  setInterval(report, 60000);
+
+  // ───────── 雲端存檔：有帳號就每 3 分鐘、離開畫面時備份一次（不含照片圖檔）─────────
+  let lastSaved = '';
+  function cloudSave(keep){
+    if (!acct || !SX.game) return;
+    const txt = SX.game.getSave(); if (txt === lastSaved || txt.length > 390 * 1024) return;
+    lastSaved = txt;
+    fetch(API + '/save', { method: 'POST', headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: txt, keepalive: !!keep && txt.length < 60000 }).catch(() => { lastSaved = ''; });
+  }
+  setInterval(() => cloudSave(false), 180000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cloudSave(true); });
+  async function offerCloudLoad(){
+    try {
+      const d = await api('/save'); if (!d.data) { toast('雲端沒有存檔，從現在開始會自動備份'); return; }
+      if (confirm(`雲端有 ${new Date(d.updated).toLocaleString('zh-TW')} 的存檔，要載入嗎？\n（這支手機目前的進度會被取代，照片不會跟著搬過來）`)) SX.game.applySave(d.data);
+    } catch(e){ toast(e.message, 3000); }
+  }
   setInterval(() => { if (acct && !$('#scrLobby.on')) api('/invites').then(i => { invites = i.invites || []; checkParty(); updateBadge(); }).catch(() => {}); }, 45000);
 
   // ───────── 共享照片：上傳、500 m 照片牆、檢舉 ─────────
