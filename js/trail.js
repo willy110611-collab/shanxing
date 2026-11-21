@@ -317,7 +317,9 @@ function buildElev(m){
     let sl = clamp(base * (0.25 + 1.5 * vn(i * 0.035, 7)) + 0.05 * (vn(i * 0.21, 8) - 0.3), 0.015, 0.42);
     if (i >= e) sl *= Math.max(0, 1 - (i - e) / 12);
     elev[i + 1] = elev[i] + sl * SEG;
-    stepF[i] = ((tr === 'stairs' && sl > 0.05) || sl > (tr === 'wood' ? 0.16 : 0.2)) ? 1 : 0;   // 陡坡或石階路段 → 階梯
+    // 階梯只出現在石階型步道，或土路／碎石路上偶爾一小段很陡的地方；其餘都是原始土坡
+    const patch = vn(i * 0.06, 11) > 0.62;
+    stepF[i] = ((tr === 'stairs' && sl > 0.05) || (tr === 'wood' && sl > 0.16) || (sl > 0.3 && patch)) ? 1 : 0;
   }
 }
 function buildProps(){
