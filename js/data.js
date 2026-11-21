@@ -6,7 +6,7 @@ SX.MOUNTAINS = [
   { id:'xiangshan', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
     feat:'城市高樓、步道石階、山頂六顆大石頭', end:'山腰福德小祠', temple:true,
     theme:{ sky:['#9fd3ee','#fbe7c6'], far:'#8fb3a8', mid:'#6fa86a', near:'#86c06a', trail:'stairs', tower:true, rocks:true } },
-  { id:'qixing', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:2400, diff:2,
+  { id:'qixing', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:3500, diff:2,
     feat:'硫磺噴氣孔、整片芒草、火山口', end:'山頂三角點',
     theme:{ sky:['#a9d6e8','#f6e9cf'], far:'#9aae95', mid:'#8aa86a', near:'#b5c46e', trail:'dirt', steam:true, grass:true } },
   { id:'guanyin', name:'觀音山', area:'新北', lon:121.42, lat:25.135, startAlt:120, alt:616, dist:2200, diff:2,
