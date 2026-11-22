@@ -131,11 +131,16 @@ const GAIT = {
   idle:[100, 180], idleDur:[2, 3],      // 偶爾停下來喝口水或擦汗
   wipe:[0.35, 0.3, 0.25],               // 停下來時擦汗的機率：基本＋大太陽＋爬坡（其餘是喝水）
   look:6, lookDur:[2.2, 3],             // 觀景台、路線地標在前面幾公尺內：停下來轉頭看
-  turnIn:0.45, turnOut:0.25,            // 轉彎傾身多大換轉身走路圖（換回來的門檻小一點，不會在邊界來回換）
-  stairIn:0.45, stairOut:0.25,          // 同上，階梯走路圖
+  bendIn:0.012, bendOut:0.007,          // 轉身走路圖只在真的彎道：腳下往前 8 公尺的平均彎度超過 bendIn 換上、低於 bendOut 才算彎完（直線上的小擺動不會換）
+  bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
+  stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
+  tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
+  hold:1.5,                             // 換了一種走路圖以後，至少用這麼多秒才能再換（不會一閃一閃）
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
 };
-const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, onStair:false, onTurn:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
+// 走路圖的高度修正：每張圖量「帽頂到鞋底」佔整格多高（量出來都在 97～100%），用一般走路圖當基準換算，換圖時人不會忽大忽小。重畫了圖要重新量
+const GAIT_H = { hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
+const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
 
@@ -233,7 +238,7 @@ function artSpr(id, hm){
 // 樹埋進土裡：Gemini 的樹圖底部畫了一整圈樹根，照圖底貼在地面上，樹根就整片浮在地表上。
 // 每張圖往下埋「圖高的幾成」（量的是樹幹和樹根交界往下多少，只留樹幹底和樹根最上面一點點）；沒列的圖不埋。
 // 程式畫的樹沒有樹根，只埋一點點（SINK_DEF），樹幹底才不會像切齊的紙片
-const SINK = { tree_pine:0.06, tree_pine_snow:0.06, tree_broad:0.13, tree_big:0.12, tree_sakura:0.09, wish_tree:0.03, bush_rhodo:0.03, rock_moss:0.03, trunk_close:0.01 };
+const SINK = { tree_pine:0.06, tree_pine_snow:0.06, tree_broad:0.13, tree_big:0.12, tree_sakura:0.065, wish_tree:0.03, bush_rhodo:0.03, rock_moss:0.03, trunk_close:0.01 };
 const SINK_DEF = 0.03;
 const SINK_SOFT = 0.04;   // 切口往上這麼高（佔留下來的高度）慢慢變透明，像被土和草蓋住，不會有一條切齊的線
 // 把圖底部 s 那一截切掉（只做一次，存起來；原圖釋放），切口淡出
@@ -1280,7 +1285,7 @@ function updHero(s, t, dt, dist, sp){
 }
 // ───────── 步態：累了慢慢走、偶爾停下來喘氣／喝水／擦汗／看風景、開心時小跳、上階梯和轉彎換圖 ─────────
 function rnd(r){ return r[0] + Math.random() * (r[1] - r[0]); }
-function gaitReset(){ gait.act = null; gait.pace = 1; gait.tB = rnd(GAIT.breath[1]); gait.tH = rnd(GAIT.hop); gait.tI = rnd(GAIT.idle); gait.lookM = -1; gait.cur = ''; gait.prev = ''; gait.k = 1; }
+function gaitReset(){ gait.act = null; gait.pace = 1; gait.tB = rnd(GAIT.breath[1]); gait.tH = rnd(GAIT.hop); gait.tI = rnd(GAIT.idle); gait.lookM = -1; gait.cur = ''; gait.prev = ''; gait.k = 1; gait.mode = 'walk'; gait.modeT = 9; gait.bendT = 0; gait.tired = false; }
 function gaitStart(id, dur, flip){ if (!ART.get(id)) return; gait.act = id; gait.at = 0; gait.dur = dur; gait.aflip = !!flip; }
 // 前面幾公尺內有沒有觀景台或路線地標（登山口、終點不算）；每個只看一次
 function lookAhead(dist){
@@ -1307,6 +1312,21 @@ function updGait(s, dt, dist){
   const tg = gait.act ? 0 : s.boost ? 1 : G.pace[lvl];
   gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
   if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
+  gaitMode(dt, dist, stam);
+}
+// 現在用哪一種走路圖：階梯 > 真的彎道 > 累了 > 一般。每種都有進出兩個門檻，換了以後至少用 GAIT.hold 秒
+function gaitMode(dt, dist, stam){
+  const G = GAIT, walking = hero.mv > 0.6 && !gait.act;
+  gait.modeT += dt;
+  const stair = hero.stair > (gait.mode === 'stairs' ? G.stairOut : G.stairIn);
+  gait.tired = stam < G.tired + (gait.tired ? G.tiredOut : 0);
+  // 彎道：腳下往前 8 公尺的平均彎度（跟轉彎傾身同一段路），超過門檻而且連續走了 bendHold 秒才算；階梯段、系統設定減少動態都不算
+  const si = Math.floor(dist / SEG); let kc = 0; for (let q = 0; q < TURN_LOOK; q++) kc += cAt(si + q); kc /= TURN_LOOK;
+  const bendOn = gait.mode === 'turn', ak = Math.abs(kc), flat = hero.stair < 0.1 && !(RMOT && RMOT.matches);
+  if (walking && flat && ak > (bendOn ? G.bendOut : G.bendIn)) gait.bendT += dt; else if (!bendOn || ak < G.bendOut || !flat) gait.bendT = 0;
+  const want = stair || (gait.mode === 'turn' && hero.stair >= 0.1) ? 'stairs' : gait.bendT >= G.bendHold ? 'turn' : gait.tired ? 'tired' : 'walk';
+  // 走上階梯時轉身圖馬上換掉（階梯上不轉身）；轉身圖畫的是往右前方：左彎鏡射（換上的那一刻決定，彎完以前不會翻面）
+  if (want !== gait.mode && (gait.modeT >= G.hold || (want === 'stairs' && gait.mode === 'turn'))) { gait.mode = want; gait.modeT = 0; gait.modeF = kc < 0; }
 }
 S.pace = function(){ return gait.pace; };
 S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
@@ -1314,20 +1334,19 @@ S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.
 const RAIN_OF = { hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
 function rainy(id){ const r = RAIN_OF[id]; return isRain && r && ART.get(r) ? r : id; }
 function gaitSheet(){
-  const G = GAIT;
-  gait.onStair = hero.stair > (gait.onStair ? G.stairOut : G.stairIn);
-  gait.onTurn = Math.abs(hero.turn) > (gait.onTurn ? G.turnOut : G.turnIn);
   gait.sf = false;
   if (gait.act) { gait.sid = gait.act; gait.sf = gait.aflip; return; }
-  // 走路一律用「正背面」那張：階梯圖每格身體一下朝左一下朝右、累的圖朝左前方、轉身圖朝右前方，換來換去看起來像左右斜著走（玩家意見：上階梯要直直走）
-  // 累了只放慢速度（GAIT.pace）；這三張要等重畫成正背面再加回來
   // 一般走路：有八格版就用八格（走路比較順）；下雨天穿黃色雨衣
-  gait.sid = isRain && ART.get('hiker_rain_walk8') ? 'hiker_rain_walk8' : isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : ART.get('hiker_walk8') ? 'hiker_walk8' : 'hiker_walk';
+  const walk = isRain && ART.get('hiker_rain_walk8') ? 'hiker_rain_walk8' : isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : ART.get('hiker_walk8') ? 'hiker_walk8' : 'hiker_walk';
+  // 階梯、累了：重畫成正背面直直走的版本（雨天換雨衣版）；彎道：轉身圖（往右前方，左彎鏡射），沒有雨衣版所以雨天照舊一般走路
+  const m = gait.mode, id = m === 'stairs' ? rainy('hiker_stairs8') : m === 'tired' ? rainy('hiker_tired_walk8') : m === 'turn' && !isRain ? 'hiker_turn_walk8' : null;
+  if (id && ART.get(id)) { gait.sid = id; gait.sf = m === 'turn' && gait.modeF; }
+  else gait.sid = walk;
 }
 // 某張圖現在畫第幾格、畫多高：走路類跟著步伐相位（換圖時步伐接得上），小跳照動作進度，單張動作只有一格
 function gaitDraw(c, id, flip, fl){
   const e = ART.get(id); if (!e) return false;
-  let i = 0, h = SCALE.hero * 100, dy = 0;
+  let i = 0, h = SCALE.hero * 100 * (GAIT_H[id] || 1), dy = 0;
   if (id === 'hiker_hop4') { i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3; h *= e.frames[i].h / e.frames[3].h; }   // 跳起來那格的外框含離地空隙：照站著那格的比例畫，人不會忽大忽小
   else if (id === 'hiker_breath') h = SCALE.heroBreath * 100;
   else if (e.frames.length === 1) h = SCALE.heroPose * 100;
