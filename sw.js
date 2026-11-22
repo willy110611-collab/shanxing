@@ -1,5 +1,5 @@
 // 山行小日子：離線快取。程式與頁面「先抓網路、失敗才用快取」，所以更新會馬上生效；音樂圖示則先用快取。
-const CACHE = 'shanxing-v52';
+const CACHE = 'shanxing-v53';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
