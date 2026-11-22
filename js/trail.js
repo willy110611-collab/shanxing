@@ -20,7 +20,7 @@ const TWL = 720;        // 背景圖塊邏輯寬度
 const FONT = getComputedStyle(document.documentElement).getPropertyValue('--fontB').trim() || 'sans-serif';   // 字型在 css/style.css 的 --fontB
 const LW = 0.032;       // 道具墨線粗細（公尺）
 const HIT = { note:1, btree:1, cairn:1, bench:1, view:1, treasure:1 };
-const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW+1.0, mycairn:RW+0.35, fall:RW+3.2 };
+const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW+1.0, mycairn:RW+0.35, fall:RW+3.2, hut:RW+7.8, shrine:RW+1.5, station:RW+3.6, rockwall:RW+2.2 };   // 地標放在圖寬一半以外，不會蓋到步道
 const DEFWX = { kind:'sunny', time:'day' };
 
 let cv = null, ctx = null, W = 375, H = 812, DPR = 1, F = 450, HOR = 276, CAMH = 5, U = 1;
@@ -551,6 +551,7 @@ function buildSprites(){
   SPR.view = artOr('deck_view', SCALE.view, [sprite(SCALE.view * 2.1, SCALE.view, 70, pView)]);
   SPR.fall = artOr('waterfall', SCALE.fall, []);      // 只有美術圖：路旁小瀑布
   SPR.railPost = artOr('rail_post', SCALE.railPost, null); SPR.railBar = artOr('rail_bar', SCALE.railBar, null);   // 兩張都有才用美術圖欄杆，不然照舊程式畫
+  SPR.hut = artOr('hut_paiyun', SCALE.hut, null); SPR.shrine = artOr('shrine_small', SCALE.shrine, null); SPR.station = artOr('weather_station', SCALE.station, null); SPR.rockwall = artOr('rock_wall', SCALE.rockwall, null);   // 路旁地標（只有美術圖）
   SPR.hedgeFern = artOr('hedge_fern', SCALE.hedgeFern, null); SPR.bambooT = artOr('bamboo_tall', SCALE.bambooTall, null);   // 植物牆：森林的蕨類叢、高山的高箭竹（只有美術圖）
   const tk = TH.alpine ? null : trunkSpr(SCALE.trunk); SPR.trunk = tk ? [tk] : null;   // 森林步道貼近鏡頭的高樹幹
   SPR.treasure = artOr('treasure_box', SCALE.treasure, [sprite(SCALE.treasure * 1.17, SCALE.treasure, 80, pTreasure)]);
@@ -646,8 +647,34 @@ function buildProps(){
   // 只有美術圖才有的景物，放在最後（不影響上面固定道具的位置）：小瀑布（中低海拔）。欄杆改成沿路連續畫（railOn）
   if (ART.get('waterfall') && !TH.alpine) for (m = 600 + r() * 400; m < lim; m += 900 + r() * 600) put('fall', m, r() < 0.5 ? -1 : 1);
   props.push({ type:'summit', m:total + 3, side:1, text:'' });
+  landmarks();
   mergeProps();
 }
+// 路旁地標（只有美術圖才放）：位置照這座山的路線地標（SX.REC 的 waypoints）
+// hut：排雲山莊的三層木屋，玉山群峰經過排雲山莊時、向陽山屋也用它（369 山莊是黃屋頂、嘉明湖避難山屋是一層小屋，長得不一樣，不放）
+const LANDMARK = {
+  hut:{ art:'hut_paiyun', wp:['排雲山莊', '向陽山屋'], side:-1, clear:9 },
+  shrine:{ art:'shrine_small', peak:'yushan_west', wp:['西峰山神廟'], side:1, clear:4 },
+  station:{ art:'weather_station', peak:'yushan_north', top:9, side:-1, clear:5 },    // 北峰頂：氣象站在三角點後面一點（站上山頂時看得到）
+  rockwall:{ art:'rock_wall', peak:'yushan_east', from:'東峰岩溝', every:30, clear:3, helmet:true }  // 東峰最後一段：岩溝兩邊一塊一塊的岩壁；這段停下來時戴著頭盔
+};
+let helmetFrom = null;   // 從這裡（公尺）以後停下來站著的登山客戴頭盔（hiker_helmet 只有一個站姿，走路照舊）
+let clrS = new Uint8Array(1);   // 地標前面 2.5×clear 到後面 clear 公尺內（前面的會擋住它，留長一點）、那一邊不種路旁植物（不然山神廟會被箭竹整個擋住）：1＝左邊、2＝右邊
+function landmarks(){
+  const wp = (M && M.waypoints) || [], at = name => { for (let k = 0; k < wp.length; k++) if (wp[k].name === name) return wp[k].m; return null; };
+  clrS = new Uint8Array(N + 1); helmetFrom = null;
+  const add = (type, m, side, L) => {
+    props.push({ type:type, m:m, side:side, text:'' });
+    for (let i = Math.max(0, Math.floor((m - L.clear * 2.5) / SEG)); i <= Math.min(N, Math.ceil((m + L.clear) / SEG)); i++) clrS[i] |= side < 0 ? 1 : 2;
+  };
+  for (const type in LANDMARK) {
+    const L = LANDMARK[type]; if (!ART.get(L.art) || (L.peak && M.id !== L.peak)) continue;
+    if (L.wp) L.wp.forEach(n => { const m = at(n); if (m != null && m > 0 && m < total) add(type, m, L.side, L); });
+    if (L.top) add(type, total + L.top, L.side, L);
+    if (L.from) { const m0 = at(L.from); if (m0 != null && L.helmet) helmetFrom = m0; if (m0 != null) for (let m = m0, k = 0; m < total - 8; m += L.every, k++) add(type, m, k & 1 ? 1 : -1, L); }
+  }
+}
+function cleared(i, side){ return i >= 0 && i <= N && (clrS[i] & (side < 0 ? 1 : 2)) !== 0; }
 function mergeProps(){ AP = props.concat(cairns); AP.sort(function(a, b){ return a.m - b.m; }); }
 
 // ═════════ 色盤、地面色表、背景圖塊 ═════════
@@ -1309,10 +1336,11 @@ function drawBird(x, y, u, s, t){
 function walkFrame(n){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * (n || 4)) : 0; }
 // 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
 // fl：換衣服色調的濾鏡（隊友、廣場上的山友），自己是 undefined
-function heroArt(c, s, t, fl){
+function heroArt(c, s, t, fl, me){
   if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, SCALE.heroSleep * 100, false, fl);
   if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
   if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
+  if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return ART.drawFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
   const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
   const walk = isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk');   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
@@ -1348,7 +1376,7 @@ function drawHero(s, t, bx, by, bs){
   else ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
   ctx.save(); ctx.translate(X, Y); if (tn) ctx.rotate(tn * TURN_A); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 轉彎往內側傾（以腳底為軸）；爬階梯：身體往前傾，從背後看起來矮一點點
-  if (!heroArt(ctx, s, t)) { if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
+  if (!heroArt(ctx, s, t, undefined, true)) { if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
   ctx.restore();
 }
 
@@ -1785,6 +1813,7 @@ function drawWorld(b, t){
       if (pa <= 0) break;
       if (Hh(i, k * 8 + 1) > (k === 3 ? 0.75 : 0.62)) continue;
       const side = Hh(i, k * 8 + 2) < 0.5 ? -1 : 1, u = Hh(i, k * 8 + 3), f = (3 - k + Hh(i, k * 8 + 4)) / 4;
+      if (cleared(i, side)) continue;
       let xo, arr;
       if (k === 3) { xo = RW + 0.3 + u * 2.2; arr = pick(smallTab, Hh(i, k * 8 + 6)); }
       else { xo = RW + 0.5 + u * u * spread; arr = (xo > RW + 2.8 - wl && Hh(i, k * 8 + 5) < treeP) ? pick(treeTab, Hh(i, k * 8 + 6)) : pick(smallTab, Hh(i, k * 8 + 6)); }
@@ -1802,6 +1831,7 @@ function drawWorld(b, t){
       const h0 = 200 + k * 9;
       if (Hh(i, h0) > wl * HEDGE_P) continue;
       const side = Hh(i, h0 + 1) < 0.5 ? -1 : 1, u = Hh(i, h0 + 2), f = (k + Hh(i, h0 + 3)) / HEDGE_N;
+      if (cleared(i, side)) continue;
       const tree = !al && u > 0.5 && Hh(i, h0 + 4) < 0.45 * wl;   // 是樹還是灌木只看這個位置本身，不看它離登山客幾段（以前走近時樹會突然換成蕨類）
       const xo = tree ? RW + 1.1 + u * 2.6 : RW + 0.35 + u * u * 3.6, arr = tree ? pick(treeTab, Hh(i, h0 + 5)) : pick(hedgeTab, Hh(i, h0 + 5));
       const sp = arr[(Hh(i, h0 + 6) * arr.length) | 0], sc = tree ? 0.85 + 0.4 * Hh(i, h0 + 7) : (al ? 0.85 : 1.05) + 0.6 * Hh(i, h0 + 7);
@@ -1813,7 +1843,7 @@ function drawWorld(b, t){
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * sc, fq, farA(j, 50, 8), hA * fa);
     }
     // 森林步道貼近鏡頭的高樹幹：樹冠在畫面外，只有樹幹頂端超出畫面上緣時才看得到（依頂端離畫面上緣多遠慢慢淡入，不會突然冒出來）
-    if (SPR.trunk && hA > 0.005 && Hh(i, 230) < TRUNK_P * wl) {
+    if (SPR.trunk && hA > 0.005 && Hh(i, 230) < TRUNK_P * wl && !cleared(i, Hh(i, 231) < 0.5 ? -1 : 1)) {
       const sp = SPR.trunk[0], side = Hh(i, 231) < 0.5 ? -1 : 1, xo = RW + 1.5 + Hh(i, 232) * 2.4, f = Hh(i, 233);
       if (!heroDone && !benchO && (j < jhG || (j === jhG && f <= fhG))) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
       proj(j, f, false);
