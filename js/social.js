@@ -27,7 +27,7 @@
     catch(e){ throw new Error('連不上伺服器，檢查一下網路'); }
     const d = await r.json().catch(() => ({}));
     if (r.status === 401 && acct) { throw new Error('登入失效，請到「我的帳號」用復原碼重新登入'); }
-    if (!r.ok) throw new Error(d.error || ('伺服器錯誤 ' + r.status));
+    if (!r.ok) throw new Error(d.error || ('連線出了點狀況（' + r.status + '），晚點再試'));
     return d;
   }
   async function register(name){
@@ -247,7 +247,7 @@
     api('/photos?mine=1').then(d => {
       const L = d.photos || [], st = { pending: '審核中', ok: '已公開', hidden: '未通過' };
       $('#myPh').innerHTML = L.length ? '<div class="grid">' + L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}?t=${encodeURIComponent(acct.token)}" loading="lazy"><p>${esc(mName(p.mountain))}・${p.alt} m・${st[p.status] || p.status}</p></div>`).join('') + '</div>'
-        : '<p>還沒有上傳過。休息時按「上傳這裡的照片」，審核通過後其他山友走到同一段就看得到。</p>';
+        : '<p>還沒有上傳過。休息時按「上傳照片」，審核通過後，走到同一段的山友就看得到。</p>';
     }).catch(e => { const el = $('#myPh'); if (el) el.innerHTML = `<p>${esc(e.message)}</p>`; });
   }
 
@@ -384,7 +384,7 @@
     const asked = on ? Notification.requestPermission() : null;
     // 用 getRegistration（馬上回答），不用 serviceWorker.ready（背景程式沒裝好時會永遠等下去）
     const reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) throw new Error('遊戲還在準備背景程式，關掉重開一次再試');
+    if (!reg) throw new Error('遊戲還在準備，關掉重開再試一次');
     let sub = await reg.pushManager.getSubscription();
     if (!on) {
       if (sub) { await api('/push/sub', { method: 'DELETE', json: { endpoint: sub.endpoint } }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }

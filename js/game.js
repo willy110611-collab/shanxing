@@ -230,9 +230,9 @@
   const gradeNeed = m => SX.gradeNeed(m.id);   // 遊戲裡還沒有官方要求那一級的山時，data.js 會往下找一級
   const gradeOpen = m => { const n = gradeNeed(m); return !n || SX.MOUNTAINS.some(x => SV.done[x.id] && gradeRank(x.id) >= SX.GRADE_ORDER.indexOf(n)); };
   const unlocked = m => SV.unlockAll || (diffOpen(m) && gradeOpen(m));
-  const lockText = m => { if (!diffOpen(m)) return `先登頂任何一座難度 ${leadOf(m).diff - 1} 顆星以上的山，這裡就會開放。`;
-    const g = SX.gradeOf(m.id), n = gradeNeed(m), off = SX.GRADES[g].need;
-    return `這是官方分級 ${g} 級的百岳，要先登頂過任何一座 ${n} 級以上的百岳才能申請。` + (off !== n ? `（真實世界要 ${off} 級以上；遊戲裡還沒有 ${off} 級的山，先用 ${n} 級）` : ''); };
+  const lockText = m => { if (!diffOpen(m)) return `登頂任一座 ${leadOf(m).diff - 1} 顆星以上的山，就能挑戰這裡。`;
+    const g = SX.gradeOf(m.id), n = gradeNeed(m);
+    return `官方分級 ${g} 級：爬過任一座 ${n} 級以上的百岳，就能挑戰。`; };
   // 雪季提醒：分級有寫 snow 的山（C+），在雪季裡卡片多一行提醒，不擋玩家
   const snowNote = id => { const g = SX.gradeOf(id), t = g && SX.GRADES[g].snow; return t && seasonNow().some(s => s.id === 'snow' && s.mountains.includes(SX.groupOf(id))) ? t : ''; };
   // 建議挑戰順序：已開放、還沒爬過的山裡，難度最低、時間最短的那座；全都爬過就推爬最少次的。正在爬的那座不推
@@ -317,8 +317,8 @@
         <div class="rc-btns"><button class="cbtn go" id="rcSwitch">下山，改爬${m.name}</button></div>`
       : ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
         <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`
-      : `<div class="rc-feat"><em>還沒開放：</em>${lockText(m)}</div>
-        <div class="rc-btns"><button class="cbtn go" disabled>尚未解鎖</button></div>`}`;
+      : `<div class="rc-feat"><em>還不能爬：</em>${lockText(m)}</div>
+        <div class="rc-btns"><button class="cbtn go" disabled>還沒解鎖</button></div>`}`;
     card.classList.add('on'); card.scrollTop = 0;
     wxIcon($('#rcWx'), w.kind, w.time);
     if (!g) $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
@@ -372,10 +372,10 @@
       <div class="mBtns"><button class="cbtn go" id="petOk">決定了</button></div>`);
     $$('#mCard .pet').forEach(b => b.onclick = () => {
       const p = list.find(x => x.id === b.dataset.pet); A.pop();
-      if (!hasPet(p)) { $('#petMsg').textContent = `${p.name}還沒來：${p.unlockText || '之後才會遇到'}`; return; }
+      if (!hasPet(p)) { $('#petMsg').textContent = `${p.name}還沒來：${p.unlockText || '還在山裡等你'}`; return; }
       SV.pet = p.id || null; save();
       $$('#mCard .pet').forEach(x => x.classList.toggle('on', x === b));
-      $('#petMsg').textContent = p.desc + (p.id && p.id !== 'shiba' ? '（牠在步道上的樣子還在畫，先陪你在心裡走）' : '');
+      $('#petMsg').textContent = p.desc;
     });
     $('#petOk').onclick = () => { A.pop(); closeModal(); if (backId && screen === 'map') showRoute(backId); };
   }
@@ -385,7 +385,7 @@
   let lineT = 8, coldT = 0, lastEnc = null;
   function startClimb(id, force){
     const m = SX.M[id]; if (!m) return;
-    if (!force && !unlocked(m)) { toast('這座山還沒開放'); return; }
+    if (!force && !unlocked(m)) { toast('這座山還不能爬'); return; }
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
     M = m; SV.cur = id; st = P(id);
@@ -1572,7 +1572,7 @@
         <div><label>拍照地點的海拔（公尺）</label><input type="number" id="upAlt" inputmode="numeric"></div>
         <div><span class="alt500" id="upBand"></span></div>
         <button class="cbtn go" id="upGo">選一張照片上傳</button>
-        <p>照片會依海拔歸到下一個 500 公尺點，走到那裡的山友才看得到，步道不會被照片塞滿。現在先存在這支手機裡。</p></div>`;
+        <p>照片會依海拔歸到下一個 500 公尺點，走到那裡的山友才看得到，步道不會被照片塞滿。</p></div>`;
       SX.MOUNTAINS.forEach(m => { const ps = SV.userPhotos.filter(p => p.mountainId === m.id).sort((a, b) => a.m - b.m); if (!ps.length) return;
         html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol" data-up="${p.id}" style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${Math.round(p.alt).toLocaleString('en-US')} m・${bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m'}照片牆</p></div>`).join('') + '</div>'; });
       if (!SV.userPhotos.length) html += '<div class="empty" style="padding:30px 20px">還沒有上傳過照片。</div>';
@@ -1597,12 +1597,12 @@
   const byPlay = r => SX.MOUNTAINS.find(m => m.by === r);   // 百岳排名 → 遊戲裡的山（連結只寫在山身上的 by）
   function renderBaiyue(body){
     const isDone = r => { const m = byPlay(r); return !!(m && SV.done[m.id]); };
-    const n = SX.BAIYUE.filter(p => isDone(p.rank)).length, open = SX.BAIYUE.filter(p => byPlay(p.rank)).length;
-    body.innerHTML = `<div class="colHead">百岳 <b>${n}</b>／${SX.BAIYUE.length}・遊戲裡能爬 ${open} 座</div>` + SX.BAIYUE_GROUPS.map(g => {
+    const n = SX.BAIYUE.filter(p => isDone(p.rank)).length;
+    body.innerHTML = `<div class="colHead">百岳 <b>${n}</b>／${SX.BAIYUE.length}</div>` + SX.BAIYUE_GROUPS.map(g => {
       const rs = g.peaks.map(p => SX.BYNAME[p[0]]);
       return `<div class="grp byG">${g.name}<small>${rs.filter(p => isDone(p.rank)).length}／${rs.length}</small></div><div class="byGrid">` + rs.map(p => {
         const s = isDone(p.rank) ? 'done' : byPlay(p.rank) ? 'open' : 'soon';
-        return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>尚未開放</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;
+        return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>敬請期待</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;
       }).join('') + '</div>';
     }).join('');
     stagger(body, '.byG');
@@ -1610,7 +1610,7 @@
   }
   function openBaiyue(rank){
     const p = SX.BY[rank], m = byPlay(rank), G = SX.GRADES[p.grade];
-    const state = !m ? '尚未開放，之後的更新會加進遊戲' : SV.done[m.id] ? `已登頂 ${SV.done[m.id]} 次` : unlocked(m) ? '遊戲裡可以爬，還沒登頂' : '遊戲裡有這座山，還沒解鎖';
+    const state = !m ? '這座山還在路上，敬請期待' : SV.done[m.id] ? `已登頂 ${SV.done[m.id]} 次` : unlocked(m) ? '可以出發，還沒登頂' : '還沒解鎖';
     modal(`<h3>${p.name}</h3><div class="byInfo paper">
         <div><span>百岳排名</span><b>第 ${p.rank} 名</b></div>
         <div><span>海拔</span><b>${p.alt.toLocaleString('en-US')} m</b></div>
