@@ -1984,15 +1984,15 @@ function bankDetail(i, j, side, fade, fi){
   ctx.globalAlpha = fade;
 }
 // 石階嵌進土裡（石階步道 ground_stone／ground_stone_moss／ground_riser_stone）：每一階左右兩端
-// 踏面外緣接一條不規則的土邊、貼著石頭一條深褐綠接觸陰影再往草地淡掉，立面往外多伸出一截石頭側面（上緣往下斜，像埋進土裡）。
-// 階梯畫的時候把每階的位置記在 SEQ，整段所有階、兩邊一起畫成 4 筆（不是每階每邊各畫好幾筆，省效能）
-const SE_J = 30;                       // 幾段以內畫（最後 8 段淡入）
+// 踏面外緣接一條不規則的土邊、貼著石頭一條深褐綠接觸陰影，近處立面再往外多伸出一截石頭側面（外側往下斜，像埋進土裡）。
+// 階梯畫的時候把每階的位置記在 SEQ，整段所有階、兩邊一起畫成 2～3 筆（不是每階每邊各畫好幾筆，省效能）
+const SE_J = 24;                       // 幾段以內畫（最後 8 段淡入）
 const SE_SOIL = [0.12, 0.3];           // 土邊寬（公尺，每階每邊不一樣）
-const SE_SH = 0.4;                     // 接觸陰影往草地淡出去多寬（公尺）
+const SE_ROCK_J = 14;                  // 石頭側面只畫到幾段（再遠只剩一兩個像素）
 const SE_EXT = [0.05, 0.13];            // 石頭側面伸出踏面外多少（公尺）
 const SEQ = new Float32Array(9 * 4);   // 這段每一階：近端 x、y、半寬、比例，遠端 x、y（踏面）、立面上緣 y、半寬、比例
-const SE_PLANT_J = 24, SE_PLANT_P = 0.8, SE_FAR = 0.6;   // 石階邊的苔草：幾段以內畫、每階每邊長一叢的機率、最遠那幾段縮到幾成大
-const SE_LEAF = 5, SE_LEAF_J = 22;     // 石階每段多撒幾片落葉、松針；幾段以內才撒（再遠只剩一個像素）
+const SE_PLANT_J = 18, SE_PLANT_P = 0.5, SE_FAR = 0.6;   // 石階邊的苔草：幾段以內畫、每階每邊長一叢的機率、最遠那幾段縮到幾成大
+const SE_LEAF = 3, SE_LEAF_J = 22;     // 石階每段多撒幾片落葉、松針；幾段以內才撒（再遠只剩一個像素）
 const CLUMP_V = 4;                     // 小草叢只用前幾種（每種是一張貼圖，種類越多 WebGL 越常要換圖）
 function stoneSE(){ return TH.trail === 'stairs' && snowAmt < 0.5; }
 // 一段階梯分成幾階（每階最高 STEP_H）：登山客踩階梯的節奏、畫階梯、石階邊的草和落葉都用這個
@@ -2002,8 +2002,8 @@ function stairN(j){ return stepsOf(pW[j + 1] - pW[j]); }
 // 遠處每階立面只剩幾像素時，中間幾階的高度跟著距離慢慢壓扁（tm 1→0），壓到 0 就跟整段一階一樣
 function stairTm(j, n){ return n > 1 ? clamp(((pW[j + 1] - pW[j]) * pS[j + 1] / n - 3) / 2, 0, 1) : 0; }
 function treadY(j, f, n){ return HOR - (pW[j] + (pW[j + 1] - pW[j]) * stairTm(j, n) * Math.min(n - 1, Math.floor(f * n)) / n - camY) * gs; }
-function stoneEdges(i, n, fi, a){
-  for (let pass = 0; pass < 4; pass++) {
+function stoneEdges(i, n, fi, a, rock){
+  for (let pass = 0; pass < (rock > 0.01 ? 3 : 2); pass++) {
     ctx.beginPath();
     for (let q = 0; q < n; q++) {
       const o = q * 9, xa = SEQ[o], ya = SEQ[o + 1], wa = SEQ[o + 2], sa = SEQ[o + 3], xb = SEQ[o + 4], yt = SEQ[o + 5], yr = SEQ[o + 6], wb = SEQ[o + 7], sb = SEQ[o + 8], id = i * 8 + q;
@@ -2017,16 +2017,14 @@ function stoneEdges(i, n, fi, a){
         } else if (pass === 1) { // 貼著石頭最深的接觸陰影（壓到石頭外緣一點點）
           const ia = side * 0.05 * sa, ib = side * 0.05 * sb;
           ctx.moveTo(ea - ia, ya); ctx.lineTo(ea + side * kA * 0.6 * sa, ya); ctx.lineTo(em + side * kM * 0.6 * sm, ym); ctx.lineTo(eb + side * kB * 0.6 * sb, yt); ctx.lineTo(eb - ib, yt); ctx.closePath();
-        } else if (pass === 2) { // 往草地淡出去的一層
-          ctx.moveTo(ea, ya); ctx.lineTo(ea + side * (kA + SE_SH) * sa, ya); ctx.lineTo(em + side * (kM + SE_SH * 0.8) * sm, ym); ctx.lineTo(eb + side * (kB + SE_SH) * sb, yt); ctx.lineTo(eb, yt); ctx.closePath();
         } else if (yt - yr > 0.8) {   // 石頭側面：立面往外伸出一截，外側上緣往下斜
           const rx = xb + side * wb * 1.04, ext = lerp(SE_EXT[0], SE_EXT[1], Hh(id, 713 + h)) * sb;
-          ctx.moveTo(rx, yr); ctx.quadraticCurveTo(rx + side * ext, yr + (yt - yr) * 0.15, rx + side * ext, yr + (yt - yr) * 0.6); ctx.lineTo(rx + side * ext * 0.7, yt + 0.7); ctx.lineTo(rx, yt + 0.7); ctx.closePath();   // 外側圓圓的，像一塊石頭的端面
+          ctx.moveTo(rx, yr); ctx.lineTo(rx + side * ext * 0.8, yr + (yt - yr) * 0.12); ctx.lineTo(rx + side * ext, yr + (yt - yr) * 0.55); ctx.lineTo(rx + side * ext * 0.7, yt + 0.7); ctx.lineTo(rx, yt + 0.7); ctx.closePath();   // 外側往下斜、圓鈍，像一塊石頭的端面
         }
       }
     }
-    ctx.globalAlpha = a;
-    ctx.fillStyle = pass === 0 ? LUT[37 * FOGN + fi] : pass === 1 ? 'rgba(34,40,20,0.5)' : pass === 2 ? 'rgba(34,40,20,0.2)' : LUT[33 * FOGN + fi];
+    ctx.globalAlpha = pass === 2 ? rock : a;
+    ctx.fillStyle = pass === 0 ? LUT[37 * FOGN + fi] : pass === 1 ? 'rgba(34,40,20,0.5)' : LUT[33 * FOGN + fi];
     ctx.fill();
   }
 }
@@ -2130,20 +2128,21 @@ function railPost(x, y, s, lit, dk, A, AI){
   if (AI > 0.01) { ctx.globalAlpha = AI; ctx.strokeStyle = INK; ctx.lineWidth = clamp(s * 0.012, 0.5, 1.6); ctx.strokeRect(x - pw, top, pw * 2, y - top); }
 }
 // 路緣的落葉：堆在路邊內側（被踩過的地方掃到兩邊），讓路面和草地的交界不是一條乾淨的線
+// 一片落葉：細長的菱形（四個點；以前畫橢圓，WebGL 要切成幾十個三角形，路邊落葉一多就很吃力）
+function leaf(x, y, r, a){ const cx = Math.cos(a) * r, sy = Math.sin(a) * r, nx = -Math.sin(a) * r * 0.42, ny = Math.cos(a) * r * 0.42; quad(x - cx, y - sy, x + nx, y + ny, x + cx, y + sy, x - nx, y - ny); }
 function edgeLeaves(i, j, stp, n){
   if (stp && n && stoneSE() && pZ[j] < SE_LEAF_J * SEG) for (let q = 0; q < SE_LEAF; q++) {   // 石階：落葉、松針多一點，卡在每階接縫兩邊
     if (Hh(i, 760 + q) > 0.75) continue;
     const k = (Hh(i, 765 + q) * n) | 0, f = (k + 0.75 + 0.2 * Hh(i, 770 + q)) / n, side = Hh(i, 775 + q) < 0.5 ? -1 : 1;
     proj(j, f, false); gy = treadY(j, f, n);
     const x = gx + side * (rwF(i, f) - 0.02 - 0.3 * Hh(i, 780 + q)) * gs, r = Math.max(1, 0.055 * gs), a = Hh(i, 785 + q) * TAU;
-    ctx.fillStyle = LEAFC[(Hh(i, 790 + q) * 4) | 0]; ctx.beginPath(); ctx.ellipse(x, gy, r, r * 0.42, a, 0, TAU); ctx.fill();
-    if (r > 2.5) { ctx.lineWidth = Math.min(1, r * 0.15); ctx.strokeStyle = INK; ctx.stroke(); }
+    ctx.fillStyle = LEAFC[(Hh(i, 790 + q) * 4) | 0]; leaf(x, gy, r, a);
   }
   for (let q = 0; q < 3; q++) {
     if (Hh(i, 140 + q) > 0.6) continue;
     proj(j, Hh(i, 143 + q), stp);
     const side = Hh(i, 146 + q) < 0.5 ? -1 : 1, x = gx + side * (rwAt(i) - 0.05 - 0.25 * Hh(i, 149 + q)) * gs, r = Math.max(1, 0.06 * gs), a = Hh(i, 152 + q) * TAU;
-    ctx.fillStyle = LEAFC[(Hh(i, 155 + q) * 4) | 0]; ctx.beginPath(); ctx.ellipse(x, gy, r, r * 0.42, a, 0, TAU); ctx.fill();
+    ctx.fillStyle = LEAFC[(Hh(i, 155 + q) * 4) | 0]; leaf(x, gy, r, a);
     if (r > 2.5) { ctx.lineWidth = Math.min(1, r * 0.15); ctx.strokeStyle = INK; ctx.stroke(); }
   }
 }
@@ -2313,7 +2312,7 @@ function drawWorld(b, t, jHi, jLo, far){
             ctx.beginPath(); ctx.moveTo(xb - wb * 1.04, yr); ctx.lineTo(xb + wb * 1.04, yr); ctx.moveTo(xb - wb * 1.04, yt); ctx.lineTo(xb + wb * 1.04, yt); ctx.stroke(); ctx.globalAlpha = fade;
           }
         }
-        if (seA > 0.01) stoneEdges(i, n, fi, seA);   // 每一階左右兩端嵌進土裡（土邊、接觸陰影、石頭側面），所有階一起畫
+        if (seA > 0.01) stoneEdges(i, n, fi, seA, seA * farA(j, SE_ROCK_J, 4));   // 每一階左右兩端嵌進土裡（土邊、接觸陰影、石頭側面），所有階一起畫
       } else {
         ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + 1, x2 - e2, y2 + 1);   // 遠端同樣往內縮 1 像素（不蓋到後面那段的路面貼圖）
         ctx.fillStyle = LUT[7 * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2 + 1, x2 - w2, y2 + 1);
