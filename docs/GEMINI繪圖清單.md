@@ -404,7 +404,7 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | 檔名 | 場景 |
 |---|---|
 | `summit_yushan_front` | Yushan Front Peak summit, a steep grey scree slope with a few twisted Yushan junipers, looking down on the Tataka saddle and forested ridges below, clouds rising from the valley |
-| `summit_yushan_west` | Yushan West Peak summit among tall Taiwan fir trees, a tiny old stone mountain shrine on the trail, and the huge rocky face of Yushan main peak seen straight across the valley |
+| `summit_yushan_west` | Yushan West Peak summit among tall Taiwan fir trees, a tiny old stone niche by the trail, and the huge rocky face of Yushan main peak seen straight across the valley |
 | `summit_yushan_north` | Yushan North Peak summit with a small white mountain weather station and wind instruments, the golden sunset-lit Yushan main peak beside it above a sea of clouds |
 | `summit_yushan_east` | Yushan East Peak, a sharp jagged rocky summit with steep rock gullies, the hiker wearing a climbing helmet, dramatic deep valleys below and the Central Mountain Range in the distance |
 | `summit_xueshan_east` | Xueshan East Peak, a gentle dwarf-bamboo summit with a survey marker, a long wooden-step slope behind, the Holy Ridge and the Nanhu mountains on the horizon |
@@ -417,13 +417,13 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 
 | 檔名 | 比例 | 內容 |
 |---|---|---|
-| `stamp_yushan_front` `stamp_yushan_west` `stamp_yushan_north` `stamp_yushan_east` `stamp_xueshan_east` `stamp_xiangyang` `stamp_sancha` `stamp_hh_shimen` `stamp_hh_east` `stamp_hh_north` `stamp_hh_west` | 1:1 | 洋紅底。Eleven round red-ink rubber stamp impressions in the same style as the existing mountain stamps, each showing the silhouette of that peak's summit view above (shrine / weather station / jagged rock / landslide cliff / grassland and lake), slightly uneven ink, **no text**. |
+| `stamp_yushan_front` `stamp_yushan_west` `stamp_yushan_north` `stamp_yushan_east` `stamp_xueshan_east` `stamp_xiangyang` `stamp_sancha` `stamp_hh_shimen` `stamp_hh_east` `stamp_hh_north` `stamp_hh_west` | 1:1 | 洋紅底。Eleven round red-ink rubber stamp impressions in the same style as the existing mountain stamps, each showing the silhouette of that peak's summit view above (stone niche / weather station / jagged rock / landslide cliff / grassland and lake), slightly uneven ink, **no text**. |
 
 ### 放進 `02.素材`（沿途新物件）
 
 | 檔名 | 比例 | 內容 |
 |---|---|---|
-| `shrine_small` | 1:1 | 洋紅底。A tiny old mountain shrine made of grey stone with a small tiled roof, a few stones and a little offering in front, Taiwan high-mountain style. |
+| `shrine_small` | 1:1 | 洋紅底。A tiny old roadside stone niche (路邊的小石龕) made of grey stone with a small slate roof and a few stacked stones in front, Taiwan high-mountain style. |
 | `weather_station` | 1:1 | 洋紅底。A small white high-mountain weather station building with a wind vane, anemometer and solar panel on a rocky base. |
 | `hut_paiyun` | 16:9 | 洋紅底。A two-storey mountain lodge with a grey roof and wooden porch at the edge of a fir forest, 3/4 view (Paiyun Lodge style), no text on signs. |
 | `rock_wall` | 9:16 | 洋紅底。A tall steep grey rock wall with a narrow gully and a few small alpine plants in cracks, as a trail-side climbing section. |
@@ -434,7 +434,7 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | 檔名 | 名稱 | 內容 |
 |---|---|---|
 | `t_front_sticker` | 「前峰不前」貼紙 | a hand-drawn round sticker of a tiny out-of-breath hiker on a steep slope |
-| `t_shrine_card` | 西峰山神廟平安小卡（**不需要**：寺廟相關內容已拿掉，不用畫） | a small card with a photo of a tiny stone mountain shrine among fir trees |
+| `t_shrine_card` | （**不需要**：這件寶物已拿掉，不用畫） | — |
 | `t_weather_log` | 玉山氣象站觀測紀錄卡 | a handwritten weather observation sheet with a grid, a pencil and a small thermometer doodle |
 | `t_ridge_sketch` | 十峻之首岩壁速寫 | a pencil sketch of a jagged rock face on cream paper (legendary) |
 | `t_crying_slope` | 哭坡過關證書 | a small crooked handwritten certificate with a wooden-step slope doodle and a smiling face |

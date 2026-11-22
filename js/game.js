@@ -49,10 +49,10 @@
       if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
       // 山的全程改短過（玉山、雪山 11000 → 10900 公尺）：還沒登頂的進度停在山頂前一公尺，不能等於全程（出發時會被當成走完、從頭開始）
       for (const id in SV.prog) { const p = SV.prog[id], m = SX.M[id]; if (m && p && !p.fin && p.dist >= m.dist) p.dist = m.dist - 1; }
-      // 福德祠和籤詩冊拿掉了：舊存檔的籤詩清單丟掉；以前象山要進福德祠才蓋得到章，登頂過但沒蓋的補蓋（日期用今天）
+      // 已經拿掉的舊收集冊（存檔欄位 lots）丟掉；以前象山要另外按一次才蓋得到章，登頂過但沒蓋的補蓋（日期用今天）
       delete SV.lots;
       for (const id in SV.done) if (SX.M[id] && SV.done[id] > 0 && !SV.stamps[id]) SV.stamps[id] = today();
-      // 拿掉的寶物、奇遇（例如西峰山神廟平安小卡）：背包和奇遇圖鑑只留資料裡還有的，「收集幾種寶物」任務才不會算到不存在的東西
+      // 拿掉的寶物、奇遇（例如 t_shrine_card、e60）：背包和奇遇圖鑑只留資料裡還有的，「收集幾種寶物」任務才不會算到不存在的東西
       const TRID = new Set(SX.TREASURES.map(x => x.id)), ENID = new Set(SX.ENCOUNTERS.map(x => x.id));
       for (const k in SV.bag) if (!TRID.has(k)) { delete SV.bag[k]; delete SV.bagLog[k]; }
       for (const k in SV.bagLog) if (!TRID.has(k)) delete SV.bagLog[k];
