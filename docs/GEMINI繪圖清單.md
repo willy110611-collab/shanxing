@@ -367,3 +367,30 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `t_salamander_card` | 雪山山椒魚圖鑑卡 | a field-guide card of a tiny brown salamander beside a mossy rock crevice, golden border and golden glow (legendary) |
 | `t_moon_lake_photo` | 天使的眼淚月光照片 | a polaroid photo of a deep blue alpine lake at night reflecting the full moon, silver sparkles, golden border and golden glow (legendary) |
 | `t_rime_photo` | 霧淞照片 | a polaroid photo of fir branches covered in white rime ice like sugar frosting, frosty sparkles, soft glow (rare, snow season) |
+
+## 第 13 批：階梯、欄杆與兩側植物牆（放進 `02.素材`）
+
+目前階梯的「立面」（每一階朝向你的那一面）和欄杆都是程式用單色畫的，所以看起來很假。這批畫好後會換掉。路面貼圖不用去背（存成 jpg），欄杆和植物要洋紅底。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `ground_riser_stone` | 16:9 | 不用去背。Straight-on front view at eye level of the vertical front faces of old granite stone steps on a Taiwan mountain trail: one horizontal band of rough grey cut-stone blocks of slightly different sizes, moss and tiny ferns in the joints, a worn and slightly chipped top edge, seamless tileable left-right, even soft lighting, the band fills the whole image. |
+| `ground_stone_moss` | 1:1 | 不用去背。Top-down view of the flat tops of old mossy granite stone steps, irregular grey slabs with thick green moss and fallen hemlock needles in the gaps, a few small leaves, seamless tileable texture, even lighting. |
+| `ground_riser_wood` | 16:9 | 不用去背。Straight-on front view at eye level of the front edges of wooden log steps on a dirt mountain trail: one horizontal band of round weathered logs held by short wooden stakes, packed brown soil behind, a little moss, seamless tileable left-right, even soft lighting, the band fills the whole image. |
+| `rail_post` | 9:16 | 洋紅底。A single weathered wooden trail railing post (square timber, about waist height), slightly darker at the base, small notch at the top where a handrail rests, ink outline, lit from the upper right. |
+| `rail_bar` | 16:9 | 洋紅底。One long horizontal peeled-log handrail for a mountain trail railing, smooth worn top where hands touch, visible wood grain, both ends cut flat, lit from the upper right. |
+| `hedge_fern` | 1:1 | 洋紅底。A dense waist-high clump of Taiwan mountain ferns and low shrubs growing at the edge of a forest trail, wider than tall, lush and layered, lit from the upper right. |
+| `bamboo_tall` | 9:16 | 洋紅底。A tall dense clump of Yushan dwarf bamboo (Yushania niitakayamensis) about two metres high, many thin stems with narrow leaves, lit from the upper right. |
+| `trunk_close` | 9:16 | 洋紅底。One tall straight Taiwan hemlock trunk with rough bark, moss and a little ivy, only a few small branches near the top, whole trunk visible from roots to top, lit from the upper right. |
+
+參考感覺：台灣步道的陡石階一路往上爬、兩側被森林包住、一側或兩側有木頭欄杆（就像你之前給的那幾張照片）。
+## 第 14 批：合歡群峰登頂插圖（放進 `07.奇遇`，16:9，不用去背，抵達山頂時顯示）
+
+合歡山拆成五座百岳（合歡群峰）。合歡主峰沿用上面的 `summit_hehuan`；下面四座還沒畫之前，遊戲會先借用 `summit_hehuan`。畫法跟上面的登頂插圖一樣。
+
+| 檔名 | 場景 |
+|---|---|
+| `summit_hh_shimen` | Shimen Mountain (Hehuan range) summit: a gentle dwarf-bamboo grass slope right above a winding mountain highway, the rounded Hehuan main peak across the valley, clear blue sky |
+| `summit_hh_east` | Hehuan East Peak summit after a very steep stone-step climb, looking down at a small alpine lodge far below and the jagged Qilai ridges to the east |
+| `summit_hh_north` | Hehuan North Peak summit with a stone triangulation marker, wide green dwarf-bamboo ridges, pink alpine rhododendron bushes, Qilai and Xueshan ranges on the horizon |
+| `summit_hh_west` | Hehuan West Peak summit at the end of a long remote bamboo ridge, a lonely triangulation stone, rolling ridgelines and a sea of clouds in the late afternoon light |
