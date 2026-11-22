@@ -9,7 +9,12 @@
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch(e){ return d; } };
   const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
   const A = () => SX.audio || {};
-  const toast = (msg, ms = 2400) => { const t = $('#toast'); if (!t) return; t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms); };
+  const MO = SX.motion;   // 介面動態效果（js/motion.js）：吐司、搖晃、骨架、下拉更新
+  const toast = (msg, ms = 2400) => MO.toast(msg, ms);
+  // 浮動標籤的輸入框：提示字聚焦時縮小移到框線上（樣式 .fl）
+  const flIn = (attrs, label) => `<label class="fl"><input ${attrs} placeholder=" "><span><b>${label}</b></span></label>`;
+  // 復原碼不對：輸入框變紅、整排搖一下；再打字就恢復
+  const badCode = (form, input) => { input.classList.add('bad'); MO.shake(form); input.addEventListener('input', () => input.classList.remove('bad'), { once:true }); };
   const G = () => window.SXG || {};
   const mName = id => (SX.M[id] && SX.M[id].name) || id || '';
   const km = m => (Math.max(0, m || 0) / 1000).toFixed(2) + ' km';
@@ -63,6 +68,7 @@
   }
 
   // ───────── 大廳畫面 ─────────
+  let netReady = false;   // 好友、邀請第一次從伺服器拿回來了沒（還沒就先放骨架畫面）
   let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false, chatHid = false;   // chatHid：廣場聊天框收起來，只剩一顆「聊天」小牌
   const PZ = () => SX.plaza;
   // 還沒有帳號：大廳裡面放一張「取暱稱」的木牌卡（不用蓋住整個畫面的彈出視窗，上面的「← 地圖」永遠按得到）
@@ -73,10 +79,10 @@
     body.classList.remove('plazaMode');
     body.innerHTML = `<div class="mCard lbWelcome"><h3>第一次來到山友大廳</h3>
       <p class="summitBig">取個暱稱，其他山友會看到這個名字。不急的話，可以先不要。</p>
-      <input id="nmIn" class="txtIn" maxlength="12" placeholder="暱稱（最多 12 個字）">
+      ${flIn('id="nmIn" class="txtIn" maxlength="12"', '暱稱（最多 12 個字）')}
       <div class="mBtns"><button class="cbtn" id="nmNo">先不要</button><button class="cbtn go" id="nmOk">進入大廳</button></div>
       <p class="tiny">已經有帳號（換新手機）？貼上復原碼：</p>
-      <form class="pw" id="rsF0"><input id="rsIn0" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>`;
+      <form class="pw" id="rsF0">${flIn('id="rsIn0"', '貼上復原碼')}<button class="cbtn sm">登入</button></form></div>`;
     $('#nmNo').onclick = () => { if (A().pop) A().pop(); if (G().go) G().go('map'); };
     $('#nmOk').onclick = async () => {
       const v = $('#nmIn').value.trim(); if (!v) { toast('先取個暱稱吧'); return; }
@@ -84,7 +90,7 @@
       try { await register(v); showRecovery(true, open); } catch(e){ toast(e.message, 3200); $('#nmOk').disabled = false; }
     };
     $('#rsF0').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn0').value.trim(); if (!v) return;
-      try { await restore(v); toast(`歡迎回來，${acct.name}`); open(); offerCloudLoad(); } catch(err){ toast(err.message, 3000); } };
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); open(); offerCloudLoad(); } catch(err){ toast(err.message, 3000); badCode($('#rsF0'), $('#rsIn0')); } };
   }
   function showRecovery(first, then){
     const mc = $('#mCard'); mc.innerHTML = `<h3>${first ? '帳號建好了！' : '我的復原碼'}</h3>
@@ -124,6 +130,7 @@
       if (tab === 'friends') renderFriends();
       updateBadge();
     } catch(e){ if (tab !== 'plaza') toast(e.message, 3000); }
+    if (!netReady) { netReady = true; if (tab === 'friends') renderFriends(); }
   }
   function updateBadge(){
     const n = invites.filter(v => v.guest === (acct && acct.id) && v.status === 'pending').length;
@@ -189,6 +196,7 @@
   }
   function renderFriends(){
     const body = $('#lobbyBody'); if (!body) return;
+    if (!netReady) { body.innerHTML = `<div class="setRow">${MO.skeleton(1, 40)}</div><div class="setRow">${MO.skeleton(3, 34)}</div>`; return; }
     const inc = invites.filter(v => v.guest === acct.id && v.status === 'pending');
     const opts = mtOpts();
     body.innerHTML = `${invMt ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁按「邀請」（山已經選好了），對方接受就會加入你的隊伍。</p></div>` : ''}
@@ -257,17 +265,17 @@
   function renderMe(){
     const body = $('#lobbyBody'); if (!body) return;
     body.innerHTML = `
-      <div class="setRow"><h4>暱稱</h4><form class="pw" id="nmF"><input id="nmIn2" maxlength="12" value="${esc(acct.name)}"><button class="cbtn sm">改名</button></form></div>
+      <div class="setRow"><h4>暱稱</h4><form class="pw" id="nmF">${flIn(`id="nmIn2" maxlength="12" value="${esc(acct.name)}"`, '暱稱')}<button class="cbtn sm">改名</button></form></div>
       <div class="setRow"><h4>復原碼</h4><p>換手機時用來找回帳號，不要給別人。</p><button class="cbtn sm" id="showRc">顯示復原碼</button></div>
-      <div class="setRow"><h4>換手機：用復原碼登入</h4><form class="pw" id="rsF"><input id="rsIn" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>
+      <div class="setRow"><h4>換手機：用復原碼登入</h4><form class="pw" id="rsF">${flIn('id="rsIn"', '貼上復原碼')}<button class="cbtn sm">登入</button></form></div>
       <div class="setRow"><h4>雲端存檔</h4><p>進度每 3 分鐘自動備份到雲端（照片不備份），換手機登入後就能載回來。</p>
         <div class="mBtns" style="justify-content:flex-start"><button class="cbtn sm" id="cdUp">立刻備份</button><button class="cbtn sm" id="cdDown">從雲端載入</button></div></div>
-      <div class="setRow"><h4>我上傳的照片</h4><div id="myPh"><p>讀取中…</p></div></div>`;
+      <div class="setRow"><h4>我上傳的照片</h4><div id="myPh">${MO.skeletonGrid(2)}</div></div>`;
     $('#nmF').onsubmit = async e => { e.preventDefault(); const v = $('#nmIn2').value.trim(); if (!v) return;
       try { const d = await api('/me', { json: { name: v } }); acct.name = d.name; store(KEY, acct); toast('改好了'); } catch(err){ toast(err.message, 3000); } };
     $('#showRc').onclick = () => showRecovery(false);
     $('#rsF').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn').value.trim(); if (!v) return;
-      try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); } };
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); badCode($('#rsF'), $('#rsIn')); } };
     $('#cdUp').onclick = () => { lastSaved = ''; cloudSave(false); toast('備份好了'); };
     $('#cdDown').onclick = () => offerCloudLoad();
     api('/photos?mine=1').then(d => {
@@ -359,15 +367,18 @@
   }
   async function fillWall(mountainId, mark, root){
     if (!acct || !root) return;
+    const sk = document.createElement('div'); sk.innerHTML = MO.skeletonGrid(2);
+    const at = root.querySelector('.mBtns'); at ? root.insertBefore(sk, at) : root.appendChild(sk);
     try {
       const d = await api(`/photos?mountain=${encodeURIComponent(mountainId)}&band=${Math.max(0, mark / 500 - 1)}`);
       const L = (d.photos || []).filter(p => p.status === 'ok' && p.owner !== acct.id);
+      sk.remove();
       if (!L.length || !root.isConnected) return;
       const box = document.createElement('div');
       box.innerHTML = `<h3>其他山友在這一段拍的</h3><div class="grid">${L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}" loading="lazy"><p>${esc(p.by || '山友')}・${p.alt} m <button class="repBtn" data-rep="${p.id}">檢舉</button></p></div>`).join('')}</div>`;
       const btns = root.querySelector('.mBtns'); btns ? root.insertBefore(box, btns) : root.appendChild(box);
       box.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { if (!confirm('這張照片不恰當，要檢舉嗎？')) return; try { await api(`/photos/${b.dataset.rep}/report`, { method: 'POST' }); b.textContent = '已檢舉'; b.disabled = true; } catch(e){ toast(e.message); } });
-    } catch(e){}
+    } catch(e){ sk.remove(); }
   }
 
   // ───────── 照片審核（開發者選項裡）─────────
@@ -441,6 +452,7 @@
   }
   document.addEventListener('visibilitychange', () => sendEta(document.hidden));
 
+  { const lb = $('#lobbyBody'); if (lb) MO.pull(lb, () => !!acct && tab === 'friends', refresh); }
   SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite };
   if (acct) { refresh(); }
 })();

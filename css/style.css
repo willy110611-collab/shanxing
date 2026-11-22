@@ -45,7 +45,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .cbtn.sm{padding:7px 12px;font-size:14px;border-radius:11px 13px 10px 14px/13px 10px 14px 11px}
 .cbtn.go{background:linear-gradient(#a6d98a,#6fb257);color:#fff;text-shadow:var(--txo);font-size:19px;box-shadow:0 4px 0 var(--ink),0 6px 8px rgba(30,60,20,.3),inset 1.5px 1.5px 0 rgba(255,255,255,.6),inset -2px -3px 0 rgba(30,90,30,.3)}
 .cbtn.red{background:linear-gradient(#f08a72,#d4533e);color:#fff;text-shadow:var(--txo)}
-.cbtn:disabled,.woodBtn:disabled{filter:grayscale(.7);opacity:.6}
+.cbtn:disabled,.woodBtn:disabled,.cbtn[aria-disabled="true"]{filter:grayscale(.7);opacity:.6}
 .chip{background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:2px 10px;font-size:13px;box-shadow:0 2px 0 var(--ink);text-shadow:none}
 
 /* ───── 地圖 (全版畫布 diorama) ───── */
@@ -75,8 +75,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .cloudFloat{animation:cf 9s ease-in-out infinite alternate}
 @keyframes cf{to{transform:translateX(16px)}}
 
-.sheet{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:6;padding:16px 16px 14px;transform:translateY(135%);transition:transform .35s cubic-bezier(.3,1.3,.5,1)}
-.sheet.on{transform:none}
+.sheet{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:6;padding:16px 16px 14px;transform:translateY(135%);transition:transform var(--t) var(--ease)}   /* 收起：一般緩動往下滑 */
+.sheet.on{transform:none;transition:transform var(--t-sheet) var(--spring)}   /* 打開：彈簧滑上來 */
 .rc-h{display:flex;align-items:baseline;gap:8px}
 .rc-h b{font-size:26px;font-weight:normal;color:#fff7e4}
 .rc-h span{font-size:14px;color:#ffe3a8}
@@ -180,9 +180,9 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 @keyframes tagBob{0%,100%{transform:translate(-50%,-100%)}50%{transform:translate(-50%,calc(-100% - 5px))}}   /* 用位移做上下浮動：改 margin 每格都要重排版面 */
 
 /* 休息抽屜 */
-#restSheet{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:8;padding:16px 14px 14px;transform:translateY(135%);transition:transform .35s cubic-bezier(.3,1.3,.5,1);
+#restSheet{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:8;padding:16px 14px 14px;transform:translateY(135%);transition:transform var(--t) var(--ease);
   background:var(--woodBg);border:2.5px solid var(--ink);border-radius:var(--irr);box-shadow:var(--woodSh);color:#fff7e4;text-shadow:var(--txo)}
-#restSheet.on{transform:none}
+#restSheet.on{transform:none;transition:transform var(--t-sheet) var(--spring)}
 /* 休息選單要矮：坐著的登山客在畫面下半部，選單只蓋住底部選單那一條，一排四個小按鈕（圖示在上、字在下），坐著的人整個看得到 */
 #restSheet{padding:10px 10px 10px}
 #restSheet h4{font-weight:normal;font-size:15px;line-height:1.2;text-align:center;margin-bottom:6px}
@@ -275,9 +275,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .setRow{padding:14px;margin-bottom:12px}
 .setRow h4{font-size:16px;font-weight:normal;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
 .setRow p{font-size:13px;color:var(--ink2);line-height:1.6}
-.tgl{width:52px;height:30px;border-radius:999px;background:#bba684;border:2.5px solid var(--ink);position:relative;transition:background .2s;box-shadow:inset 0 2px 4px rgba(0,0,0,.25)}
-.tgl::after{content:"";position:absolute;left:1px;top:1px;width:22px;height:22px;border-radius:50%;background:#fff7e4;border:2px solid var(--ink);transition:transform .2s}
-.tgl.on{background:var(--leaf)}
+.tgl{width:52px;height:30px;border-radius:999px;background:#bba684;border:2.5px solid var(--ink);position:relative;box-shadow:inset 0 2px 4px rgba(0,0,0,.25)}
+.tgl::after{content:"";position:absolute;left:1px;top:1px;width:22px;height:22px;border-radius:50%;background:#fff7e4;border:2px solid var(--ink)}
 .tgl.on::after{transform:translateX(22px)}
 input[type=range]{width:100%;accent-color:#6fb257}
 .pw{display:flex;gap:8px;margin-top:8px}
@@ -302,35 +301,109 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .summitBig{text-align:center;font-size:15px;line-height:1.7;margin-bottom:10px}
 .summitBig b{display:block;font-size:30px;font-weight:normal;color:#ffe27a;text-shadow:var(--txo)}
 
-.toast{position:absolute;left:50%;top:calc(150px + env(safe-area-inset-top));z-index:30;transform:translate(-50%,-20px);opacity:0;background:var(--woodBg);color:#fff7e4;text-shadow:var(--txo);border:2.5px solid var(--ink);padding:8px 16px;border-radius:var(--irrS);box-shadow:0 3px 0 var(--ink);font-size:14px;transition:all .3s;pointer-events:none;width:max-content;max-width:calc(100% - 28px);text-align:center;line-height:1.5;text-wrap:balance}   /* 長訊息兩行平均分，不會剩一個字在第二行 */
-.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast{position:absolute;left:50%;top:calc(150px + env(safe-area-inset-top));z-index:30;transform:translate(-50%,14px) scale(.96);opacity:0;background:var(--woodBg);color:#fff7e4;text-shadow:var(--txo);border:2.5px solid var(--ink);padding:8px 16px;border-radius:var(--irrS);box-shadow:0 3px 0 var(--ink);font-size:14px;transition:opacity .24s var(--ease),transform 0s .24s;pointer-events:none;width:max-content;max-width:calc(100% - 28px);text-align:center;line-height:1.5;text-wrap:balance}   /* 長訊息兩行平均分，不會剩一個字在第二行 */
+.toast.on{opacity:1;transform:translate(-50%,0);transition:opacity .2s var(--ease),transform .42s var(--spring)}   /* 由下浮上來；收起時只淡掉 */
 .rotate{display:none}
 @media (orientation:landscape) and (max-height:500px){
   .rotate{display:grid;place-items:center;position:fixed;inset:0;z-index:99;background:#e9cf9f;font-size:18px;color:var(--ink)}
 }
-.spark{position:absolute;z-index:25;pointer-events:none;width:14px;height:14px;animation:spark .9s ease-out forwards}
-@keyframes spark{to{transform:translate(var(--dx),var(--dy)) scale(.3) rotate(200deg);opacity:0}}
 
-/* ───── 動態效果 ───── */
+/* ───── 動態效果（程式只在 js/motion.js）─────
+   規則：只動 transform 和 opacity（不動寬高、陰影、濾鏡，手機不會每格重排版面）；
+   一般 --ease 0.2～0.3 秒，彈簧 --spring；手機設定「減少動態」時只淡入淡出（最下面的 @media） */
+:root{--ease:cubic-bezier(.2,.8,.2,1);--spring:cubic-bezier(.34,1.56,.64,1);--t-fast:.2s;--t:.26s;--t-sheet:.46s}
 .cbtn,.woodBtn,.dbtn,.tab,.chip{overflow:hidden}
-.rip{position:absolute;border-radius:50%;pointer-events:none;background:rgba(255,236,190,.6);transform:scale(0);animation:rip .55s cubic-bezier(.2,.8,.2,1) forwards}
+.dbtn,.tab,.chip{position:relative}
+/* 漣漪：從手指按下的地方擴散、淡出 */
+.rip{position:absolute;border-radius:50%;pointer-events:none;background:rgba(255,236,190,.6);transform:scale(0);animation:rip .5s var(--ease) forwards}
 .cbtn.go .rip,.cbtn.red .rip{background:rgba(255,255,255,.45)}
-@keyframes rip{to{transform:scale(1);opacity:0}}
-.stg{opacity:0;animation:stg .45s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes rip{from{transform:scale(0);opacity:1}to{transform:scale(1);opacity:0}}
+/* 交錯出場 */
+.stg{opacity:0;animation:stg .42s var(--spring) forwards}
 @keyframes stg{from{opacity:0;transform:translateY(14px) scale(.96) rotate(var(--rot,0deg))}to{opacity:1;transform:rotate(var(--rot,0deg))}}
-.mk{animation:mkIn .5s cubic-bezier(.34,1.56,.64,1) both;transform-box:fill-box;transform-origin:50% 100%}
+.mk{animation:mkIn .5s var(--spring) both;transform-box:fill-box;transform-origin:50% 100%}
 @keyframes mkIn{from{opacity:0;transform:translateY(-18px) scale(.6)}to{opacity:1;transform:none}}
-.shakeX{animation:shakeX .36s cubic-bezier(.2,.8,.2,1)}
-@keyframes shakeX{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 .pw input.bad{border-color:#c0392b;color:#c0392b}
-.likeHeart{position:absolute;z-index:26;pointer-events:none;width:44px;height:44px;margin:-22px 0 0 -22px;animation:like .7s cubic-bezier(.34,1.56,.5,1) forwards}
+/* 特效層：粒子都放這裡，不擋點擊、不撐開畫面 */
+#fxLayer{position:absolute;inset:0;z-index:29;pointer-events:none;overflow:hidden;contain:strict}
+.spark{position:absolute;pointer-events:none;width:14px;height:14px;animation:spark .9s ease-out forwards}
+@keyframes spark{to{transform:translate(var(--dx),var(--dy)) scale(.3) rotate(200deg);opacity:0}}
+.likeHeart{position:absolute;pointer-events:none;width:44px;height:44px;margin:-22px 0 0 -22px;animation:like .7s cubic-bezier(.34,1.56,.5,1) forwards}
 @keyframes like{0%{transform:scale(0)}45%{transform:scale(1.3)}70%{transform:scale(1)}100%{transform:translateY(-30px) scale(1);opacity:0}}
-.likeDot{position:absolute;z-index:25;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;pointer-events:none;animation:likeDot .6s cubic-bezier(.2,.8,.2,1) forwards}
+.likeDot{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;pointer-events:none;animation:likeDot .6s var(--ease) forwards}
 @keyframes likeDot{to{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
-.confetti{position:absolute;z-index:24;top:-20px;width:10px;height:13px;border-radius:3px;border:1.5px solid var(--ink);pointer-events:none;animation:conf var(--t) cubic-bezier(.3,.6,.5,1) forwards}
-@keyframes conf{to{transform:translate(var(--dx),calc(100dvh + 40px)) rotate(var(--r));}}
-.reveal{animation:reveal .6s cubic-bezier(.2,.8,.2,1)}
+/* 花瓣、葉子、松針（登頂、第一次拿到稀有寶物、徽章）：形狀用小張向量圖，顏色取木框配色 */
+.pt{position:absolute;top:-24px;width:13px;height:13px;background:no-repeat center/contain;animation:ptFall var(--t) ease-in-out forwards}
+@keyframes ptFall{0%{transform:translate(0,0) rotate(0)}25%{transform:translate(var(--sw),calc(var(--h) * .25)) rotate(calc(var(--r) * .25))}50%{transform:translate(calc(var(--sw) * -1),calc(var(--h) * .5)) rotate(calc(var(--r) * .5))}75%{transform:translate(var(--sw),calc(var(--h) * .75)) rotate(calc(var(--r) * .75));opacity:1}100%{transform:translate(var(--dx),var(--h)) rotate(var(--r));opacity:0}}
+.pt.burst{width:12px;height:12px;animation:ptBurst .75s var(--ease) forwards}
+@keyframes ptBurst{from{transform:scale(.3)}60%{opacity:1}to{transform:translate(var(--dx),var(--dy)) rotate(var(--r)) scale(.8);opacity:0}}
+.pt.sakura{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 19C4 15 2 9 5 4c1.5-2 3.5-2 5 .5C11.5 2 13.5 2 15 4c3 5 1 11-5 15z' fill='%23f7bccb' stroke='%233a2a20' stroke-width='1.3'/%3E%3C/svg%3E")}
+.pt.sakura2{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 19C4 15 2 9 5 4c1.5-2 3.5-2 5 .5C11.5 2 13.5 2 15 4c3 5 1 11-5 15z' fill='%23fde4ea' stroke='%233a2a20' stroke-width='1.3'/%3E%3C/svg%3E")}
+.pt.rhodo{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 19C4 15 2 9 5 4c1.5-2 3.5-2 5 .5C11.5 2 13.5 2 15 4c3 5 1 11-5 15z' fill='%23e98aa8' stroke='%233a2a20' stroke-width='1.3'/%3E%3C/svg%3E")}
+.pt.maple{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1l2 5 4-2-1 5 4 1-4 3 1 3-4-1-1 4h-2l-1-4-4 1 1-3-4-3 4-1-1-5 4 2z' fill='%23d9533f' stroke='%233a2a20' stroke-width='1.1' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.pt.maple2{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1l2 5 4-2-1 5 4 1-4 3 1 3-4-1-1 4h-2l-1-4-4 1 1-3-4-3 4-1-1-5 4 2z' fill='%23e2873c' stroke='%233a2a20' stroke-width='1.1' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.pt.ginkgo{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 19v-7M10 12C5 12 2 8 3 4c3-1 5 0 7 3 2-3 4-4 7-3 1 4-2 8-7 8z' fill='%23f2c35a' stroke='%233a2a20' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.pt.leaf{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 17C3 8 9 3 17 3c0 8-5 14-14 14zM3 17l9-9' fill='%237dbb63' stroke='%233a2a20' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.pt.leaf2{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 17C3 8 9 3 17 3c0 8-5 14-14 14zM3 17l9-9' fill='%23b5824f' stroke='%233a2a20' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.pt.pine{width:16px;height:16px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 2v16M10 9L5 3M10 9l5-6M10 14l-4-5M10 14l4-5' fill='none' stroke='%234f8f45' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")}
+.reveal{animation:reveal .6s var(--ease)}
 @keyframes reveal{from{clip-path:circle(0 at var(--rx) var(--ry))}to{clip-path:circle(150% at var(--rx) var(--ry))}}
+/* 載入按鈕：按鈕橫向縮成圓、字淡掉、中間轉圈，好了變打勾 */
+.mBusy{pointer-events:none;overflow:visible!important}
+.mBusy .mLbl,.mBusy::before{opacity:0}
+.mSpin{position:absolute;left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%);pointer-events:none}
+.mSpin i{position:absolute;inset:0;border-radius:50%;border:2.5px solid rgba(58,42,32,.22);border-top-color:var(--ink);animation:mSpin .7s linear infinite}
+.mSpin b{position:absolute;inset:-4px;display:grid;place-items:center;font-size:19px;line-height:1;font-weight:bold;opacity:0}
+.mSpin.ok i{opacity:0}
+@keyframes mSpin{to{transform:rotate(360deg)}}
+/* 進度條：出現在畫面上時從 0 長到目前進度（用縮放，不改寬度） */
+.dyBar i{transform-origin:0 50%}
+.dyBar i.mWait{transform:scaleX(0)}
+.dyBar i.mGrow{animation:mGrow .7s var(--ease) both}
+@keyframes mGrow{from{transform:scaleX(0)}to{transform:none}}
+/* 彈簧卡片（奇遇、登頂、寶物）：由 motion.js 的 rise 從下面彈上來，不再用一般視窗的放大 */
+.mCard.rise,.mCard.rise .encounter{animation:none}
+/* 骨架畫面：等伺服器時的羊皮紙輪廓塊，一道光輕輕掃過 */
+.skel{position:relative;overflow:hidden;border:2px dashed rgba(106,78,58,.4);border-radius:var(--irrS);background:rgba(243,229,196,.75)}
+.skel::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 25%,rgba(255,250,235,.9) 50%,transparent 75%);transform:translateX(-100%);animation:skel 1.5s var(--ease) infinite}
+@keyframes skel{to{transform:translateX(100%)}}
+/* 下拉更新的小圓牌 */
+.mPull{position:absolute;left:50%;top:0;z-index:5;width:36px;height:36px;margin-top:6px;border-radius:50%;background:var(--paperBg);border:2px solid var(--ink);box-shadow:0 2px 0 var(--ink);opacity:0;pointer-events:none;transform:translate(-50%,-44px)}
+.mPull i{position:absolute;inset:7px;border-radius:50%;border:2.5px solid rgba(58,42,32,.22);border-top-color:var(--wood2)}
+.mPull.spin i{animation:mSpin .7s linear infinite}
+/* 浮動標籤：提示字聚焦時縮小、移到框線上 */
+.fl{position:relative;display:block;flex:1;min-width:0}
+.fl>input{width:100%}
+.fl>span{position:absolute;left:10px;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;transform-origin:0 50%;transition:transform var(--t) var(--ease)}
+.fl>span b{font-weight:normal;font-size:15px;color:var(--ink2);background:#fffdf4;padding:0 4px;border-radius:4px;white-space:nowrap}
+.fl>input:focus+span,.fl>input:not(:placeholder-shown)+span{transform:translateY(-50%) scale(.78)}
+/* 新手教學翻頁：圓點跟著手指和頁面移動 */
+.tutDots .tdW{position:relative;display:flex;gap:7px}
+.tutDot{position:absolute;left:0;top:0;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);background:#8fcf6e}
+.tutPage{touch-action:pan-y}
+/* 開關：底圖交叉淡換、圓鈕彈簧滑動 */
+.tgl::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--leaf);box-shadow:inset 0 2px 4px rgba(0,0,0,.25);opacity:0;transition:opacity var(--t) var(--ease)}
+.tgl.on::before{opacity:1}
+.tgl::after{z-index:1;transition:transform .36s var(--spring)}
+@media (prefers-reduced-motion:reduce){
+  @keyframes mFade{from{opacity:0}}
+  @keyframes mFadeOut{to{opacity:0}}
+  @keyframes mPulse{from{opacity:.35}}
+  .rip{transform:none;animation:mFadeOut .4s linear forwards;opacity:.5}
+  .stg{animation-name:mFade}
+  .scr.on,.mCard,.encounter,.reveal,.ec-pic{animation:mFade .2s linear!important}
+  .likeHeart{animation:mFadeOut .6s linear forwards}
+  .mSpin i{animation:mPulse .8s ease-in-out infinite alternate}
+  .skel::after{animation:none;opacity:0}
+  .sheet,#restSheet{transition:opacity .2s linear,transform 0s .2s!important}
+  .sheet:not(.on),#restSheet:not(.on){opacity:0}
+  .sheet.on,#restSheet.on{transition:opacity .2s linear!important}
+  .toast,.toast.on{transition:opacity .2s linear}
+  .fl>span,.tgl::after{transition:none}
+  .tag,.tapHint,.awI.big{animation:none}
+  @keyframes bpOutC{to{opacity:0}}
+  .badgePop{animation:mFade .2s linear,bpOutC .3s linear 4.6s forwards}
+}
 .hudFace.cold canvas{animation:shiv .18s linear infinite alternate}
 @keyframes shiv{from{transform:translateX(-1.2px) rotate(-2deg)}to{transform:translateX(1.2px) rotate(2deg)}}
 

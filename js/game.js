@@ -1,7 +1,7 @@
 // 山行小日子 — 主程式（第二版：手繪木框、真實步調、休息點、奇遇、寶物、任務）
 (function(){
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-  const C = SX.clay, A = SX.audio, SC = SX.scene, HUD = SX.hud, WM = SX.worldmap;
+  const C = SX.clay, A = SX.audio, SC = SX.scene, HUD = SX.hud, WM = SX.worldmap, MO = SX.motion;   // MO：介面動態效果（js/motion.js）
   const DRAIN = 700;          // 走多少公尺用掉全部體力
   const REST = 5;             // 休息時每秒回復體力
   const NAP = 4;              // 打瞌睡時每秒回復體力
@@ -108,7 +108,7 @@
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
 
-  function toast(msg, ms = 2200){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms); }
+  function toast(msg, ms = 2200){ MO.toast(msg, ms); }
   // 背景通知（隱藏任務完成、離開時自己走了多遠）：讀取畫面還沒收、有彈出視窗、或正在跳別的提示時先排隊，
   // 等視窗關掉、上一則提示收起來才一則一則跳出來，不會蓋住「你不在的時候」這類視窗的標題
   const noticeQ = [];
@@ -120,46 +120,12 @@
     const [msg, ms] = noticeQ.shift(); toast(msg, ms);
   }
   $('#toast').addEventListener('transitionend', e => { if (e.propertyName === 'opacity' && !e.target.classList.contains('on')) pumpNotice(); });
-  function sparks(x, y, n = 10){
-    const app = $('#app'), r = app.getBoundingClientRect();
-    for (let i=0;i<n;i++){ const s = document.createElement('div'); s.className = 'spark';
-      const col = ['#ffd166','#ff8fa3','#8fd694','#9ad0f5'][i%4];
-      s.innerHTML = `<svg viewBox="0 0 20 20"><path d="M10 0l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="${col}" stroke="${INK}" stroke-width="1"/></svg>`;
-      s.style.left = (x - r.left - 7) + 'px'; s.style.top = (y - r.top - 7) + 'px';
-      const a = Math.random()*6.28, d = 40 + Math.random()*60; s.style.setProperty('--dx', Math.cos(a)*d + 'px'); s.style.setProperty('--dy', Math.sin(a)*d - 20 + 'px');
-      app.appendChild(s); setTimeout(() => s.remove(), 950); }
-  }
-
-  // 動態效果：漣漪、按讚、彩紙、交錯出場
+  // 動態效果（漣漪、星星、花瓣、交錯出場…）都在 js/motion.js；這裡只記最後點的位置，出發時的圓形展開從那裡開始
   let lastTap = { x: 0, y: 0 };
-  document.addEventListener('pointerdown', e => {
-    lastTap = { x: e.clientX, y: e.clientY };
-    const b = e.target.closest('.cbtn,.dbtn,.tab,.chip'); if (!b || b.disabled) return;
-    const r = b.getBoundingClientRect(), s = Math.max(r.width, r.height) * 2.2, rp = document.createElement('span');
-    const L = e.clientX - r.left - s/2, T = e.clientY - r.top - s/2;
-    // 漣漪自己裁成按鈕的形狀：按鈕不必 overflow:hidden，右上角的紅點數字才不會被切掉
-    rp.className = 'rip'; rp.style.cssText = `width:${s}px;height:${s}px;left:${L}px;top:${T}px;clip-path:inset(${-T}px ${s + L - r.width}px ${s + T - r.height}px ${-L}px round 12px)`;
-    if (getComputedStyle(b).position === 'static') b.style.position = 'relative';
-    b.appendChild(rp); setTimeout(() => rp.remove(), 600);
-  }, { passive:true });
-  function likeAt(x, y){
-    const app = $('#app'), r = app.getBoundingClientRect(), lx = x - r.left, ly = y - r.top;
-    const h = document.createElement('div'); h.className = 'likeHeart'; h.style.left = lx + 'px'; h.style.top = ly + 'px';
-    h.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 21C5 15.5 2 12.5 2 8.5 2 5.4 4.4 3 7.4 3c1.9 0 3.6 1 4.6 2.5C13 4 14.7 3 16.6 3 19.6 3 22 5.4 22 8.5c0 4-3 7-10 12.5z" fill="#ff7b93" stroke="${INK}" stroke-width="1.6"/><ellipse cx="7.5" cy="7.5" rx="2.2" ry="1.4" fill="#fff" opacity=".6" transform="rotate(-30 7.5 7.5)"/></svg>`;
-    app.appendChild(h); setTimeout(() => h.remove(), 750);
-    for (let i=0;i<10;i++){ const d = document.createElement('div'); d.className = 'likeDot'; const a = i/10*6.283, R = 34 + Math.random()*16;
-      d.style.cssText = `left:${lx}px;top:${ly}px;background:${['#ff7b93','#ffd166','#f7a35c'][i%3]};--dx:${Math.cos(a)*R}px;--dy:${Math.sin(a)*R}px`;
-      app.appendChild(d); setTimeout(() => d.remove(), 650); }
-  }
-  function confetti(n = 46){
-    const app = $('#app'), W = app.clientWidth, cols = ['#8fcf6e','#f2cf5b','#f3a35a','#ee7e6b','#9ad0f5','#f4b3c6','#fffaf0'];
-    for (let i=0;i<n;i++){ const c = document.createElement('div'); c.className = 'confetti';
-      c.style.cssText = `left:${Math.random()*W}px;background:${cols[i%cols.length]};--dx:${(Math.random()-0.5)*120}px;--r:${(Math.random()-0.5)*900}deg;--t:${1.6 + Math.random()*1.4}s;animation-delay:${Math.random()*0.4}s`;
-      app.appendChild(c); setTimeout(() => c.remove(), 3600); }
-  }
-  function stagger(root, sel){ [...root.querySelectorAll(sel)].forEach((el, i) => { el.classList.add('stg'); el.style.animationDelay = Math.min(i, 14) * 60 + 'ms'; }); }
+  document.addEventListener('pointerdown', e => { lastTap = { x: e.clientX, y: e.clientY }; }, { passive:true });
 
-  function modal(html){ const c = $('#mCard'); c.innerHTML = html; c.scrollTop = 0; $('#modal').classList.add('on'); paused = true; }
+  // rise：奇遇、登頂、寶物這種卡片，由下面彈上來（一般視窗是放大跳出）
+  function modal(html, rise){ const c = $('#mCard'); c.innerHTML = html; c.scrollTop = 0; c.classList.toggle('rise', !!rise); $('#modal').classList.add('on'); paused = true; if (rise) MO.rise(c); }
   function closeModal(){ $('#modal').classList.remove('on'); paused = false; if (st && screen === 'climb') st.last = Date.now(); queueMicrotask(pumpNotice); }   // 等這次點擊處理完（可能馬上又開下一個視窗）再看要不要跳排隊的通知
 
   // ───────── 天氣 ─────────
@@ -310,7 +276,7 @@
     const permit = ok && permitBlock(id);
     // 「邀請山友」自己一排：跟「回到某某山繼續爬」擠同一排時，375 寬會被擠成兩行
     const permitBtns = lead => `<div class="rc-btns">${lead}</div><div class="rc-btns"><button class="cbtn sm" id="rcInv">邀請山友</button></div>
-        <div class="rc-btns"><button class="cbtn go" disabled>還差 ${permit.minParty - permit.have} 人才能出發</button></div>`;
+        <div class="rc-btns"><button class="cbtn go" id="rcNeed" aria-disabled="true">還差 ${permit.minParty - permit.have} 人才能出發</button></div>`;
     const card = $('#routeCard');
     card.innerHTML = `${g ? `<button class="cbtn sm cBack" id="rcBack">← ${g.full}</button>` : '<button class="cbtn sm cBack" id="rcX">← 返回</button>'}
       <div class="ic-h"><b>${m.name}</b><span class="ic-alt">${m.area}・${m.alt.toLocaleString('en-US')} m</span><span class="stars">${stars}</span></div>
@@ -335,7 +301,7 @@
         : `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
         <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`)
       : `<div class="rc-feat"><em>還不能爬：</em>${lockText(m)}</div>
-        <div class="rc-btns"><button class="cbtn go" disabled>還沒解鎖</button></div>`}`;
+        <div class="rc-btns"><button class="cbtn go" id="rcLock" aria-disabled="true">還沒解鎖</button></div>`}`;
     card.classList.add('on'); card.scrollTop = 0;
     wxIcon($('#rcWx'), w.kind, w.time);
     if (!g) $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
@@ -346,6 +312,8 @@
       modal(`${SX.art.img('scene_descend', '', 'artImg summitArt')}<h3>下山了</h3><p class="summitBig">今天先走到這裡。山一直都在，下次從登山口再出發。</p><p class="summitBig">路上的寶物和照片，都收在背包和相簿裡。</p><div class="mBtns"><button class="cbtn go" id="dnOk">好</button></div>`);
       $('#dnOk').onclick = () => { closeModal(); showRoute(id); }; };
     // 這張卡片的大綠鈕（cbtn go）只會出發去這張卡片的山（id）；回到另一座山用小按鈕、寫清楚山名（check 會檢查）
+    // 鎖住的大綠鈕：不出發，搖一下並說原因
+    const lk = $('#rcLock') || $('#rcNeed'); if (lk) lk.onclick = e => { e.stopPropagation(); MO.shake(lk); toast(ok ? `${permit.reason}（目前 ${permit.have} 人）` : '這座山還不能爬：' + lockText(m), 3000); };
     if (permit) $('#rcInv').onclick = e => { e.stopPropagation(); A.pop(); hideRoute(); if (SX.social && SX.social.openInvite) SX.social.openInvite(id); };
     if (busy) {
       $('#rcBackTo').onclick = () => { A.unlock(); A.chime(); startClimb(tr); };
@@ -354,7 +322,8 @@
     }
     else if (ok) {
       $('#rcPet').onclick = () => openPets(id);
-      if (!permit) $('#rcGo').onclick = () => { A.unlock(); A.chime(); startClimb(id); };
+      if (!permit) $('#rcGo').onclick = e => { A.unlock(); A.chime(); MO.beat(e.currentTarget).then(on => {   // 縮成圓、打勾（不到 0.4 秒）再出發；卡片收起或換掉就不出發
+        if (on && card.classList.contains('on')) startClimb(id); }); };
     }
   }
   // 正在進行的季節小標籤（山群的山跟著山群的季節走）
@@ -434,16 +403,29 @@
   }
   // 新手教學（地圖頂列、登山畫面下方的「?」）：內容在 data.js 的 SX.TUTORIAL，一頁一個主題，左右翻頁
   const tutIntro = () => SX.TUTORIAL.flatMap(p => p.items).filter(x => x.intro);
-  function openHelp(page = 0){
-    const P = SX.TUTORIAL, pg = P[page], last = page >= P.length - 1;
+  // from：從哪一頁翻過來（左右滑、按上一頁下一頁），新的一頁從那個方向滑進來、圓點跟著移過去
+  function openHelp(page = 0, from = page){
+    const P = SX.TUTORIAL, pg = P[page], last = page >= P.length - 1, DOT = 15;   // DOT：圓點 8px＋間距 7px
     modal(`<button class="cbtn sm mBack" id="tuX">← 返回</button><h3>新手教學・${pg.title}</h3>
-      <ul class="awayL tutL">${pg.items.map(x => `<li>${awIco(x.icon)}<span><b>${x.h}</b>${x.t}</span></li>`).join('')}</ul>
-      <div class="tutDots">${P.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="tutPage" id="tutPage"><ul class="awayL tutL">${pg.items.map(x => `<li>${awIco(x.icon)}<span><b>${x.h}</b>${x.t}</span></li>`).join('')}</ul></div>
+      <div class="tutDots"><span class="tdW">${P.map(() => '<i></i>').join('')}<b class="tutDot" id="tutDot" style="transform:translateX(${page * DOT}px)"></b></span></div>
       <div class="mBtns">${page ? '<button class="cbtn" id="tuPrev">‹ 上一頁</button>' : ''}<button class="cbtn go" id="tuNext">${last ? '開始登山吧' : '下一頁 ›'}</button></div>`);
-    stagger($('#mCard'), '.tutL li');
+    const pageEl = $('#tutPage'), dot = $('#tutDot'), turn = d => { A.pop(); openHelp(page + d, page); };
+    if (from === page) MO.stagger($('#mCard'), '.tutL li');
+    else { MO.slideIn(pageEl, page > from ? 1 : -1); MO.run(dot, [{ transform:`translateX(${from * DOT}px)` }, { transform:`translateX(${page * DOT}px)` }], { duration:320, easing:MO.SPRING }); }
+    // 手指左右滑：這一頁跟著手指走、圓點跟著移；放開時滑超過 50px 就換頁，不然彈回來
+    MO.swipe(pageEl, {
+      move: dx => { const w = pageEl.offsetWidth || 300, f = clamp(page - dx / w, 0, P.length - 1);
+        pageEl.style.transform = `translateX(${(dx < 0 && last) || (dx > 0 && !page) ? dx * 0.3 : dx}px)`; dot.style.transform = `translateX(${f * DOT}px)`; },
+      end: dx => {
+        if (dx < -50 && !last) return turn(1);
+        if (dx > 50 && page) return turn(-1);
+        const was = pageEl.style.transform; pageEl.style.transform = ''; dot.style.transform = `translateX(${page * DOT}px)`;
+        if (was) MO.run(pageEl, [{ transform:was }, { transform:'none' }], { duration:320, easing:MO.SPRING });
+      } });
     $('#tuX').onclick = () => { A.pop(); closeModal(); };
-    if (page) $('#tuPrev').onclick = () => { A.pop(); openHelp(page - 1); };
-    $('#tuNext').onclick = () => { A.pop(); if (last) closeModal(); else openHelp(page + 1); };
+    if (page) $('#tuPrev').onclick = () => turn(-1);
+    $('#tuNext').onclick = () => { if (last) { A.pop(); closeModal(); } else turn(1); };
   }
   const wxHere = () => calcWx(M ? M.id : null, 0, st && M ? st.dist / M.dist : 1);   // 登山客現在所在位置的天氣（雪線以下不會下雪）
   function buildMarks(){
@@ -573,7 +555,7 @@
       ${pics.length ? `<div class="awayPics">${pics.map((p, i) => `<img src="${p.img}" alt="" style="transform:rotate(${(i - 1) * 4}deg)">`).join('')}</div>` : ''}
       ${left.length ? `<div class="awayParcel">${awIco('treasure_box', 'big')}<span>路上撿到 <b>${left.length}</b> 件東西，<br>都收在包裹裡了。</span></div>` : ''}</div>
       <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="awGo">${left.length ? '打開包裹' : '繼續走'}</button></div>`);
-    stagger($('#mCard'), '.awayL li');
+    MO.stagger($('#mCard'), '.awayL li');
     $('#awGo').onclick = () => { A.pop(); if (left.length) openParcel(left, 0); else endAway(); };
   }
   // 包裹裡的東西一件一件拿出來（用跟路上撿到一樣的寶物卡）
@@ -714,7 +696,7 @@
   $('#rsGo').onclick = () => { if (!st) return; A.pop(); st.rest = false; $('#restSheet').classList.remove('on'); say('出發囉！'); };
   $('#rsPhoto').onclick = () => { if (st && M) takePhoto(st.dist, false, st.restType === 'view' ? '觀景台' : '休息時光'); };
   $('#rsStone').onclick = () => { if (st && M) { A.pop(); stoneGame(); } };
-  $('#rsUp').onclick = () => { if (st && M) { A.pop(); pickUpload(M.id, st.dist); } };
+  $('#rsUp').onclick = e => { if (st && M) { A.pop(); pickUpload(M.id, st.dist, e.currentTarget); } };
 
   // 浮在休息點／寶物上方的小木牌
   // 收合畫面資訊：狀態面板、小地圖、下方選單一起收起來，只看風景；右下角小鈕再點一次展開
@@ -748,8 +730,8 @@
       ${noteHtml(notePick(o), `— 匿名山友・${days} 天後會風化`)}
       <div class="mBtns"><button class="cbtn" id="nHeart">給愛心</button><button class="cbtn" id="nClean">${o.type === 'btree' ? '澆澆水' : '清清泥'}</button></div>
       <div class="mBtns" style="margin-top:10px"><button class="cbtn go" id="nOk">繼續走</button></div>`);
-    const give = (btn, kind) => { if (btn.disabled) return; btn.disabled = true; const r = btn.getBoundingClientRect(); sparks(r.left + r.width/2, r.top + r.height/2, 12); A.sparkle(); st.stam = Math.min(100, st.stam + 8); toast(kind === 'heart' ? '愛心送出了，體力 +8' : '步道變乾淨了，體力 +8'); };
-    $('#nHeart').onclick = e => { const b = e.currentTarget, r = b.getBoundingClientRect(); if (!b.disabled) likeAt(r.left + r.width/2, r.top); give(b, 'heart'); };
+    const give = (btn, kind) => { if (btn.disabled) return; btn.disabled = true; const r = btn.getBoundingClientRect(); MO.sparks(r.left + r.width/2, r.top + r.height/2, 12); A.sparkle(); st.stam = Math.min(100, st.stam + 8); toast(kind === 'heart' ? '愛心送出了，體力 +8' : '步道變乾淨了，體力 +8'); };
+    $('#nHeart').onclick = e => { const b = e.currentTarget, r = b.getBoundingClientRect(); if (!b.disabled) MO.like(r.left + r.width/2, r.top); give(b, 'heart'); };
     $('#nClean').onclick = e => give(e.currentTarget, 'clean');
     $('#nOk').onclick = () => { closeModal(); checkQuests(); };
   }
@@ -805,7 +787,7 @@
     if (u('ui_tab') && u('ui_tab_on')) css.push(`.tab{background:url("${u('ui_tab')}") center/100% 100% no-repeat!important;border:0!important;box-shadow:none!important;color:var(--ink)!important;text-shadow:0 1px 0 rgba(255,240,210,.6)!important}
       .tab.on{background-image:url("${u('ui_tab_on')}")!important;color:#fff7e4!important;text-shadow:var(--txo)!important}`);
     if (u('ui_toggle_on') && u('ui_toggle_off')) css.push(`.tgl{width:62px!important;height:30px!important;border:0!important;box-shadow:none!important;background:url("${u('ui_toggle_off')}") center/contain no-repeat!important}
-      .tgl.on{background-image:url("${u('ui_toggle_on')}")!important}.tgl::after{display:none!important}`);
+      .tgl::before{background:url("${u('ui_toggle_on')}") center/contain no-repeat!important;box-shadow:none!important;border-radius:0!important}.tgl::after{display:none!important}`);   // 打開的圖疊在上面淡入淡出（css 的 .tgl::before）
     if (u('ui_close')) css.push(`.rc-x{background:url("${u('ui_close')}") center/contain no-repeat!important;border:0!important;box-shadow:none!important;color:transparent!important;font-size:0!important}`);
     if (u('ui_bubble')) css.push(`.bubble{background:none!important;border-style:solid!important;border-width:12px 16px 20px!important;border-color:transparent!important;border-image:url("${u('ui_bubble')}") 60 70 90 70 fill / 12px 16px 20px stretch!important;box-shadow:none!important;padding:0 2px!important}.bubble::after{display:none!important}`);
     if (u('ui_page')) css.push(`#scrAlbum,#scrSettings,#scrLobby{background:url("${u('ui_page')}") center/cover no-repeat!important}`);
@@ -863,17 +845,18 @@
   }
   // 寶物卡（寶物已經在背包裡了，這裡只負責給玩家看）
   function showTreasure(tr, after){
-    A.sparkle(); if (tr.rarity === '傳說') { confetti(30); A.chime(); }
+    A.sparkle(); if (tr.rarity === '傳說') A.chime();
+    if (tr.rarity === '傳說' || (tr.rarity !== '普通' && SV.bag[tr.id] === 1)) MO.petals(MO.petalKind(M), 32);   // 第一次拿到稀有（或傳說）：花瓣飄下來
     modal(`<div class="encounter${tr.rarity !== '普通' ? ' rare' : ''}"><div class="ec-pic" style="animation:pop .5s cubic-bezier(.34,1.8,.5,1)">${trSvg(tr)}</div>
       <h3>${tr.name}</h3><p><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span>${tr.season ? ` <span class="chip" style="background:#ffd9e4">季節限定・${SX.SEASON[tr.season].name}</span>` : ''}</p><p>${tr.desc}</p></div>
-      <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="trOk">${after && after.label ? after.label : '收進背包'}</button></div>`);
+      <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="trOk">${after && after.label ? after.label : '收進背包'}</button></div>`, true);
     $('#trOk').onclick = () => { A.pop(); closeModal(); checkQuests(); if (after) after(); };
   }
   function pickTreasure(o, cx, cy){
     const k = 't' + Math.round(o.m);
     if (st.got[k]) return toast('這裡的寶物已經收進背包了');
     st.got[k] = 1;
-    const r = cv.getBoundingClientRect(); SC.burst(cx - r.left, cy - r.top, 'star', 8); sparks(cx, cy, 14);
+    const r = cv.getBoundingClientRect(); SC.burst(cx - r.left, cy - r.top, 'star', 8); MO.sparks(cx, cy, 14);
     gainTreasure(rollTreasure(M.id), 'show');
   }
 
@@ -920,7 +903,7 @@
     if (e.text.includes('藍鵲')) S.magpie[M.id] = 1;
     const ch = e.choices || [];
     modal(`<div class="encounter${e.rare ? ' rare' : ''}"><div class="ec-pic">${encSvg(e)}</div><h3>${e.rare ? '難得的奇遇' : '路上的小插曲'}</h3><p id="encTxt">${e.text}</p></div>
-      <div class="mBtns" id="encBtns" style="margin-top:12px;flex-direction:column">${ch.length ? ch.map((c, i) => `<button class="cbtn" data-ch="${i}">${c.label}</button>`).join('') : '<button class="cbtn go" id="encOk">繼續走</button>'}</div>`);
+      <div class="mBtns" id="encBtns" style="margin-top:12px;flex-direction:column">${ch.length ? ch.map((c, i) => `<button class="cbtn" data-ch="${i}">${c.label}</button>`).join('') : '<button class="cbtn go" id="encOk">繼續走</button>'}</div>`, true);
     const end = () => { A.pop(); closeModal(); save(); checkQuests(); };
     if (!ch.length) { $('#encOk').onclick = end; return; }
     $$('#encBtns [data-ch]').forEach(b => b.onclick = () => {
@@ -968,18 +951,19 @@
   // 上傳山上的照片：縮到最長邊 720px 的 JPEG，記下哪座山、離登山口幾公尺、海拔
   let upCtx = null;
   const upFile = $('#upFile');
-  function pickUpload(mountainId, m){ upCtx = { mountainId, m }; upFile.value = ''; upFile.click(); }
+  function pickUpload(mountainId, m, btn){ upCtx = { mountainId, m, btn }; upFile.value = ''; upFile.click(); }   // btn：按下去的按鈕，選好照片後轉圈
   upFile.onchange = () => {
     const f = upFile.files && upFile.files[0], ctx = upCtx; upCtx = null;
     if (!f || !ctx || !SX.M[ctx.mountainId]) return;
-    const url = URL.createObjectURL(f), im = new Image();
+    const url = URL.createObjectURL(f), im = new Image(), btn = ctx.btn;
+    MO.busy(btn);
     im.onload = () => {
       const k = Math.min(1, 720 / Math.max(im.width, im.height, 1)), c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
       let img = '';
       try { c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); img = c.toDataURL('image/jpeg', 0.72); } catch(e){}
       URL.revokeObjectURL(url);
-      if (!img) return toast('這張照片讀不出來');
+      if (!img) { MO.idle(btn); return toast('這張照片讀不出來'); }
       const mt = SX.M[ctx.mountainId], m = clamp(Math.round(ctx.m), 0, mt.dist);
       const rec = { id:'u' + Date.now().toString(36), mountainId:mt.id, m, alt:Math.round(altAt(mt, m / mt.dist)), img, date:today(), by:'我' };
       // 之後接後端：在這裡把 rec（img 改成檔案）POST 到伺服器，成功後用回傳的 id 和圖片網址取代本機的 img；
@@ -989,9 +973,9 @@
       daily('photo');
       if (SX.social) SX.social.uploadPhoto(c, rec);   // 有山友帳號就同時分享到伺服器（審核後公開）
       toast(bandOf(m) >= mt.dist ? `上傳好了，會出現在${mt.name}山頂的照片牆` : `上傳好了，會出現在 ${bandOf(m)} m 的照片牆`, 3000);
-      if (screen === 'album') renderAlbum();
+      MO.done(btn).then(() => { if (screen === 'album') renderAlbum(); });
     };
-    im.onerror = () => { URL.revokeObjectURL(url); toast('這張照片讀不出來'); };
+    im.onerror = () => { URL.revokeObjectURL(url); MO.idle(btn); toast('這張照片讀不出來'); };
     im.src = url;
   };
 
@@ -1025,7 +1009,7 @@
       const side = Math.random() < 0.5 ? -1 : 1, m = Math.round(st.dist + 2), wish = pick(WISHES);
       SC.addCairn(m, side); (SV.cairns[M.id] = SV.cairns[M.id] || []).push({ m, side });
       SV.stats.cairns++; daily('cairn'); save(); A.chime();
-      const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width / 2, r.top + r.height * 0.4, 18);
+      const r = $('#app').getBoundingClientRect(); MO.sparks(r.left + r.width / 2, r.top + r.height * 0.4, 18);
       modal(`<h3>石頭疊好了</h3>${noteHtml(wish, `— 你在${M.name}留下的願望`)}
         <p class="summitBig">步道旁多了一座你的小石堆。</p><div class="mBtns"><button class="cbtn go" id="sgOk">好</button></div>`);
       $('#sgOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };
@@ -1096,7 +1080,7 @@
       msgs.push(`完成隱藏任務「${q.name}」${txt ? '，得到' + txt : ''}`);
     });
     if (!msgs.length) return;
-    save(); confetti(34); A.chime();
+    save(); MO.petals(MO.petalKind(M), 30); A.chime();
     msgs.forEach(m => notice(m, 2600));
   }
 
@@ -1109,7 +1093,7 @@
     const areas = ms ? [...new Set(ms.map(id => (SX.M[id] || {}).area).filter(Boolean))] : [];
     return `？ ${x.rarity === '傳說' ? '傳說中的寶物' : '稀有的寶物'}・${s ? `季節限定：${s.name}` : areas.length ? `聽說在${areas.slice(0, 2).join('、')}一帶的山上` : '聽說藏在某座山上'}`;
   }
-  function openBag(back){   // back：從寶物放大卡回來時，捲回原本的位置
+  function openBag(back, from){   // back：從寶物放大卡回來時，捲回原本的位置；from：{ id, rect } 大卡片的位置，圖飛回格子
     const have = SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
     modal(`<button class="cbtn sm mBack" id="bagOk">← 返回</button><h3>背包</h3>
       ${SV.titles.length ? `<div class="grp" style="margin-top:0">稱號（點一個掛在身上）</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${SV.titles.map(x => `<button class="chip" data-title="${x}"${SV.title === x ? ' style="background:#ffe08a"' : ''}>${x}</button>`).join('')}</div>` : ''}
@@ -1119,7 +1103,7 @@
       <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點寶物看故事；點淡淡的影子，看哪裡找得到。' : '步道上閃閃發亮的地方，點一下看看。'}</p>
       <div class="grp">隱藏任務 ${Object.keys(SV.quests).length} / ${SX.QUESTS.length}</div>
       <ul class="quest">${SX.QUESTS.map(q => SV.quests[q.id] ? `<li class="done"><span>${q.name}<small>${q.desc}</small></span></li>` : `<li class="hid"><span>？？？<small>${q.hint}</small></span></li>`).join('')}</ul>`);
-    $$('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop); });
+    $('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop, b.getBoundingClientRect()); });
     $$('#mCard [data-hint]').forEach(b => b.onclick = () => {
       A.pop(); $$('#mCard .slot.pick').forEach(k => k.classList.remove('pick')); b.classList.add('pick');
       toast(bagHint(SX.TREASURES.find(x => x.id === b.dataset.hint)), 3000);   // 提示框浮在最上面，格子在背包下面也看得到
@@ -1127,11 +1111,13 @@
     $$('#mCard [data-title]').forEach(b => b.onclick = () => { A.pop(); SV.title = b.dataset.title; save(); $$('#mCard [data-title]').forEach(k => { k.style.background = k === b ? '#ffe08a' : ''; }); });
     $('#bagOk').onclick = () => { A.pop(); closeModal(); };
     if (typeof back === 'number') $('#mCard').scrollTop = back;
+    else MO.stagger($('#mCard'), '.bag .slot');
+    if (from) MO.flip($(`#mCard [data-tr="${from.id}"]`), from.rect, { lift:true });
   }
 
   // ───────── 寶物放大卡（背包裡點寶物）─────────
   // 大圖＋稀有度框、名稱、說明、數量、第一次拿到的日期和山；稀有／傳說有流光和跟著手指的傾斜；左右滑或箭頭換下一件
-  function treasureCard(id, bagScroll){
+  function treasureCard(id, bagScroll, fromRect){   // fromRect：背包格子的位置，圖從那裡飛過來
     const owned = SX.TREASURES.filter(x => SV.bag[x.id] > 0);
     let i = owned.findIndex(x => x.id === id);
     if (i < 0) return;
@@ -1171,9 +1157,10 @@
       wrap.onpointercancel = () => { p0 = null; untilt(); };
       wrap.onpointerleave = () => { if (!p0) untilt(); };
       if (many) { $('#tzPrev').onclick = () => step(-1); $('#tzNext').onclick = () => step(1); }
-      $('#tzBack').onclick = () => { A.pop(); openBag(bagScroll); };
+      $('#tzBack').onclick = () => { A.pop(); const f = $('#mCard .tzFrame'); openBag(bagScroll, { id:owned[i].id, rect:f && f.getBoundingClientRect() }); };
     };
     show(0);
+    if (fromRect) { MO.flip($('#mCard .tzFrame'), fromRect); MO.fadeIn($('#mCard h3, #mCard .tzTags, #mCard .tzDesc, #mCard .tzFirst, #mCard .tzBtns')); }
   }
 
   // ───────── 每日任務與連續上山天數 ─────────
@@ -1277,20 +1264,22 @@
         <button class="cbtn ${D.streakGot ? '' : 'go'} sm" id="dyIn" ${D.streakGot ? 'disabled' : ''}>${D.streakGot ? '今天簽到過了' : '簽到'}</button></div>
       ${D.tasks.map((tk, i) => { const def = DAILY_POOL.find(x => x.id === tk.id) || { name:tk.id, goal:1 }; const f = Math.min(1, tk.n / def.goal);
         return `<div class="dyTask${tk.done ? ' done' : ''}"><div><b>${def.name}</b><div class="dyBar"><i style="width:${f * 100}%"></i></div>
-          <small>${def.unit ? `${Math.floor(tk.n).toLocaleString('en-US')} / ${def.goal.toLocaleString('en-US')} m` : `${tk.n} / ${def.goal}`}</small></div>
+          <small><span data-count="${Math.floor(tk.n)}">${Math.floor(tk.n).toLocaleString('en-US')}</span> / ${def.goal.toLocaleString('en-US')}${def.unit ? ' m' : ''}</small></div>
           <button class="cbtn sm ${tk.done && !tk.got ? 'go' : ''}" data-dy="${i}" ${tk.done && !tk.got ? '' : 'disabled'}>${tk.got ? '已領取' : tk.done ? '領取' : '進行中'}</button></div>`; }).join('')}
       <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務，完成就能領一件寶物。</p>
       <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">← 返回</button></div>`);
+    MO.progress($('#mCard')); MO.stagger($('#mCard'), '.dyTask');
     // 領完都回到每日畫面
     $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; claimRewards([signKind]); };
     $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; claimRewards(['common']); });
     // 一鍵領取：簽到＋所有完成的任務，一次收進背包，卡片一張一張看
-    if (nClaim) $('#dyAll').onclick = () => {
+    if (nClaim) $('#dyAll').onclick = e => MO.beat(e.currentTarget).then(on => {   // 轉圈、打勾（不到 0.4 秒）；視窗已經關掉就不領
+      if (!on) return;
       const list = [];
       if (!D.streakGot) { D.streakGot = true; list.push(signKind); }
       D.tasks.forEach(tk => { if (tk.done && !tk.got) { tk.got = true; list.push('common'); } });
       claimRewards(list);
-    };
+    });
     $('#dyX').onclick = () => { A.pop(); closeModal(); };
   }
 
@@ -1345,7 +1334,7 @@
       if (M !== m) return;
       const img = SC.snapshot();
       if (img) { SV.photos.push({ id:M.id, m:M.dist, alt:M.alt, img, cap:`${M.name}・登頂`, wx:wxText(wx) || '晴', date:today() }); imgDirty = true; save(); }
-      const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width/2, r.top + r.height*0.4, 24); confetti();
+      const r = $('#app').getBoundingClientRect(); MO.sparks(r.left + r.width/2, r.top + r.height*0.4, 24); MO.petals(MO.petalKind(M), 40);
       const wall = SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) >= M.dist);
       const nx = recommendNext(), nxt = nx && nx.id !== M.id ? nx : null;   // 登頂後推薦下一座
       modal(`${SX.art.img(groupArt('summit_', M.id), '', 'artImg summitArt')}<h3>抵達終點！</h3>
@@ -1356,7 +1345,7 @@
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
         <p class="summitBig">集印帳蓋上新的章了！</p>
         ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
-        <div class="mBtns"><button class="cbtn go" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`);
+        <div class="mBtns"><button class="cbtn go" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`, true);
       $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
       checkQuests();
     }, 1400);
@@ -1460,7 +1449,7 @@
       let html = '';
       SX.MOUNTAINS.forEach(m => { const ps = SV.photos.filter(p => p.id === m.id); if (!ps.length) return;
         html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol" style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${p.cap}</p></div>`).join('') + '</div>'; });
-      body.innerHTML = html; stagger(body, '.pol');
+      body.innerHTML = html; MO.stagger(body, '.pol');
     } else if (albumTab === 'wall') {
       const cur = SV.cur && SX.M[SV.cur] ? SV.cur : SX.MOUNTAINS[0].id;
       let html = `<div class="setRow paper photoForm"><h4>上傳山上的照片</h4>
@@ -1478,10 +1467,10 @@
       const upd = () => { const m = SX.M[selM.value], d = mOf(); $('#upBand').textContent = `${m.name} ${m.startAlt}–${m.alt} m・會出現在${bandOf(d) >= m.dist ? '山頂' : ' ' + bandOf(d) + ' m '}的照片牆`; };
       const reset = () => { const m = SX.M[selM.value]; inAlt.min = m.startAlt; inAlt.max = m.alt; inAlt.value = Math.round(st && M === m && !st.fin ? altAt(m, st.dist / m.dist) : (m.startAlt + m.alt) / 2); upd(); };
       selM.onchange = reset; inAlt.oninput = upd; reset();
-      $('#upGo').onclick = () => { A.pop(); pickUpload(selM.value, mOf()); };
+      $('#upGo').onclick = e => { A.pop(); pickUpload(selM.value, mOf(), e.currentTarget); };
       $$('#albumBody [data-up]').forEach(el => el.onclick = () => { if (confirm('要把這張照片從照片牆拿下來嗎？')) { SV.userPhotos = SV.userPhotos.filter(p => p.id !== el.dataset.up); imgDirty = true; save(); renderAlbum(); } });
     } else {
-      body.innerHTML = '<div class="stamps">' + SX.MOUNTAINS.map(m => `<div class="stampSlot">${SV.stamps[m.id] ? stampSvg(m.id, SV.stamps[m.id]) : m.name}</div>`).join('') + '</div>'; stagger(body, '.stampSlot');
+      body.innerHTML = '<div class="stamps">' + SX.MOUNTAINS.map(m => `<div class="stampSlot">${SV.stamps[m.id] ? stampSvg(m.id, SV.stamps[m.id]) : m.name}</div>`).join('') + '</div>'; MO.stagger(body, '.stampSlot');
     }
   }
 
@@ -1497,7 +1486,7 @@
         return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>敬請期待</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;
       }).join('') + '</div>';
     }).join('');
-    stagger(body, '.byG');
+    MO.stagger(body, '.byG, .byCell');
     $$('#albumBody [data-by]').forEach(el => el.onclick = () => { A.pop(); openBaiyue(+el.dataset.by); });
   }
   function openBaiyue(rank){
@@ -1584,9 +1573,12 @@
     el.innerHTML = `<div class="bpHead">得到新徽章！</div>` + top.slice(0, 3).map(([b, i]) => `<div class="bpRow">${medalHtml(b, i)}<span><b>${b.name}・${badgeLevels(b)[i].name}</b><small>${b.desc}</small></span></div>`).join('')
       + (more > 0 ? `<small class="bpMore">還有 ${more} 枚，到相簿的「徽章」看看</small>` : '');
     el.onclick = () => el.remove();
-    el.addEventListener('animationend', ev => { if (ev.animationName === 'bpOut') el.remove(); });
+    el.addEventListener('animationend', ev => { if (/^bpOut/.test(ev.animationName)) el.remove(); });
     $('#app').appendChild(el);
-    confetti(top[0][1] >= 2 ? 70 : 36); A.chime();
+    // 徽章 0 → 1.3 → 1 彈出來，第一枚爆出一小圈木頭色的葉子
+    el.querySelectorAll('.medal').forEach((md, i) => MO.pop(md, 180 + i * 90));
+    const m0 = el.querySelector('.medal'); if (m0) { const r = m0.getBoundingClientRect(); MO.burst(r.left + r.width / 2, r.top + r.height / 2, 12); }
+    A.chime();
   }
   function renderBadges(body){
     const earned = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0), all = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0);
@@ -1595,10 +1587,10 @@
       const v = badgeValue(b), show = x => Math.floor(x).toLocaleString('en-US');
       const goal = L[nx >= 0 ? nx : t].goal, f = Math.min(1, v / goal);
       return `<button class="bdgRow${t < 0 ? ' off' : ''}" data-bdg="${b.id}">${medalHtml(b, t)}<span class="bdgTxt"><b>${b.name}${t >= 0 ? `<em style="background:${L[t].color}">${L[t].name}</em>` : ''}</b>
-        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small>${nx >= 0 ? `${show(v)} / ${show(goal)} ${b.unit}・下一級${L[nx].name}` : `${show(v)} ${b.unit}・全部等級都拿到了`}</small></span>
+        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small><span data-count="${Math.floor(v)}">${show(v)}</span>${nx >= 0 ? ` / ${show(goal)} ${b.unit}・下一級${L[nx].name}` : ` ${b.unit}・全部等級都拿到了`}</small></span>
         <span class="bdgDots">${L.map((x, i) => `<i${i <= t ? ` style="background:${x.color}"` : ''}></i>`).join('')}</span></button>`;
     }).join('');
-    stagger(body, '.bdgRow');
+    MO.stagger(body, '.bdgRow'); MO.progress(body);
     $$('#albumBody [data-bdg]').forEach(el => el.onclick = () => { A.pop(); openBadge(SX.BADGES.find(b => b.id === el.dataset.bdg)); });
   }
   function openBadge(b){
@@ -1634,7 +1626,7 @@
       if (!r) return `<div class="encCard hid"><div class="encPic"><span>？</span></div><b>${no}　？？？${mark}</b><small>${encHint(e)}</small></div>`;
       return `<button class="encCard${e.rare ? ' rare' : ''}" data-enc="${e.id}"><div class="encPic">${encSvg(e)}</div><b>${no}${mark}</b><small>${e.text}</small><em>遇過 ${r.n} 次</em></button>`;
     }).join('') + '</div>';
-    stagger(body, '.encCard');
+    MO.stagger(body, '.encCard');
     $$('#albumBody [data-enc]').forEach(el => el.onclick = () => {
       A.pop(); const e = L.find(x => x.id === el.dataset.enc), r = SV.encSeen[e.id];
       modal(`<div class="encounter${e.rare ? ' rare' : ''}"><div class="ec-pic">${encSvg(e)}</div><h3>${superRare(e) ? '極稀有的奇遇' : e.rare ? '難得的奇遇' : '路上的小插曲'}</h3><p>${e.text}</p><p style="margin-top:6px;font-size:12px">第一次遇到：${r.first}・遇過 ${r.n} 次</p></div>
@@ -1675,14 +1667,14 @@
       </div>` : ''}`;
     // 開發者選項平常藏起來：連點「操作小抄」標題 7 下才出現（進入方式寫在 HANDOFF.md 管理手冊）
     $('#tipsH').onclick = () => { const n = Date.now(); devTaps = n - devTapT < 600 ? devTaps + 1 : 1; devTapT = n; if (devTaps >= 7 && !devPeek) { devPeek = true; renderSettings(); } };
-    $('#sSound').onclick = () => { s.sound = !s.sound; A.setOn(s.sound); save(); renderSettings(); if (s.sound) { A.unlock(); A.pop(); } };
+    $('#sSound').onclick = e => { s.sound = !s.sound; A.setOn(s.sound); save(); MO.toggle(e.currentTarget, s.sound); if (s.sound) { A.unlock(); A.pop(); } };
     $('#sVol').oninput = e => { s.vol = +e.target.value; A.setVol(s.vol); save(); };
     $('#sVol').onchange = () => { A.unlock(); A.pop(); };
-    $('#sGps').onclick = () => { s.gps = !s.gps; save(); setGps(s.gps); renderSettings(); };
+    $('#sGps').onclick = e => { s.gps = !s.gps; save(); MO.toggle(e.currentTarget, s.gps); setGps(s.gps); };
     $('#sPush').onclick = async () => {
       if (!SX.social) return; const want = !SX.social.pushOn; $('#sPush').disabled = true;
       try { await SX.social.pushSet(want); toast(want ? '通知打開了' : '通知關掉了'); } catch(e){ toast(e.message, 7000); }   // 說明步驟比較長，停久一點
-      renderSettings();
+      const b = $('#sPush'); if (b) { b.disabled = false; MO.toggle(b, SX.social.pushOn); }
     };
     if (s.dev) {
       const need = () => { if (!st || !M || st.fin) { toast('先開始爬一座山'); return false; } return true; };
@@ -1701,7 +1693,7 @@
       $('#pwOk').onclick = async () => {
         const v = $('#pw').value, h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v + 'sx'));
         const hex = [...new Uint8Array(h)].map(b => b.toString(16).padStart(2,'0')).join('');
-        if (hex === DEV_HASH) { s.dev = true; s.devOn = true; save(); renderSettings(); toast('開發者選項已解鎖'); } else { toast('密碼不對喔'); const ip = $('#pw'); ip.classList.add('bad'); ip.parentNode.classList.remove('shakeX'); void ip.offsetWidth; ip.parentNode.classList.add('shakeX'); }
+        if (hex === DEV_HASH) { s.dev = true; s.devOn = true; save(); renderSettings(); toast('開發者選項已解鎖'); } else { toast('密碼不對喔'); const ip = $('#pw'); ip.classList.add('bad'); MO.shake(ip.parentNode); }
       };
     }
   }
