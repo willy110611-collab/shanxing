@@ -233,8 +233,11 @@
   const lockText = m => { if (!diffOpen(m)) return `登頂任一座 ${leadOf(m).diff - 1} 顆星以上的山，就能挑戰這裡。`;
     const g = SX.gradeOf(m.id), n = gradeNeed(m);
     return `官方分級 ${g} 級：爬過任一座 ${n} 級以上的百岳，就能挑戰。`; };
-  // 雪季提醒：分級有寫 snow 的山（C+），在雪季裡卡片多一行提醒，不擋玩家
-  const snowNote = id => { const g = SX.gradeOf(id), t = g && SX.GRADES[g].snow; return t && seasonNow().some(s => s.id === 'snow' && s.mountains.includes(SX.groupOf(id))) ? t : ''; };
+  // 入山管制（雪季 C+ 要三人以上組隊）：規則只在 SX.permitNeed；卡片和 startClimb 都只問這裡
+  // 只在「從登山口出發」時檢查：已經在路上的那座（onTrail）接著走不擋，季節結束或隊友離開都不會把人困在山上
+  // 擋住時回 { reason, minParty, have }，可以出發回 null。寵物不算人數
+  const partySize = id => SX.social && SX.social.partySize ? SX.social.partySize(id) : 1;
+  const permitBlock = id => { if (onTrail() === id) return null; const n = SX.permitNeed(id, testDate || new Date()), have = partySize(id); return n && have < n.minParty ? Object.assign({ have }, n) : null; };
   // 建議挑戰順序：已開放、還沒爬過的山裡，難度最低、時間最短的那座；全都爬過就推爬最少次的。正在爬的那座不推
   function recommendNext(){
     const going = id => { const p = SV.prog[id]; return id === SV.cur && p && p.dist > 0 && !p.fin; };
@@ -295,6 +298,11 @@
     const pet = SX.PETS.find(x => x.id === SV.pet) || PET_NONE;
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
     const grade = SX.gradeOf(id), g = m.group && SX.GROUP[m.group];
+    // 雪季管制：人數不夠時，大綠鈕換成「還差幾人」並多一顆「邀請山友」（還在別座山上也一樣，免得先下山歸零才發現出不了發）
+    const permit = ok && permitBlock(id);
+    // 「邀請山友」自己一排：跟「回到某某山繼續爬」擠同一排時，375 寬會被擠成兩行
+    const permitBtns = lead => `<div class="rc-btns">${lead}</div><div class="rc-btns"><button class="cbtn sm" id="rcInv">邀請山友</button></div>
+        <div class="rc-btns"><button class="cbtn go" disabled>還差 ${permit.minParty - permit.have} 人才能出發</button></div>`;
     const card = $('#routeCard');
     card.innerHTML = `${g ? `<button class="cbtn sm cBack" id="rcBack">← ${g.full}</button>` : '<button class="cbtn sm cBack" id="rcX">← 返回</button>'}
       <div class="ic-h"><b>${m.name}</b><span class="ic-alt">${m.area}・${m.alt.toLocaleString('en-US')} m</span><span class="stars">${stars}</span></div>
@@ -311,12 +319,13 @@
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
       <div class="rc-feat"><em>終點：</em>${m.end}</div>${m.temple ? `<div class="rc-feat"><em>路上：</em>會經過${m.temple}（登頂後能去擲筊、求籤）</div>` : ''}
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
-      ${snowNote(id) ? `<div class="rc-feat"><em>提醒：</em>${snowNote(id)}</div>` : ''}
+      ${permit ? `<div class="rc-feat"><em>入山管制：</em>${permit.reason}（目前 ${permit.have} 人）。到山友大廳邀好友一起爬，對方接受就會入隊；寵物不算人數。</div>` : ''}
       ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。想改爬${m.name}，要先下山（${trN}的進度會歸零）。</div>
-        <div class="rc-btns"><button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button></div>
-        <div class="rc-btns"><button class="cbtn go" id="rcSwitch">下山，改爬${m.name}</button></div>`
-      : ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
-        <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`
+        ${permit ? permitBtns(`<button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button>`) : `<div class="rc-btns"><button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button></div>
+        <div class="rc-btns"><button class="cbtn go" id="rcSwitch">下山，改爬${m.name}</button></div>`}`
+      : ok ? (permit ? permitBtns(`<button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}`)
+        : `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
+        <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`)
       : `<div class="rc-feat"><em>還不能爬：</em>${lockText(m)}</div>
         <div class="rc-btns"><button class="cbtn go" disabled>還沒解鎖</button></div>`}`;
     card.classList.add('on'); card.scrollTop = 0;
@@ -329,14 +338,15 @@
       modal(`${SX.art.img('scene_descend', '', 'artImg summitArt')}<h3>下山了</h3><p class="summitBig">今天先走到這裡。山一直都在，下次從登山口再出發。</p><p class="summitBig">路上的寶物和照片，都收在背包和相簿裡。</p><div class="mBtns"><button class="cbtn go" id="dnOk">好</button></div>`);
       $('#dnOk').onclick = () => { closeModal(); showRoute(id); }; };
     // 這張卡片的大綠鈕（cbtn go）只會出發去這張卡片的山（id）；回到另一座山用小按鈕、寫清楚山名（check 會檢查）
+    if (permit) $('#rcInv').onclick = e => { e.stopPropagation(); A.pop(); hideRoute(); if (SX.social && SX.social.openInvite) SX.social.openInvite(id); };
     if (busy) {
       $('#rcBackTo').onclick = () => { A.unlock(); A.chime(); startClimb(tr); };
       const sw = $('#rcSwitch');   // 換山會把另一座的進度歸零：按兩次（第一次換成確認字樣），避免誤按
-      sw.onclick = e => { e.stopPropagation(); A.unlock(); if (!sw.dataset.arm) { A.pop(); sw.dataset.arm = 1; sw.textContent = `再按一次確定（${trN}歸零）`; return; } A.chime(); goDown(tr); startClimb(id); };
+      if (sw) sw.onclick = e => { e.stopPropagation(); A.unlock(); if (!sw.dataset.arm) { A.pop(); sw.dataset.arm = 1; sw.textContent = `再按一次確定（${trN}歸零）`; return; } A.chime(); goDown(tr); startClimb(id); };
     }
     else if (ok) {
       $('#rcPet').onclick = () => openPets(id);
-      $('#rcGo').onclick = () => { A.unlock(); A.chime(); startClimb(id); };
+      if (!permit) $('#rcGo').onclick = () => { A.unlock(); A.chime(); startClimb(id); };
     }
   }
   // 正在進行的季節小標籤（山群的山跟著山群的季節走）
@@ -387,6 +397,7 @@
     const m = SX.M[id]; if (!m) return;
     if (!force && !unlocked(m)) { toast('這座山還不能爬'); return; }
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
+    const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
     M = m; SV.cur = id; st = P(id);
     if (!cont) Object.assign(st, newProg());
