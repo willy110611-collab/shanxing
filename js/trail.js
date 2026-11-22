@@ -223,7 +223,7 @@ function buildTurf(){
   const base = av ? mix(near, av, GRASS_A * TEX_A) : rgb(near);
   TURF.forEach(a => a.forEach(b => b.forEach(s => free(s.c))));   // 上一座山的草帶（顏色不同）釋放
   TURF = [[0.9, 0.3, 240, 26], [2.4, 0.26, 90, 60]].map(function(d){
-    return [0, 1, 2].map(function(lv){ return [0, 1].map(function(){ return turfSpr(d[0], d[1], d[2], d[3], base, lv, r); }); });
+    return [0, 1, 2].map(function(lv){ return [0, 1, 2, 3].map(function(){ return turfSpr(d[0], d[1], d[2], d[3], base, lv, r); }); });   // 每種明暗 4 種草叢，排起來才不會一直重複
   });
 }
 // 一段路兩側蓋草帶：由遠到近幾排，每排從路邊往外蓋到畫面外或稜線邊；明暗跟著所在那格坡面
@@ -236,9 +236,12 @@ function drawTurf(i, j, y1, y2, s1, fq, fade, DS, gw){
     for (let side = -1; side <= 1; side += 2) {
       let k = 1, n = 0;
       for (let d0 = RW + BANKW + sp0.core * 0.5 - 0.12; d0 < gw - 0.4; d0 += step, n++) {
-        // 每一叢前後、左右都錯開一點（第一叢貼著路邊不左右跳），才不會排成一行一行的格子
+        // 野地的草不整齊：一片密一片疏（patch 每幾段、每兩叢換一次）、有的位置空著露出地面，大小也不一樣；第一叢貼著路邊不跳
+        const patch = Hh((i >> 2) * 13 + side, (n >> 1) + 70);
+        if (n && Hh(i * 11 + q, n * 3 + side + 90) > 0.4 + 0.5 * patch) continue;
+        const sc = 0.6 + 0.75 * Hh(i * 13 + q, n + side * 30);
         proj(j, (q + 0.1 + 0.8 * Hh(i * 3 + q, n + side * 50)) / rows, false);
-        const d = d0 + (n ? (Hh(i * 5 + q, n + side * 40) - 0.5) * step * 0.6 : 0), x = gx + side * d * gs, dw = sp0.w * gs, dh = sp0.hm * gs;
+        const d = d0 + (n ? (Hh(i * 5 + q, n + side * 40) - 0.5) * step : 0), x = gx + side * d * gs, dw = sp0.w * gs * sc, dh = sp0.hm * gs * sc;
         if (side < 0 ? x + dw * 0.5 < 0 : x - dw * 0.5 > W) break;
         while (k < nS - 2 && d >= DS[k + 1]) k++;
         const v = T[tLvS[(side + 1) * 4 + k]], sp = v[(Hh(i * 7 + q, n) * v.length) | 0], y = gy - terrH(i, side, d) * gs;
