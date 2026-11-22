@@ -121,7 +121,7 @@ function load(){
     const todo = list.filter(it => !it.lazy); let done = 0; setProg(0, todo.length);
     return Promise.all(todo.map(it => new Promise(res => {
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
-      const u = 'art/' + file + '?v=' + it.v;      // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
+      const u = 'art/' + file + '?v=' + it.v;      // v 是檔案內容指紋：圖換了網址才變，沒換的圖手機不用重新下載
       const end = () => { setProg(++done, todo.length); res(); };
       img.onload = () => { let p; try { p = prep({ id, file }, img); } catch (e) { end(); return; }
         p.then(e => { lib[id] = e; e.fit = it.fit || null; urls[id] = u; }, () => {}).then(end); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
