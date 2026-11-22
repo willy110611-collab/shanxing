@@ -22,7 +22,7 @@
   const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[], bagLog:{},   // bagLog：寶物 id → { first 第一次拿到的日期, mt 在哪座山, last 最近一次 }
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
     badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
-    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, bestStreak:0 },
+    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, snowTop:0, bestStreak:0 },
     set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false } });
   let SV = blank();
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
@@ -127,27 +127,32 @@
 
   // ───────── 天氣 ─────────
   let wxOverride = null;
-  const WX_NAMES = { sunny:'晴', cloudy:'多雲', fog:'起霧', rain:'下雨' };
+  const WX_NAMES = { sunny:'晴', cloudy:'多雲', fog:'起霧', rain:'下雨', snow:'下雪' };
   const TIME_NAMES = { dawn:'清晨', day:'', dusk:'黃昏', night:'夜晚' };
-  const WXD = { sunny:'clear', cloudy:'cloud', fog:'fog', rain:'rain' };   // 對應 data.js 奇遇用的天氣名稱
+  const WXD = { sunny:'clear', cloudy:'cloud', fog:'fog', rain:'rain', snow:'snow' };   // 對應 data.js 奇遇用的天氣名稱
   const wxText = w => (TIME_NAMES[w.time] ? TIME_NAMES[w.time] + '・' : '') + WX_NAMES[w.kind];
-  function calcWx(id, ts){   // ts：算某個時間點的天氣（離開時的日記用），不給就是現在
+  // 下雪：只在雪季（SX.SEASONS 的 snow）那幾座山、走到雪線（全程的 SNOW_LINE）以上才會下
+  // 雪線以上：本來會下雨的時段一律變成下雪，多雲或起霧的時段有 SNOW_P 的機率變成下雪（合起來約四分之一的時間在下雪）
+  const SNOW_LINE = 0.4, SNOW_P = 0.3;
+  function calcWx(id, ts, f = 1){   // ts：算某個時間點的天氣（離開時的日記用），不給就是現在；f：走到全程幾成，不給就是山頂
     ts = ts || Date.now();
     const d = new Date(ts), h = d.getHours() + d.getMinutes()/60;
     const time = h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 17 ? 'day' : h >= 17 && h < 18.6 ? 'dusk' : 'night';
     id = id || SV.cur || 'x';
-    const rr = C.rng(C.hash(id + Math.floor(ts / 1200000)))();
+    const R = C.rng(C.hash(id + Math.floor(ts / 1200000))), rr = R(), rs = R();
     const fogBias = SX.M[id] && SX.M[id].theme.fog ? 0.15 : 0;
-    const kind = rr < 0.16 ? 'rain' : rr < 0.3 + fogBias ? 'fog' : rr < 0.52 + fogBias ? 'cloudy' : 'sunny';
+    let kind = rr < 0.16 ? 'rain' : rr < 0.3 + fogBias ? 'fog' : rr < 0.52 + fogBias ? 'cloudy' : 'sunny';
+    if (f >= SNOW_LINE && (kind === 'rain' || ((kind === 'fog' || kind === 'cloudy') && rs < SNOW_P)) && snowSeasonAt(id, ts)) kind = 'snow';
     return { kind, time };
   }
-  let wx = calcWx();
   // ───────── 季節限定（真實日期，台灣時間；資料在 SX.SEASONS）─────────
   let testDate = null;   // 只給測試掛鉤 SXG.date() 用
+  const snowSeasonAt = (id, ts) => SX.seasonsAt(testDate || new Date(ts)).some(s => s.id === 'snow' && s.mountains.includes(id));
+  let wx = calcWx();
   const seasonNow = (date = testDate || new Date()) => SX.seasonsAt(date);
   const seasonOk = (sid, mid) => { const s = seasonNow().find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(wx.time)); };
   const seasonEnd = s => `${+s.to.slice(0, 2)}/${+s.to.slice(3)}`;
-  const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
+  const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'snow',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
   function cycleWx(){
     const i = WX_CYCLE.findIndex(w => w.kind === wx.kind && w.time === wx.time);
     wxOverride = WX_CYCLE[(i + 1) % WX_CYCLE.length]; wx = wxOverride; moodNow();
@@ -175,10 +180,11 @@
       }
     }
     if (!clear) {
-      c.fillStyle = kind === 'rain' ? '#cfd8de' : '#fffaf0'; c.beginPath();
+      c.fillStyle = kind === 'rain' ? '#cfd8de' : kind === 'snow' ? '#e4e9f0' : '#fffaf0'; c.beginPath();
       c.arc(12, 20, 6, Math.PI * 0.5, Math.PI * 1.5); c.arc(17, 15.5, 6.5, Math.PI, Math.PI * 1.9); c.arc(23, 20.5, 5.5, Math.PI * 1.4, Math.PI * 0.5);
       c.closePath(); c.fill(); c.stroke();
       if (kind === 'rain') { c.strokeStyle = '#4f9fd6'; c.beginPath(); [11, 17, 23].forEach(px => { c.moveTo(px, 28.5); c.lineTo(px - 1.5, 32.5); }); c.stroke(); }
+      if (kind === 'snow') { c.fillStyle = '#fff'; c.lineWidth = 1; [11, 17, 23].forEach((px, i) => { c.beginPath(); c.arc(px, 30 + (i % 2) * 2, 1.8, 0, 6.2832); c.fill(); c.stroke(); }); }
       if (kind === 'fog') { c.strokeStyle = '#9aa7ad'; c.beginPath(); c.moveTo(6, 29); c.lineTo(28, 29); c.moveTo(9, 32.5); c.lineTo(25, 32.5); c.stroke(); }
     }
   }
@@ -291,7 +297,7 @@
     if (switching) st.last = Date.now();
     arrived = false; paused = false; ptrHold = false; keyHold = false; t = 0;
     $('#routeCard').classList.remove('on'); $('#modal').classList.remove('on');
-    wx = wxOverride || calcWx(id);
+    wx = wxOverride || wxHere();
     SC.setMountain(M); SC.setCairns(SV.cairns[id] || []);
     try { HUD.setRoute(M.route); buildMarks(); } catch(e){ console.error('hud', e); }
     if (screen === 'climb') catchUp(); else go('climb');
@@ -300,6 +306,7 @@
     $('#tapHint').classList.toggle('off', !!st.fast);
     hudTick(); save();
   }
+  const wxHere = () => calcWx(M ? M.id : null, 0, st && M ? st.dist / M.dist : 1);   // 登山客現在所在位置的天氣（雪線以下不會下雪）
   function buildMarks(){
     const ms = [];
     SC.props(0, M.dist).forEach(o => { if (o.type === 'bench') ms.push({ f:o.m / M.dist, type:'bench' }); });
@@ -307,10 +314,10 @@
     HUD.setMarks(ms);
   }
 
-  // 有多冷：海拔、夜晚、雨霧、高山的風
+  // 有多冷：海拔、夜晚、雨雪霧、高山的風
   function chill(m, f, w){
     return Math.max(0, altAt(m, f) - 500) / 3500 * 0.5 + (w.time === 'night' ? 0.35 : w.time === 'dawn' ? 0.15 : 0)
-      + (w.kind === 'rain' ? 0.4 : w.kind === 'fog' ? 0.2 : 0) + (m.theme.alpine || m.theme.snow ? 0.2 : 0);
+      + (w.kind === 'snow' ? 0.6 : w.kind === 'rain' ? 0.4 : w.kind === 'fog' ? 0.2 : 0) + (m.theme.alpine || m.theme.snow ? 0.2 : 0);
   }
   // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）；dry：只是試算（不記里程、不算每日任務）
   function simulate(p, m, dt, boost, offline, dry){
@@ -379,7 +386,7 @@
       const n = a.sec >= 4 * 3600 ? 2 : 1;
       for (let i = 0; i < n; i++) {
         const ts = a.t0 + Math.random() * (a.t1 - a.t0), f = (a.from + Math.random() * (a.to - a.from)) / m.dist;
-        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts), a.enc);
+        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts, f), a.enc);
         if (e) { a.enc.push(e.id); noteEncounterSeen(e.id); }
       }
     }
@@ -388,7 +395,6 @@
     save();
   }
   const awIco = (id, cls) => `<span class="awI${cls ? ' ' + cls : ''}">${SX.art.img(id, `<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="#f2c35a" stroke="${INK}" stroke-width="1.8"/></svg>`)}</span>`;
-  const WX_ART = { sunny:'wx_sun', cloudy:'wx_cloud', fog:'wx_fog', rain:'wx_rain' };
   function awayLines(a){
     const m = M, L = [], km = x => (x / 1000).toFixed(1);
     const up = Math.round(altAt(m, a.to / m.dist) - altAt(m, a.from / m.dist)), summit = a.to >= m.dist - 2.5;
@@ -398,9 +404,9 @@
     if (a.marks.length) L.push([ 'icon_camera', `經過 ${a.marks.slice(-3).map(k => km(k) + ' 公里').join('、')}的路標${a.pics ? `，拍了 ${a.pics} 張照片收進相簿` : ''}。` ]);
     if (nn) L.push([ 'note_post', `路過 ${nn} 處山友留下的便條和疊石，順手拍掉上面的落葉。` ]);
     const seq = [];
-    for (let ts = a.t0; ts <= a.t1; ts += 1200000) { const w = calcWx(m.id, ts), s = wxText(w) || '晴'; if (!seq.length || seq[seq.length - 1].s !== s) seq.push({ s, w }); }
+    for (let ts = a.t0; ts <= a.t1; ts += 1200000) { const f = (a.from + (a.to - a.from) * (ts - a.t0) / Math.max(1, a.t1 - a.t0)) / m.dist, w = calcWx(m.id, ts, f), s = wxText(w) || '晴'; if (!seq.length || seq[seq.length - 1].s !== s) seq.push({ s, w }); }   // f：那時大概走到哪（照時間平均推算）
     const sh = (seq.length > 3 ? [seq[0], seq[seq.length >> 1], seq[seq.length - 1]] : seq).filter((x, i, l) => !i || l[i - 1].s !== x.s);   // 變很多次：只寫開頭、中間、現在
-    if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ w.time === 'night' ? 'wx_night' : WX_ART[w.kind], `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
+    if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ HUD.wxArt(w.kind, w.time), `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
     (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${e.text.split('。')[0]}。` ]); });
     if (summit) L.push([ 'emo_cheer', '已經走到山頂前面了，就等你一起踏上山頂！' ]);
     // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲（登頂那行一定留著）
@@ -635,9 +641,10 @@
       return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
-    let sum = 0; pool.forEach(e => { sum += encWeight(e); });
+    const wt = e => encWeight(e) * (e.wxPref && e.wxPref.includes(wx.kind) ? WXPREF_X : 1);   // wxPref：在這種天氣比較容易遇到
+    let sum = 0; pool.forEach(e => { sum += wt(e); });
     let r = Math.random() * sum;
-    for (const e of pool) { r -= encWeight(e); if (r <= 0) return e; }
+    for (const e of pool) { r -= wt(e); if (r <= 0) return e; }
     return pool[pool.length - 1];
   }
   function applyEffect(ef){
@@ -978,6 +985,7 @@
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
     if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
     if (wx.kind === 'fog') S.fogTop = (S.fogTop || 0) + 1;   // 霧中登頂（徽章用）
+    if (wx.kind === 'snow') S.snowTop = (S.snowTop || 0) + 1;   // 雪中登頂（徽章用）
     daily('summit');
     const stamp = SX.TREASURES.find(x => x.id === 't_summit_stamp'); if (stamp) gainTreasure(stamp, 'quiet');
     save(); A.yay();
@@ -1050,12 +1058,12 @@
       st.last = Date.now();
     }
     const moving = d > 0;
-    const snowy = M.theme.snow && wx.kind !== 'rain' && st.dist / M.dist > 0.55;
+    const snowy = wx.kind === 'snow' || (M.theme.snow && wx.kind !== 'rain' && st.dist / M.dist > 0.55);
     A.walk(moving && !paused, snowy ? 'snow' : M.theme.trail, boost);
     lineT -= dt;
     if (lineT <= 0 && moving && !paused) { lineT = 18 + Math.random()*16;
-      say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
-    wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = calcWx(M.id); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
+      say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'snow' ? SX.LINES.snow : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
+    wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
     SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist });
     if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
     updTag();
@@ -1271,6 +1279,7 @@
 
   // ───────── 徽章與奇遇圖鑑 ─────────
   const encWeight = e => e.weight != null ? e.weight : e.rare ? 0.3 : 1;   // 抽奇遇的權重：一般 1、稀有 0.3、極稀有看 data.js 的 weight
+  const WXPREF_X = 6;   // 奇遇的 wxPref 天氣剛好出現時，權重乘幾倍
   const superRare = e => e.weight != null;
   // 遇到奇遇時記進圖鑑（記錄方式只在 noteEncounterSeen 一個地方；第一次遇到才跳提示）
   function noteEnc(e){
@@ -1289,6 +1298,7 @@
       case 'night': return S.night || 0;
       case 'rain': return S.rain || 0;
       case 'fogTop': return S.fogTop || 0;
+      case 'snowTop': return S.snowTop || 0;
       case 'rests': return S.rests || 0;
       case 'cairns': return S.cairns || 0;
       case 'treasureKinds': return SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
@@ -1350,7 +1360,9 @@
   // 沒遇過的奇遇：從出現條件寫一句提示
   function encHint(e){
     const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time, out = [];
-    const TN = { dawn:'清晨', day:'白天', dusk:'黃昏', night:'夜晚' }, WN = { clear:'晴天', cloud:'多雲', fog:'起霧', rain:'下雨' };
+    const TN = { dawn:'清晨', day:'白天', dusk:'黃昏', night:'夜晚' }, WN = {};
+    for (const k in WXD) WN[WXD[k]] = k === 'sunny' ? '晴天' : WX_NAMES[k];   // 天氣名稱只寫在 WX_NAMES 一個地方
+    if (e.wxPref) out.push(e.wxPref.map(x => WX_NAMES[x] || x).join('或') + '時比較容易遇到');
     if (ts) out.push('只在' + ts.map(x => TN[x] || x).join('或'));
     if (ws) out.push(ws.map(x => WN[x] || x).join('或') + '時');
     if (w.mountains) { const ms = w.mountains.map(id => SX.M[id]).filter(Boolean);
@@ -1483,6 +1495,6 @@
     stones:() => { if (st && M) stoneGame(); },
     date:s => { testDate = s ? new Date(s + 'T12:00:00+08:00') : null; return seasonNow().map(x => x.id); },   // 假裝今天是某一天（台灣時間），不帶參數就回到真實日期
     roll:mid => rollTreasure(mid).id,
-    wx:(kind, time) => { wxOverride = kind ? { kind, time:time || 'day' } : null; wx = wxOverride || calcWx(); moodNow(); return wx; },
+    wx:(kind, time) => { wxOverride = kind ? { kind, time:time || 'day' } : null; wx = wxOverride || wxHere(); moodNow(); return wx; },
     get st(){ return st; }, get M(){ return M; }, get SV(){ return SV; } };
 })();

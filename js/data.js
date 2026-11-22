@@ -75,6 +75,7 @@ SX.LINES = {
   night:['星星好多','螢火蟲在幫我照路','晚上的山好安靜'],
   tired:['先瞇一下…','呼…休息一下下'],
   fog:['霧好濃，像在雲裡散步','看不到前面，那就看腳下'],
+  snow:['下雪了！呼出來的氣都是白的','雪踩起來沙沙響','雪花落在帽子上了','手好冰，等下喝口熱茶'],
 };
 
 // 原創籤詩：四句＋白話＋台味鼓勵
@@ -196,7 +197,7 @@ SX.ENCOUNTERS = [
   { id:'e03', text:'樹上一群獼猴正在吃果子，牠們好奇地盯著你的背包。', where:{ mountains:['alishan','taiping','xiangshan','qixing'] }, choices:[
       { label:'保持距離，慢慢經過', result:'獼猴沒有搶東西，你輕鬆地走過去了。', effect:{ temp:1 } },
       { label:'拿出零食吸引牠們', result:'一隻獼猴跳下來把你的水果搶走，你只能苦笑。', effect:{ stam:-3 } } ] },
-  { id:'e04', text:'遠方的樹枝上停著一隻帝雉，尾羽在陽光下閃閃發亮。', where:{ mountains:['alishan','taiping','hehuan','xueshan','yushan'] }, rare:true, choices:[
+  { id:'e04', text:'遠方的樹枝上停著一隻帝雉，尾羽在陽光下閃閃發亮。', where:{ mountains:['alishan','taiping','hehuan','xueshan','yushan'] }, wx:['clear','cloud'], rare:true, choices:[
       { label:'輕輕按下快門', result:'你拍到一張很漂亮的照片，帝雉慢慢地走進林子裡。', effect:{ photo:true } },
       { label:'靠近一點想看清楚', result:'帝雉被嚇到飛走了，你只能看著牠的背影。', effect:{ temp:-1 } } ] },
   { id:'e05', text:'一位阿伯遞來一顆茶葉蛋：「上山要吃飽，才會有力氣。」', where:{}, choices:[
@@ -242,7 +243,7 @@ SX.ENCOUNTERS = [
   { id:'e21', text:'一位小朋友在步道上跑來跑去，媽媽在後面大喊：「慢一點！」', where:{ maxFrac:0.3 }, choices:[
       { label:'笑著讓小朋友先過', result:'小朋友回頭對你揮手，你覺得整個人都變年輕了。', effect:{ temp:2 } },
       { label:'提醒小朋友注意腳下', result:'媽媽感謝你的提醒，小朋友乖乖慢下來。', effect:{ temp:1 } } ] },
-  { id:'e22', text:'溪邊有一塊平坦的大石頭，很適合坐下來休息一下。', where:{ minFrac:0.1, maxFrac:0.6 }, choices:[
+  { id:'e22', text:'溪邊有一塊平坦的大石頭，很適合坐下來休息一下。', where:{ minFrac:0.1, maxFrac:0.6 }, wx:['clear','cloud','fog'], choices:[
       { label:'坐下來曬曬太陽', result:'陽光灑在身上，你差點睡著了。', effect:{ stam:12, temp:1 } },
       { label:'泡一下腳', result:'溪水很涼，腳底的疲憊一下子消失了。', effect:{ stam:8, temp:2 } } ] },
   { id:'e23', text:'一位外國背包客迷路了，他拿著地圖一臉困惑地看著你。', where:{}, choices:[
@@ -282,11 +283,11 @@ SX.ENCOUNTERS = [
   { id:'es_firefly', season:'firefly', text:'整片山谷亮起成千上萬的小光點，螢火蟲像是從天上掉下來的星星。', where:{}, rare:true, choices:[
       { label:'關掉頭燈，安靜地看', result:'光點在你身邊慢慢飄，你把這個晚上收進心裡的小瓶子。', effect:{ temp:3, item:'t_firefly_jar' } },
       { label:'壓低聲音，慢慢走過', result:'你小心不打擾牠們，光點一路陪你走了好遠。', effect:{ temp:2 } } ] },
-  { id:'es_snow', season:'snow', text:'天空忽然飄下細細的白色顆粒，今年的第一場雪落在你的手套上。', where:{ minFrac:0.4 }, rare:true, choices:[
+  { id:'es_snow', season:'snow', text:'天空忽然飄下細細的白色顆粒，今年的第一場雪落在你的手套上。', where:{ minFrac:0.4 }, wxPref:['snow'], rare:true, choices:[
       { label:'伸手接住雪花', result:'雪花在手套上停了一下才融化，你看清楚了它六個角的形狀。', effect:{ temp:-1, photo:true } },
       { label:'拉緊外套，繼續往上', result:'雪踩起來沙沙響，你一步一步走得很穩。', effect:{ stam:-4, temp:-2 } } ] },
   // 極稀有奇遇：weight 是抽中的權重（一般 1、稀有 0.3），這幾個很小，玩很久才可能遇到一次
-  { id:'e33', text:'遠遠的對面山坡上，一團黑影慢慢移動。是台灣黑熊！胸前的白色 V 字在陽光下很清楚。', where:{ minFrac:0.3, mountains:['taiping','jiaming','xueshan','yushan'] }, rare:true, weight:0.25, choices:[
+  { id:'e33', text:'遠遠的對面山坡上，一團黑影慢慢移動。是台灣黑熊！胸前的白色 V 字在陽光下很清楚。', where:{ minFrac:0.3, mountains:['taiping','jiaming','xueshan','yushan'] }, wx:['clear','cloud'], rare:true, weight:0.25, choices:[
       { label:'停在原地，用相機遠遠記錄', result:'黑熊抬頭聞了聞風，慢慢走進樹林。你的手還在發抖，但心裡很感動。', effect:{ photo:true, temp:3 } },
       { label:'輕聲說話，慢慢往後退', result:'黑熊知道有人在，安靜地繞開了。山裡的鄰居，彼此尊重就好。', effect:{ temp:2 } } ] },
   { id:'e34', text:'太陽在背後，濃霧在前方。霧裡出現你的影子，影子周圍有一圈彩虹光環，這就是傳說中的「佛光」。', where:{ minFrac:0.5, mountains:['alishan','hehuan','jiaming','xueshan','yushan'], time:['dawn','day'] }, wx:['fog','cloud'], rare:true, weight:0.9, choices:[
@@ -373,6 +374,7 @@ SX.BADGES = [
   { id:'night',   name:'夜登',       glyph:'夜', stat:'night',       unit:'次', tiers:[3, 15, 40, 120], desc:'在夜晚登頂的次數' },
   { id:'rain',    name:'雨中行',     glyph:'雨', stat:'rain',        unit:'次', tiers:[2, 8, 20, 60], desc:'在下雨天登頂的次數' },
   { id:'fog',     name:'霧中行',     glyph:'霧', stat:'fogTop',      unit:'次', tiers:[2, 10, 25, 80], desc:'在起霧時登頂的次數' },
+  { id:'snow',    name:'雪中行',     glyph:'雪', stat:'snowTop',     unit:'次', tiers:[1, 5, 15, 40], desc:'在下雪時登頂的次數（只有雪季的高山會下雪）' },
   { id:'rest',    name:'長椅常客',   glyph:'憩', stat:'rests',       unit:'次', tiers:[10, 60, 150, 500], desc:'在長椅或觀景台休息的次數' },
   { id:'cairn',   name:'疊石人',     glyph:'石', stat:'cairns',      unit:'座', tiers:[5, 30, 80, 250], desc:'疊出的許願石堆' },
   { id:'treasure',name:'寶物收藏',   glyph:'寶', stat:'treasureKinds', unit:'種', tiers:[10, 18, 'all'], desc:'蒐集到的寶物種類' },

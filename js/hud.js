@@ -1,5 +1,5 @@
 /* 山行小日子 - 登山 HUD (手繪木框風)
-   window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt }
+   window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt }
    左上：表情臉 + 體力 + 體溫 + 高度跳動數字；右上：天氣圖示 + 圓形等高線雷達小地圖 */
 (function () {
   'use strict';
@@ -135,7 +135,7 @@
     if (art) { H.els.wxWrap.style.background = ''; return; }
     g.lineJoin = 'round'; g.lineCap = 'round';
     const night = time === 'night', warm = time === 'dawn' || time === 'dusk';
-    H.els.wxWrap.style.background = night ? 'linear-gradient(#34436e,#6a6a9c)' : warm ? 'linear-gradient(#f9c98e,#fbe6b8)' : kind === 'rain' ? 'linear-gradient(#a9bfcb,#d5dde0)' : 'linear-gradient(#bfe3f3,#f8ecc8)';
+    H.els.wxWrap.style.background = night ? 'linear-gradient(#34436e,#6a6a9c)' : warm ? 'linear-gradient(#f9c98e,#fbe6b8)' : kind === 'rain' ? 'linear-gradient(#a9bfcb,#d5dde0)' : kind === 'snow' ? 'linear-gradient(#c6d3e0,#eef2f6)' : 'linear-gradient(#bfe3f3,#f8ecc8)';
     const sun = (x, y, r) => {
       g.strokeStyle = INK; g.lineWidth = 2;
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.beginPath(); g.moveTo(x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2)); g.lineTo(x + Math.cos(a) * (r + 5), y + Math.sin(a) * (r + 5)); g.stroke(); }
@@ -160,6 +160,10 @@
       cloud(21, 15, 1.1, '#d7dde6');
       g.strokeStyle = '#3d78b8'; g.lineWidth = 2;
       [[12, 26], [20, 29], [28, 26]].forEach(p => { g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(p[0] - 2, p[1] + 6); g.stroke(); });
+    } else if (kind === 'snow') {   // 下雪：灰白雲＋三朵小雪花
+      cloud(21, 15, 1.1, '#e4e9f0');
+      g.fillStyle = '#ffffff'; g.strokeStyle = INK; g.lineWidth = 1.2;
+      [[12, 29], [21, 33], [30, 29]].forEach(p => { g.beginPath(); g.arc(p[0], p[1], 2.4, 0, 7); g.fill(); g.stroke(); });
     } else if (kind === 'fog') {
       cloud(21, 14, 1, '#eef0f0');
       g.strokeStyle = '#8a97a0'; g.lineWidth = 2.2;
@@ -357,5 +361,5 @@
     if (s.frac != null) drawRadar(s.frac, false);
   }
 
-  window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt };
+  window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt };
 })();
