@@ -142,6 +142,7 @@ const GAIT = {
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
   upFull:0.35, upStride:0.75, upPace:0.8,   // 上坡（不是階梯）：坡度到 35% 算最陡，最陡時步子只剩 0.75、前進速度只剩 0.8（一步一步踩上去，腳不在地上滑）
+  stairPace:0.85,                       // 爬階梯：前進速度只剩這麼多（背大背包一階一階往上，約一秒一步多一點）
   stairCad:1.35,                        // 階梯上一步踩一階：踏面很短（很陡）時步頻最多是平路的這麼多倍，再快就放慢前進（腳不會原地狂踩、在階梯上滑）
   tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
   hold:1.5,                             // 換了一種走路圖以後，至少用這麼多秒才能再換（不會一閃一閃）
@@ -1513,7 +1514,7 @@ function updGait(s, dt, dist){
   }
   // 前進速度：做動作時停下來，累了慢慢走；長按快走照原本的速度。慢慢變，不會一下子停住
   const cad = hero.stepL ? Math.min(1, G.stairCad * hero.stepL / (STRIDE / 2)) : 1;   // 很陡的階梯（踏面短）放慢，一步還是踩一階
-  const up = 1 - (1 - G.upPace) * hero.up;   // 上坡越陡走越慢
+  const up = (1 - (1 - G.upPace) * hero.up) * (1 - (1 - G.stairPace) * hero.stair);   // 上坡越陡走越慢；爬階梯更慢
   const tg = gait.act ? 0 : (s.boost ? 1 : G.pace[lvl]) * cad * up;
   gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
   if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
@@ -1534,8 +1535,8 @@ function gaitMode(dt, dist, stam){
   if (want !== gait.mode && (gait.modeT >= G.hold || (want === 'stairs' && gait.mode === 'turn'))) { gait.mode = want; gait.modeT = 0; gait.modeF = kc < 0; }
 }
 S.pace = function(){ return gait.pace; };
-// 測試用：這座山整條路因為上坡變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
-S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const gr = sAt(i) === 1 ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1); a += 1; b += 1 / (1 - (1 - GAIT.upPace) * u); } return Math.round((b / a - 1) * 1000) / 10; };
+// 測試用：這座山整條路因為上坡和爬階梯變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
+S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const st = sAt(i) === 1 && eAt(i + 1) > eAt(i), gr = st ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1); a += 1; b += 1 / ((1 - (1 - GAIT.upPace) * u) * (st ? GAIT.stairPace : 1)); } return Math.round((b / a - 1) * 1000) / 10; };
 S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv, ph:hero.ph, stepL:hero.stepL }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
 // 現在要用哪一張走路圖、要不要鏡射（寫在 gait.sid、gait.sf；每格都會跑，不產生新的陣列、字串）
 const RAIN_OF = { hiker_stairs16:'hiker_rain_stairs16', hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
