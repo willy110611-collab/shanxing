@@ -497,11 +497,11 @@ function pinBox(c, m){ const g = pinGeom(c, m); return { w:g.bw, x0:g.x0, x1:g.x
 const PIN_OFFS = [[0,0],[1,-.125],[-1,-.125],[1.9,-.125],[-1.9,-.125],[0,-.625],[1,-.75],[-1,-.75],[1.9,-.75],[-1.9,-.75],[0,-1.25],[1,-1.375],[-1,-1.375]];
 function layoutPins(c, order, ps){
   const placed = [], out = {};
-  // 目前挑戰的山、選中的山先放，維持在原位
-  const pri = o => (o.m.id === S.sel ? 0 : o.m.id === S.data.current ? 1 : 2);
+  // 目前挑戰的山先放，維持在原位；不看「選中／滑過」，點一座山時木牌才不會跳來跳去
+  const pri = o => (o.m.id === S.data.current ? 0 : 1);
   const list = order.slice().sort((a, b) => pri(a) - pri(b) || b.q.y - a.q.y);
   for (const o of list){
-    const s = ps * (S.anim[o.m.id] || 1), b = pinBox(c, o.m); let best = null;
+    const s = ps, b = pinBox(c, o.m); let best = null;
     for (const f of PIN_OFFS){
       const ox = f[0] * (b.w / 2 + 8), oy = f[1] * (b.y1 - b.y0);
       const r = { x0:o.q.x + (b.x0 + ox) * s, x1:o.q.x + (b.x1 + ox) * s, y0:o.q.y + (b.y0 + oy) * s, y1:o.q.y + (b.y1 + oy) * s };
@@ -527,10 +527,9 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   if (cur) drawWalkers(c, t);
   if (locked) c.globalAlpha = LOCK_DIM_A;
   if (done) drawCairn(c, -9, 0);
-  // 木樁（偏移時變成一根斜斜的引線木樁，從山頂連到木牌；美術圖自己有木樁，只在偏移時接到圖的樁底）
-  if (!G.art || ox || oy){ c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(ox, oy + (G.art ? 0 : py + ph / 2));
+  c.translate(ox, oy);   // 讓位時整支路標直接站到旁邊，不畫斜的引線木樁
+  if (!G.art){ c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(0, py + ph / 2);   // 沒有美術圖時程式畫的木樁
     c.strokeStyle = INK; c.lineWidth = 4.6; c.stroke(); c.strokeStyle = '#9a6a3f'; c.lineWidth = 2.6; c.stroke(); }
-  c.translate(ox, oy);
   c.lineWidth = 1; c.strokeStyle = INK; c.lineJoin = 'round';
   if (G.art){
     if (locked) c.filter = LOCK_GRAY;   // 還沒解鎖：旗子、木牌褪色
@@ -624,7 +623,8 @@ function render(t){
   const order = S.data.mountains.map((m, i) => ({ m, i, p:S.pos[m.id] })).filter(o => o.p).sort((a, b) => a.p.y - b.p.y);
   order.forEach(o => o.q = w2s(o.p.x, o.p.y));
   const lay = layoutPins(c, order, ps);
-  for (const o of order){ const q = o.q; if (q.x < -90 || q.x > vw + 90 || q.y < -60 || q.y > vh + 90) continue; const L2 = lay[o.m.id] || { ox:0, oy:0 }; drawPin(c, o.m, o.i, q.x, q.y, ps, t, L2.ox, L2.oy); }
+  const drawOrder = order.filter(o => o.m.id !== S.sel).concat(order.filter(o => o.m.id === S.sel));   // 選中的最後畫，放大時蓋在別人上面
+  for (const o of drawOrder){ const q = o.q; if (q.x < -90 || q.x > vw + 90 || q.y < -60 || q.y > vh + 90) continue; const L2 = lay[o.m.id] || { ox:0, oy:0 }; drawPin(c, o.m, o.i, q.x, q.y, ps, t, L2.ox, L2.oy); }
   // 金色光芒（右上斜射）與暖霧
   if (S.rays){ c.save(); c.globalCompositeOperation = 'screen'; c.globalAlpha = .62 + .22 * Math.sin(t * .6); c.drawImage(S.rays, Math.sin(t * .2) * 6, 0, vw, vh); c.restore(); }
   const hz = c.createLinearGradient(0, 0, 0, vh * .2); hz.addColorStop(0, 'rgba(255,242,214,.32)'); hz.addColorStop(1, 'rgba(255,242,214,0)'); c.fillStyle = hz; c.fillRect(0, 0, vw, vh * .2);

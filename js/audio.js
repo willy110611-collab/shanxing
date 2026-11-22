@@ -38,24 +38,35 @@
   const loops = {};
   function track(slot, name, gain){
     let L = loops[slot];
-    if (!L) L = loops[slot] = { el:null, name:null, gain:0, fade:null };
+    if (!L) L = loops[slot] = { el:null, gn:null, name:null, gain:0, k:0, fade:null };
     if (!A.on) name = null;
-    if (L.name === name) { L.gain = gain; if (L.el) L.el.volume = Math.min(1, gain * A.vol); return; }
-    const old = L.el;
-    if (old) fadeOut(old);
-    L.name = name; L.gain = gain; L.el = null;
+    if (L.name === name) { L.gain = gain; if (L.el && !L.fade) setLevel(L, 1); return; }
+    if (L.el) fadeTo(Object.assign({}, L), 0, true);   // 舊的那首淡出後停掉（用一份副本，新歌才不會被一起停）
+    if (L.fade) clearInterval(L.fade);
+    L.name = name; L.gain = gain; L.el = null; L.gn = null; L.fade = null; L.k = 0;
     if (!name) return;
-    const el = new Audio(BASE + name + '.mp3'); el.loop = true; el.preload = 'auto'; el.volume = 0;
+    const el = new Audio(BASE + name + '.mp3'); el.loop = true; el.preload = 'auto';
     L.el = el;
+    // iPhone 的網頁不能改 <audio> 的音量（設了也沒用），所以音樂接到 Web Audio 的音量旋鈕上，關聲音和調音量才有效
+    const c = ensure();
+    if (c) { try { L.gn = c.createGain(); L.gn.gain.value = 0; c.createMediaElementSource(el).connect(L.gn); L.gn.connect(master); } catch (e) { L.gn = null; } }
+    setLevel(L, 0);
     const p = el.play(); if (p && p.catch) p.catch(() => {});
-    fadeIn(el, gain);
+    fadeTo(L, 1, false);
   }
-  function fadeIn(el, gain){ let v = 0; const tgt = () => Math.min(1, gain * A.vol); const h = setInterval(() => { v = Math.min(tgt(), v + 0.04); el.volume = v; if (v >= tgt()) clearInterval(h); }, 60); }
-  function fadeOut(el){ const h = setInterval(() => { el.volume = Math.max(0, el.volume - 0.05); if (el.volume <= 0) { clearInterval(h); el.pause(); el.src = ''; } }, 60); }
+  // 音量 k（0～1，乘上這條音軌的 gain）；有 Web Audio 就調旋鈕（總音量在 master），沒有才調 <audio> 自己的音量
+  function setLevel(L, k){ L.k = k; if (L.gn) L.gn.gain.value = L.gain * k; else if (L.el) L.el.volume = Math.min(1, L.gain * k * A.vol); }
+  // 淡入／淡出：固定 15 步（約 0.9 秒）走完，不靠讀回音量判斷，停的時候一定會暫停
+  function fadeTo(L, to, stop){
+    if (L.fade) clearInterval(L.fade);
+    const from = L.k, el = L.el; let i = 0;
+    const h = L.fade = setInterval(() => { i++; setLevel(L, from + (to - from) * Math.min(1, i / 15));
+      if (i >= 15) { clearInterval(h); if (L.fade === h) L.fade = null; if (stop) { el.pause(); el.removeAttribute('src'); el.load(); } } }, 60);
+  }
   function retry(){ Object.values(loops).forEach(L => { if (L.el && L.el.paused && L.name) { const p = L.el.play(); if (p && p.catch) p.catch(() => {}); } }); }
 
   A.unlock = () => { const c = ensure(); retry(); return c; };
-  A.setVol = v => { A.vol = v; if (master) master.gain.value = v; Object.values(loops).forEach(L => { if (L.el) L.el.volume = Math.min(1, L.gain * v); }); };
+  A.setVol = v => { A.vol = v; if (master) master.gain.value = v; Object.values(loops).forEach(L => { if (L.el && !L.gn) setLevel(L, L.k); }); };
   A.setOn = on => { A.on = on; if (!on) Object.keys(loops).forEach(k => track(k, null, 0)); else A.mood(A._mood || {}); };
 
   // 依畫面和天氣切換音樂與環境音

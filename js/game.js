@@ -103,7 +103,9 @@
     lastTap = { x: e.clientX, y: e.clientY };
     const b = e.target.closest('.cbtn,.dbtn,.tab,.chip'); if (!b || b.disabled) return;
     const r = b.getBoundingClientRect(), s = Math.max(r.width, r.height) * 2.2, rp = document.createElement('span');
-    rp.className = 'rip'; rp.style.cssText = `width:${s}px;height:${s}px;left:${e.clientX - r.left - s/2}px;top:${e.clientY - r.top - s/2}px`;
+    const L = e.clientX - r.left - s/2, T = e.clientY - r.top - s/2;
+    // 漣漪自己裁成按鈕的形狀：按鈕不必 overflow:hidden，右上角的紅點數字才不會被切掉
+    rp.className = 'rip'; rp.style.cssText = `width:${s}px;height:${s}px;left:${L}px;top:${T}px;clip-path:inset(${-T}px ${s + L - r.width}px ${s + T - r.height}px ${-L}px round 12px)`;
     if (getComputedStyle(b).position === 'static') b.style.position = 'relative';
     b.appendChild(rp); setTimeout(() => rp.remove(), 600);
   }, { passive:true });
@@ -565,6 +567,7 @@
     if (u('ui_panel')) css.push(`.mCard,.infoCard,#restSheet{background:none!important;border-style:solid!important;border-width:18px!important;border-color:transparent!important;border-image:url("${u('ui_panel')}") 50 fill / 18px stretch!important;box-shadow:0 8px 20px rgba(40,25,10,.35)!important;color:var(--ink)!important;text-shadow:none!important}
       .mCard::before,.mCard::after,.infoCard::before,.infoCard::after,#restSheet::before,#restSheet::after{display:none!important}
       .mCard .summitBig,.mCard .tiny,.mCard p,.infoCard .ic-h b,.infoCard .rc-h b,.mCard .grp,.mCard .empty{color:var(--ink)!important;text-shadow:none!important}
+      .infoCard .ic-alt,.infoCard .rc-feat em,.mCard .rc-feat em,.infoCard .rc-h span{color:var(--wood2)!important;text-shadow:none!important}
       .mCard .stoneGame .sg-top{color:#fff7e4!important;text-shadow:var(--txo)!important}`);
     if (u('ui_ribbon')) css.push(`.mCard h3{display:block;width:fit-content;max-width:100%;margin:0 auto 12px!important;padding:8px 2px 12px;border-style:solid;border-width:0 26px;border-color:transparent;border-image:url("${u('ui_ribbon')}") 0 130 fill / 0 26px stretch;color:var(--ink)!important;text-shadow:none!important;font-size:16px!important;white-space:nowrap;letter-spacing:0}`);   // 標題一行放完，不准折成兩行
     if (u('ui_tab') && u('ui_tab_on')) css.push(`.tab{background:url("${u('ui_tab')}") center/100% 100% no-repeat!important;border:0!important;box-shadow:none!important;color:var(--ink)!important;text-shadow:0 1px 0 rgba(255,240,210,.6)!important}
@@ -589,8 +592,8 @@
     // 數字是 note_paper 裁掉透明邊後量的（314×438，紙 168×280，紙中心在 124.75, 275.5），換圖要重量
     if (u('note_paper')) css.push(`.noteP{--p:140px;width:calc(var(--p) * 314 / 168)!important;height:calc(var(--p) * 438 / 168);box-sizing:border-box;margin:0 auto 14px!important;padding:0!important;background:url("${u('note_paper')}") center/100% 100% no-repeat!important;border:0!important;border-radius:0!important;box-shadow:none!important;transform:none!important}
       .noteP::before{display:none!important}
-      .noteP>div{position:absolute;left:calc(100% * 124.75 / 314);top:calc(100% * 275.5 / 438);width:var(--p);height:calc(var(--p) * 280 / 168);margin:calc(var(--p) * -140 / 168) 0 0 calc(var(--p) / -2);box-sizing:border-box;padding:34px 12px 10px;font-size:15px;line-height:1.6;transform:rotate(16deg);overflow-wrap:anywhere}
-      .noteP small{font-size:11.5px!important;line-height:1.4;margin-top:6px!important}`);
+      .noteP>div{position:absolute;left:calc(100% * 124.75 / 314);top:calc(100% * 275.5 / 438);width:var(--p);height:calc(var(--p) * 280 / 168);margin:calc(var(--p) * -140 / 168) 0 0 calc(var(--p) / -2);box-sizing:border-box;padding:34px 9px 10px;font-size:15px;line-height:1.6;transform:rotate(16deg);overflow-wrap:anywhere}
+      .noteP small{font-size:10.5px!important;line-height:1.4;margin-top:6px!important;text-wrap:balance}`);   // 署名一行放得下「— 你在嘉明湖留下的願望」，放不下時兩行平均分，不會剩一個字
     if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
     if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }
   });
