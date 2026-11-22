@@ -62,6 +62,11 @@
 
   const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null });
   const P = id => { const p = SV.prog[id] || (SV.prog[id] = newProg()), d = newProg(); for (const k in d) if (p[k] === undefined) p[k] = d[k]; if (!p.got || typeof p.got !== 'object') p.got = {}; ['dist','stam','temp','ms','last','encT'].forEach(k => { if (typeof p[k] !== 'number' || !isFinite(p[k])) p[k] = d[k]; }); return p; };
+  // 一次只能爬一座山（跟真實一樣）：onTrail＝正在爬、還沒登頂的那座；舊存檔裡同時爬到一半的別座山只留目前這座
+  const onTrail = () => { const id = SV.cur, m = id && SX.M[id], q = m && SV.prog[id]; return q && q.dist > 0 && q.dist < m.dist && !q.fin ? id : null; };
+  for (const k in SV.prog) { const q = SV.prog[k]; if (k !== SV.cur && q && q.dist > 0 && !q.fin) SV.prog[k] = newProg(); }
+  // 下山：這次的進度歸零，下次從登山口重新出發（路上拿到的寶物、照片都留著）
+  function goDown(id){ SV.prog[id] = newProg(); if (SV.cur === id) SV.cur = null; save(); }
 
   // ───────── 畫面切換 ─────────
   let screen = 'map', prevScreen = 'map';
@@ -261,6 +266,7 @@
     const m = SX.M[id]; if (!m) return;
     const p = SV.prog[id], done = SV.done[id] || 0, ok = unlocked(m);
     const going = p && p.dist > 0 && p.dist < m.dist && !p.fin;
+    const tr = onTrail(), busy = ok && tr && tr !== id, trN = tr && SX.M[tr].name;
     const w = wxOverride || calcWx(id), nPh = SV.photos.filter(x => x.id === id).length, nUp = SV.userPhotos.filter(x => x.mountainId === id).length;
     const pet = SX.PETS.find(x => x.id === SV.pet) || PET_NONE;
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
@@ -282,7 +288,10 @@
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
       <div class="rc-feat"><em>終點：</em>${m.end}${m.temple ? '（可以擲筊、求籤）' : ''}</div>
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
-      ${ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button></div>
+      ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。先登頂，或下山再來。</div>
+        <div class="rc-btns"><button class="cbtn sm" id="rcDown">下山（${trN}的進度歸零）</button></div>
+        <div class="rc-btns"><button class="cbtn go" id="rcBackTo">回到${trN}</button></div>`
+      : ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
         <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`
       : `<div class="rc-feat"><em>還沒開放：</em>${lockText(m)}</div>
         <div class="rc-btns"><button class="cbtn go" disabled>尚未解鎖</button></div>`}`;
@@ -290,7 +299,13 @@
     wxIcon($('#rcWx'), w.kind, w.time);
     $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
     if (g) $('#rcBack').onclick = e => { e.stopPropagation(); A.pop(); showGroup(g.id); };
-    if (ok) {
+    // 下山要按兩次（第一次換成確認字樣），避免誤按
+    const dn = $('#rcDown'); if (dn) dn.onclick = e => { e.stopPropagation(); A.pop(); if (!dn.dataset.arm) { dn.dataset.arm = 1; dn.textContent = '再按一次確定下山（進度歸零）'; return; } goDown(tr || id); hideRoute();
+      // 下山插圖卡（scene_descend，還沒畫之前只有文字）
+      modal(`${SX.art.img('scene_descend', '', 'artImg summitArt')}<h3>下山了</h3><p class="summitBig">今天先走到這裡。山一直都在，下次從登山口再出發。</p><p class="summitBig">路上收集的寶物和照片，都好好收在背包和相簿裡。</p><div class="mBtns"><button class="cbtn go" id="dnOk">好</button></div>`);
+      $('#dnOk').onclick = () => { closeModal(); selId = id; showRoute(id); }; };
+    if (busy) $('#rcBackTo').onclick = () => { A.unlock(); A.chime(); startClimb(tr); };
+    else if (ok) {
       $('#rcPet').onclick = () => openPets(id);
       $('#rcGo').onclick = () => { A.unlock(); A.chime(); startClimb(id); };
     }
@@ -342,6 +357,7 @@
   function startClimb(id, force){
     const m = SX.M[id]; if (!m) return;
     if (!force && !unlocked(m)) { toast('這座山還沒開放'); return; }
+    const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const switching = SV.cur !== id;
     M = m; SV.cur = id; st = P(id);
     if (st.fin || st.dist >= M.dist) Object.assign(st, newProg());
@@ -646,7 +662,7 @@
     // 集印帳：紅色印章圖，下緣壓一塊紅框小牌寫山名和日期（字跟著章的大小縮放）；整枚章用「取暗色」混色，米色底會融進紙裡像真的蓋上去
     css.push(`.stampArt{position:relative;width:100%;aspect-ratio:1;container-type:inline-size;transform:rotate(-8deg);mix-blend-mode:darken}
       .stampArt img{display:block;width:100%;height:100%;object-fit:contain}
-      .stampArt span{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);padding:1.5cqw 5cqw 2cqw;background:#fbf2df;border:max(1.5px,1.6cqw) solid #b8322a;border-radius:3cqw;color:#b8322a;text-align:center;line-height:1.15;white-space:nowrap;text-shadow:none;font-family:Huninn,sans-serif}
+      .stampArt span{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);padding:1.5cqw 5cqw 2cqw;background:#fbf2df;border:max(1.5px,1.6cqw) solid #b8322a;border-radius:3cqw;color:#b8322a;text-align:center;line-height:1.15;white-space:nowrap;text-shadow:none;font-family:var(--fontB)}
       .stampArt b{display:block;font-size:13cqw;letter-spacing:.08em}.stampArt i{display:block;font-style:normal;font-size:9.5cqw;font-weight:bold}
       .stampSlot:has(.stampArt){padding:2px}`);
     // 便條／許願紙：綁繩小紙卡當底圖，字放在紙的位置、跟紙一樣順時針斜 16°
@@ -1349,7 +1365,7 @@
     return `<svg viewBox="0 0 100 100"><g transform="rotate(-8 50 50)" opacity=".9">
       <circle cx="50" cy="50" r="44" fill="none" stroke="#c8402f" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="#c8402f" stroke-width="1.5" stroke-dasharray="3 3"/>
       <path d="M22 62 L38 38 L48 50 L60 30 L78 62Z" fill="#c8402f" opacity=".85"/>
-      <text x="50" y="80" text-anchor="middle" font-size="15" fill="#c8402f" font-family="Huninn,sans-serif">${m.name}</text>
+      <text x="50" y="80" text-anchor="middle" font-size="15" fill="#c8402f" style="font-family:var(--fontB)">${m.name}</text>
       <text x="50" y="25" text-anchor="middle" font-size="8.5" fill="#c8402f">${(date || '').replace(/\//g,'.')}</text></g></svg>`;
   }
   $('#bStamp').onclick = () => busyWrap(done => {
@@ -1654,7 +1670,9 @@
   if (SV.set.gps) setGps(true);
   // 開場讀取畫面：美術圖全部載完才收起來（玩家不會看到程式畫的備用圖），收起後先到山友大廳
   SX.art.onProgress((d, t) => { const f = $('#ldFill'); if (f && t) f.style.width = Math.round(d / t * 100) + '%'; });
-  SX.art.whenReady(() => { const L = $('#loading'); if (L) L.classList.add('done'); go('lobby'); });
+  // 美術圖和兩套手寫字型都到了才收起讀取畫面（畫布上的字和木牌會用到字型；字型載入失敗也會往下走）
+  const fontsReady = document.fonts && document.fonts.load ? Promise.all(['16px Iansui', '16px "LXGW WenKai TC"'].map(f => document.fonts.load(f, '山行').catch(() => {}))) : Promise.resolve();
+  SX.art.whenReady(() => fontsReady.then(() => { const L = $('#loading'); if (L) L.classList.add('done'); go('lobby'); }));
   if (SV.cur && SX.M[SV.cur]) { const p = P(SV.cur); if (p.dist > 0 && !p.fin) setTimeout(() => { if (screen !== 'map') return; selId = SV.cur; try { WM.focus(SX.groupOf(SV.cur)); } catch(e){} showRoute(SV.cur); }, 700); }
   requestAnimationFrame(loop);
   document.addEventListener('gesturestart', e => e.preventDefault());

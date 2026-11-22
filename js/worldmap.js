@@ -10,7 +10,7 @@ const LIFT = 74;              // h=1 時的畫面抬升
 const SLAB = 18;              // 模型底座厚度
 const CELL = 1.6;             // 高度場格距
 const DIFFC = ['#8fcf6e','#f2cf5b','#f3a35a','#ee7e6b','#b98ad9'];
-const FONT = 'Huninn, "Noto Sans TC", "PingFang TC", sans-serif';
+const FONT = getComputedStyle(document.documentElement).getPropertyValue('--fontB').trim() || 'sans-serif';   // 字型在 css/style.css 的 --fontB
 
 const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
 const lerp = (a,b,t) => a + (b - a) * t;
