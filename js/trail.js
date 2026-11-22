@@ -32,7 +32,7 @@ let SPR = {}, signSpr = {}, VG = {}, hazeCss = '#dfe6e2', hazeRgb = [223,230,226
 let smallTab = [], treeTab = [], edgeTab = [], hedgeTab = [];
 const EDGE_J = 40, EDGE_P = 0.55;   // 路緣草叢：幾段以內畫、每邊每段出現的機率
 const PASS_P = 0.035, PASS_IN = 0.9;   // 鏡頭前掠過的芒草／蕨類：每段出現的機率（約 45 公尺一叢）、內緣離路中心至少幾公尺（在登山客那個深度已經在他身邊，不會擋到人）
-const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1, TRUNK_P = 0.2;   // TRUNK_P：森林步道每段有貼近鏡頭高樹幹的機率（再乘上 theme.wall）
+const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1, TRUNK_P = 0.14;   // TRUNK_P：森林步道每段有貼近鏡頭高樹幹的機率（再乘上 theme.wall）
    // 植物牆：幾段以內畫、每段幾個位置、每個位置出現的機率（再乘上 theme.wall）
 // 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
 // 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
@@ -46,6 +46,7 @@ const SCALE = {
   hut:7.5, shrine:1.2, station:3.6, rockwall:6   // 路旁地標：排雲山莊（三層木屋）、西峰山神廟、北峰氣象站、東峰岩壁
 };
 const RAIL_J = 64, RAIL_H = SCALE.rail, RAIL_D = RW + 0.12;   // 欄杆：幾段以內畫、高度、離路中心多遠（公尺）
+const RAIL_ART_J = 44;   // 美術圖欄杆畫到幾段（再遠只剩一兩像素的細線，最後 10 段淡出，省效能）
 let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
 let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積雪多少；snowFall：正在下的雪有多密（兩個都會慢慢變化）
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
@@ -232,7 +233,7 @@ function mirTex(id, m, r, mx, my, px){
 }
 // 階梯立面（面對鏡頭那一面）的貼圖：石階用花崗岩石塊（約 5 排石頭）、土路和木棧道的陡段用木頭階梯（約 3 根橫木）
 // m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
-const RISER_J = 28;
+const RISER_J = 22;
 const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95] } };
 function buildTex(){
   const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
@@ -272,7 +273,7 @@ function riserFill(T, xl, yt, s, k, a){
 // 透視下「1/距離」在畫面上是線性的：一段切成幾條約 SUB_PX 高的薄橫條，每條各自算縮放、跟著中心線斜切，
 // 相鄰兩條、相鄰兩段在接縫上位置、比例都對得起來（以前一段只用近端的比例貼到底，遠端比下一段大好幾倍，近處一段一段像拼起來的色塊）
 // 橫條的上下緣對齊整數像素：半透明的貼圖兩條各蓋半個像素時會透出一條細線
-const SUB_PX = 8, SUB_GRASS = 20;   // 路面、踏面每條約 8 像素；草地貼圖本來就亂，切粗一點（省效能）
+const SUB_PX = 8, SUB_GRASS = 36;   // 路面、踏面每條約 8 像素；草地貼圖本來就亂，切粗一點（省效能）
 function texRun(T, uc, xA, yA, sA, xB, yB, sB, zA, a, path, sub){
   if (!T || a < 0.01) return;
   const h = yA - yB, n = clamp(Math.ceil(h / (sub || SUB_PX)), 1, 24), dzA = F / sA;
@@ -311,7 +312,7 @@ const mipN = k =>Math.min(6, Math.max(0, Math.floor(-Math.log2(k * DPR))));
 // step：0＝這一級（回傳要跟下一級交叉淡換多少 w），1＝下一級（疊在上面）。兩次的不透明度算好，讓底色露出來的比例跟只畫一次一樣
 function texAff(T, uc, xn, yn, sn, xf, yf, sf, zn, zf, a, step){
   const r = T.w / T.m, dv = Math.max(1e-4, (zf - zn) * r), kx = (sn + sf) * 0.5 / r, d = -(yn - yf) / dv, c = (xf - xn) / dv;
-  const fy = clamp(-Math.log2(-d * DPR), 0, 6), ny0 = Math.floor(fy), w = ny0 === 0 ? clamp((fy - 0.7) / 0.3, 0, 1) : 0;   // 只有最近那一次換級（原圖→縮一半）交叉淡換：那條分界在登山客腳邊最明顯，更遠的換級只剩幾像素看不出來（省效能）
+  const fy = clamp(-Math.log2(-d * DPR), 0, 6), ny0 = Math.floor(fy), w = ny0 === 0 ? clamp((fy - 0.8) / 0.2, 0, 1) : 0;   // 只有最近那一次換級（原圖→縮一半）交叉淡換：那條分界在登山客腳邊最明顯，更遠的換級只剩幾像素看不出來（省效能）
   const nx = mipN(kx), ny = ny0 + (step ? 1 : 0), L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1;
   const v0 = (((zn % T.m) + T.m) % T.m) * r, u0 = uc * r, m = TEX_MTX || new DOMMatrix();
   m.a = kx * sx; m.b = 0; m.c = c * sy; m.d = d * sy; m.e = xn - kx * u0 - c * v0; m.f = yn - d * v0;
@@ -1663,30 +1664,35 @@ function drawRail(i, j, fi, fade, fq){
   ctx.globalAlpha = fade;
 }
 // 美術圖欄杆：柱子（rail_post）照原本的間距，扶手和中間橫木（rail_bar）從這段起點拉到終點、跟著坡度斜
-// 一根橫木跨兩段（柱子之間）：雙數段用圖的左半、單數段用右半，接起來剛好一整根
+// 一根橫木從一根柱子拉到下一根柱子（通常跨兩段），整根畫一次
 function railArt(i, j, fade, fq){
-  const A = fade * farA(j, RAIL_J, 10), P = SPR.railPost[0], B = SPR.railBar[0], half = i & 1;
+  const A = fade * farA(j, RAIL_ART_J, 10), P = SPR.railPost[0], B = SPR.railBar[0], half = i & 1;
+  const post = !railOn(i - 1) || !half;   // 這段起點有沒有柱子：每兩段一根，欄杆起點一定有
   if (A < 0.01) return;
   for (let side = -1; side <= 1; side += 2) {
-    proj(j + 1, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + 1, side, RAIL_D) * gs, sb = gs;
+    proj(j + 1, 0, false); const x1 = gx + side * RAIL_D * gs, y1 = gy - terrH(i + 1, side, RAIL_D) * gs, s1 = gs;
     proj(j, 0, false); const xa = gx + side * RAIL_D * gs, ya = gy - terrH(i, side, RAIL_D) * gs, sa = gs;
-    if (side < 0 ? Math.max(xa, xb) < -4 : Math.min(xa, xb) > W + 4) continue;
-    const th = SCALE.railBar * (sa + sb) * 0.5, len = Math.hypot(xb - xa, yb - ya);
-    for (let q = 0; q < 2; q++) {               // 扶手＋中間橫木（中間橫木遠處只剩一條線，30 段以外慢慢淡掉，省效能）
-      const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb, qa = q ? A * farA(j, 30, 6) : A;
-      for (let hz = 0; hz < 2; hz++) {          // 原色＋霧化剪影（遠處融進霧裡）
-        if (hz ? fq <= 0.04 : fq >= 0.96) continue;
-        const a = hz ? qa * fq : qa; if (a < 0.01) continue;
-        const img = mip(hz ? B.h : B.c, len * 2 * DPR), sw = img.width / 2, sh = img.height;
-        ctx.globalAlpha = a;
-        ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa, DPR * (ha - th * 0.5));
-        ctx.drawImage(img, sw * half, 0, sw, sh, 0, 0, sw, sh);
+    if (side < 0 ? Math.max(xa, x1) < -4 : Math.min(xa, x1) > W + 4) continue;
+    if (post) {   // 從這根柱子拉一整根橫木到下一根柱子（一根圖畫一次，柱子之間是直的）
+      const sp = !half && railOn(i + 1) ? 2 : 1;
+      proj(j + sp, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + sp, side, RAIL_D) * gs, sb = gs;
+      const th = SCALE.railBar * (sa + sb) * 0.5, len = Math.hypot(xb - xa, yb - ya);
+      for (let q = 0; q < 2; q++) {               // 扶手＋中間橫木（中間橫木遠處只剩一條線，30 段以外慢慢淡掉，省效能）
+        const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb, qa = q ? A * farA(j, 30, 6) : A;
+        for (let hz = 0; hz < 2; hz++) {          // 原色＋霧化剪影（遠處融進霧裡）
+          if (hz ? fq <= 0.04 : fq >= 0.96) continue;
+          const a = hz ? qa * fq : qa; if (a < 0.01) continue;
+          const img = mip(hz ? B.h : B.c, len * DPR), sw = img.width, sh = img.height;
+          ctx.globalAlpha = a;
+          ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa, DPR * (ha - th * 0.5));
+          ctx.drawImage(img, 0, 0);
+        }
       }
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     }
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     const ps = 0.5 * farA(j, 24, 6);   // 柱子的影子只畫近處（遠處柱子細到看不出影子）
-    if (!railOn(i + 1)) { proj(j + 1, 0, false); drawSpr(P, xb, yb, sb, fq, ps, A); }        // 欄杆終點
-    if (!railOn(i - 1) || !half) { proj(j, 0, false); drawSpr(P, xa, ya, sa, fq, ps, A); }   // 每兩段一根；欄杆起點一定有
+    if (!railOn(i + 1)) { proj(j + 1, 0, false); drawSpr(P, x1, y1, s1, fq, ps, A); }   // 欄杆終點
+    if (post) { proj(j, 0, false); drawSpr(P, xa, ya, sa, fq, ps, A); }
   }
   ctx.globalAlpha = fade;
 }
