@@ -569,6 +569,15 @@
       .mCard .summitBig,.mCard .tiny,.mCard p,.infoCard .ic-h b,.infoCard .rc-h b,.mCard .grp,.mCard .empty{color:var(--ink)!important;text-shadow:none!important}
       .infoCard .ic-alt,.infoCard .rc-feat em,.mCard .rc-feat em,.infoCard .rc-h span{color:var(--wood2)!important;text-shadow:none!important}
       .mCard .stoneGame .sg-top{color:#fff7e4!important;text-shadow:var(--txo)!important}`);
+    // 山的資訊卡用專屬的木框羊皮紙卡（ui_card，頂邊刻小山）；卡裡的小格子不再框一圈，直接寫在紙上，用淡淡的虛線分隔
+    if (u('ui_card')) css.push(`.infoCard{border-image:url("${u('ui_card')}") 84 70 88 70 fill / 30px 25px 31px stretch!important;border-width:30px 25px 31px!important;padding:4px 6px 6px!important}
+      .infoCard .paper,.infoCard .paperIn{background:none!important;border:0!important;border-bottom:1.5px dashed rgba(120,80,40,.45)!important;border-radius:0!important;box-shadow:none!important}
+      .infoCard .ic-meta{gap:2px 14px!important}`);
+    // 按鈕用木牌（ui_button）：取代程式畫的漸層亮面按鈕
+    if (u('ui_button')) css.push(`.cbtn{background:none!important;border-style:solid!important;border-color:transparent!important;border-width:12px 15px!important;border-image:url("${u('ui_button')}") 50 60 fill / 12px 15px stretch!important;box-shadow:0 3px 4px rgba(40,25,10,.28)!important;border-radius:0!important;padding:0 5px!important;min-height:44px}
+      .cbtn.sm{min-height:34px;padding:0!important;border-width:8px 10px!important;border-image-width:8px 10px!important}
+      .cbtn:active{box-shadow:0 1px 2px rgba(40,25,10,.28)!important}
+      .cbtn[data-badge]::after{top:-22px!important;right:-25px!important}.cbtn.sm[data-badge]::after{top:-17px!important;right:-19px!important}`);   // 紅點的位置從木框內緣算，往外推回按鈕右上角
     if (u('ui_ribbon')) css.push(`.mCard h3{display:block;width:fit-content;max-width:100%;margin:0 auto 12px!important;padding:8px 2px 12px;border-style:solid;border-width:0 26px;border-color:transparent;border-image:url("${u('ui_ribbon')}") 0 130 fill / 0 26px stretch;color:var(--ink)!important;text-shadow:none!important;font-size:16px!important;white-space:nowrap;letter-spacing:0}`);   // 標題一行放完，不准折成兩行
     if (u('ui_tab') && u('ui_tab_on')) css.push(`.tab{background:url("${u('ui_tab')}") center/100% 100% no-repeat!important;border:0!important;box-shadow:none!important;color:var(--ink)!important;text-shadow:0 1px 0 rgba(255,240,210,.6)!important}
       .tab.on{background-image:url("${u('ui_tab_on')}")!important;color:#fff7e4!important;text-shadow:var(--txo)!important}`);

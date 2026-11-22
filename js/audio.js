@@ -14,7 +14,7 @@
         master = ctx.createGain(); master.gain.value = A.vol; master.connect(ctx.destination);
         ONESHOT.forEach(load);
       }
-      if (ctx.state === 'suspended') ctx.resume();
+      if (ctx.state !== 'running') { const r = ctx.resume(); if (r && r.catch) r.catch(() => {}); }   // iPhone 切回來時可能是 interrupted，不只 suspended
     } catch(e){ return null; }
     return ctx;
   }
@@ -41,7 +41,7 @@
     if (!L) L = loops[slot] = { el:null, gn:null, name:null, gain:0, k:0, fade:null };
     if (!A.on) name = null;
     if (L.name === name) { L.gain = gain; if (L.el && !L.fade) setLevel(L, 1); return; }
-    if (L.el) fadeTo(Object.assign({}, L), 0, true);   // 舊的那首淡出後停掉（用一份副本，新歌才不會被一起停）
+    if (L.el) { if (L.fade) clearInterval(L.fade); if (A.on) fadeTo(Object.assign({}, L, { fade:null }), 0, true); else halt(L.el, L.gn); }   // 舊的那首淡出後停掉（用副本，新歌才不會被一起停）；關聲音、切到背景就馬上停（背景時計時器可能被暫停）
     if (L.fade) clearInterval(L.fade);
     L.name = name; L.gain = gain; L.el = null; L.gn = null; L.fade = null; L.k = 0;
     if (!name) return;
@@ -56,13 +56,15 @@
   }
   // 音量 k（0～1，乘上這條音軌的 gain）；有 Web Audio 就調旋鈕（總音量在 master），沒有才調 <audio> 自己的音量
   function setLevel(L, k){ L.k = k; if (L.gn) L.gn.gain.value = L.gain * k; else if (L.el) L.el.volume = Math.min(1, L.gain * k * A.vol); }
+  // 停掉的音軌會把旋鈕拆掉，不然腳步聲一走一停會越積越多
   // 淡入／淡出：固定 15 步（約 0.9 秒）走完，不靠讀回音量判斷，停的時候一定會暫停
   function fadeTo(L, to, stop){
     if (L.fade) clearInterval(L.fade);
-    const from = L.k, el = L.el; let i = 0;
+    const from = L.k, el = L.el, gn = L.gn; let i = 0;
     const h = L.fade = setInterval(() => { i++; setLevel(L, from + (to - from) * Math.min(1, i / 15));
-      if (i >= 15) { clearInterval(h); if (L.fade === h) L.fade = null; if (stop) { el.pause(); el.removeAttribute('src'); el.load(); } } }, 60);
+      if (i >= 15) { clearInterval(h); if (L.fade === h) L.fade = null; if (stop) halt(el, gn); } }, 60);
   }
+  function halt(el, gn){ el.pause(); el.removeAttribute('src'); el.load(); if (gn) gn.disconnect(); }
   function retry(){ Object.values(loops).forEach(L => { if (L.el && L.el.paused && L.name) { const p = L.el.play(); if (p && p.catch) p.catch(() => {}); } }); }
 
   A.unlock = () => { const c = ensure(); retry(); return c; };
