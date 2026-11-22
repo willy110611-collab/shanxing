@@ -574,7 +574,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .byCell.soon{background:linear-gradient(170deg,#e4dccd,#cfc3ad);box-shadow:none;border-style:dashed}
 .byCell.soon b,.byCell.soon .byMeta{opacity:.55}
 .byCell em{font-style:normal;font-size:10.5px;color:var(--ink2);white-space:nowrap}
-.byStamp{position:absolute;right:-5px;top:-7px;width:34px;height:34px;border:2.5px solid #c8402f;border-radius:50%;color:#c8402f;font-size:11px;font-style:normal;display:grid;place-items:center;transform:rotate(-14deg);background:rgba(255,247,226,.75);box-shadow:inset 0 0 0 1.5px rgba(200,64,47,.35);pointer-events:none}
+.byStamp{position:absolute;right:-7px;top:-9px;width:29px;height:29px;border:2.2px solid #c8402f;border-radius:50%;color:#c8402f;font-size:10px;font-style:normal;display:grid;place-items:center;transform:rotate(-14deg);background:rgba(255,247,226,.75);box-shadow:inset 0 0 0 1.5px rgba(200,64,47,.35);pointer-events:none}
 .byInfo{padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 .byInfo div{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px}
 .byInfo span{color:var(--wood2);white-space:nowrap}
