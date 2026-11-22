@@ -184,7 +184,7 @@
     SX.MOUNTAINS.forEach(m => { if (!unlocked(m)) locked[m.id] = true; });
     SV.userPhotos.forEach(p => { photos[p.mountainId] = (photos[p.mountainId] || 0) + 1; });
     try {
-      WM.setData({ mountains:SX.MOUNTAINS, coast:SX.COAST, ridge:SX.RIDGE, done:SV.done, prog:SV.prog, current:SV.cur, locked, photos });
+      WM.setData({ mountains:SX.MOUNTAINS, coast:SX.COAST, ridge:SX.RIDGE, done:SV.done, prog:SV.prog, current:SV.cur, locked, photos, pet:SV.pet || null });
       WM.start(); if (!mapInit) { mapInit = true; WM.reset(); }
     } catch(e){ console.error('worldmap', e); }
   }

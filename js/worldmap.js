@@ -26,7 +26,7 @@ const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Mat
 const S = {
   host:null, cv:null, ctx:null, dpr:1, vw:0, vh:0, base:1,
   cam:{x:280,y:400,z:1}, tgt:{x:280,y:400,z:1}, camInit:false,
-  data:{ mountains:[], coast:[], ridge:[], done:{}, prog:{}, current:null, locked:{}, photos:{} },
+  data:{ mountains:[], coast:[], ridge:[], done:{}, prog:{}, current:null, locked:{}, photos:{}, pet:null },
   T:null, dirty:true, running:false, raf:0, last:0, t:0,
   cb:null, bgCb:null, hits:[], pos:{}, hover:null, sel:null, anim:{}, tw:{},
   sprites:null, shadowSp:null, rays:null, tb1:null, tb2:null,
@@ -54,11 +54,20 @@ function puffSprite(seed, W, H){
   pass(W*.035, -H*.11, -H*.04, '#fffbe9');     // 暖色高光
   return c;
 }
+// 雲朵：有 map_cloud 美術圖就用（正、反、正三種），沒有就用程式畫的
+const CLOUD_ART = 'map_cloud';
+function flipX(src){ const c = mk(src.width, src.height), g = c.getContext('2d'); g.translate(src.width, 0); g.scale(-1, 1); g.drawImage(src, 0, 0); return c; }
 function makeSprites(){
-  S.sprites = [puffSprite(11, 256, 140), puffSprite(23, 256, 140), puffSprite(37, 256, 140)];
+  const cl = SX.art && SX.art.get(CLOUD_ART) ? SX.art.crop(CLOUD_ART, 0) : null;
+  S.sprites = cl ? [cl, flipX(cl), cl] : [puffSprite(11, 256, 140), puffSprite(23, 256, 140), puffSprite(37, 256, 140)];
   const c = mk(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64,64,0,64,64,64);
   gr.addColorStop(0, 'rgba(28,48,92,.55)'); gr.addColorStop(.6, 'rgba(28,48,92,.25)'); gr.addColorStop(1, 'rgba(28,48,92,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 128, 128); S.shadowSp = c;
+}
+// 畫一朵雲：寬 w，高度照圖的比例；(x, y) 是雲底偏上的中心
+function drawCloud(c, v, x, y, w){
+  const sp = S.sprites[v % S.sprites.length], h = w * sp.height / sp.width;
+  c.drawImage(sp, x - w / 2, y - h * .6, w, h);
 }
 
 // ───────── 地形建置（靜態，預先畫到離屏） ─────────
@@ -367,8 +376,8 @@ function drawRipples(c, t){
 }
 function drawPuffs(c, t){
   for (const p of S.puffs){
-    const k = 1 + .05 * Math.sin(t * .7 + p.ph), w = p.w * k, h = w * .55, x = p.x + Math.cos(t * .25 + p.ph) * 4, y = p.y + Math.sin(t * .5 + p.ph) * 2.2;
-    c.globalAlpha = p.a; c.drawImage(S.sprites[p.v], x - w / 2, y - h * .6, w, h);
+    const k = 1 + .05 * Math.sin(t * .7 + p.ph), w = p.w * k, x = p.x + Math.cos(t * .25 + p.ph) * 4, y = p.y + Math.sin(t * .5 + p.ph) * 2.2;
+    c.globalAlpha = p.a; drawCloud(c, p.v, x, y, w);
   }
   c.globalAlpha = 1;
 }
@@ -382,12 +391,12 @@ function drawFoam(c, t){
 function drawDrift(c, t){
   for (const d of S.drift){
     const x = ((d.x + t * d.sp) % 700) - 80;
-    c.globalAlpha = .9; const w = d.w, h = w * .55; // 雲影先畫在斜下方（光自右上）
+    c.globalAlpha = .9; const w = d.w;  // 雲影先畫在斜下方（光自右上）
     c.drawImage(S.shadowSp, x - w * .55 - 18, d.y + 14, w * 1.1, w * .5);
   }
   for (const d of S.drift){
-    const x = ((d.x + t * d.sp) % 700) - 80, w = d.w, h = w * .55;
-    c.globalAlpha = .8; c.drawImage(S.sprites[d.v], x - w / 2, d.y - 44 - h * .6, w, h);
+    const x = ((d.x + t * d.sp) % 700) - 80;
+    c.globalAlpha = .8; drawCloud(c, d.v, x, d.y - 44, d.w);
   }
   c.globalAlpha = 1;
 }
@@ -417,6 +426,29 @@ function drawShiba(c, x, y, t){
   c.fillStyle = INK; c.beginPath(); c.arc(x + 4.4, y - 6.9 - b, .5, 0, TAU); c.arc(x + 6.4, y - 5.8 - b, .5, 0, TAU); c.fill();
   c.beginPath(); c.moveTo(x - 2, y - 1 - b); c.lineTo(x - 2, y); c.moveTo(x + 2, y - 1 - b); c.lineTo(x + 2, y); c.stroke();
 }
+// 目前挑戰的山旁邊：登山客和帶著的寵物（有美術圖就用背影走路圖，沒有就用程式畫的）
+const MAP_HIKER_H = 22, MAP_PET_H = 10;   // 地圖上登山客、寵物的高度（地圖單位）
+const MAP_WALK_FPS = 4;                   // 走路圖每秒換幾格（慢慢走）
+let contactSp = null;
+function contactShadow(c, x, y, w){       // 腳底接觸影子：柔邊深色橢圓
+  if (!contactSp){ contactSp = mk(64, 32); const g = contactSp.getContext('2d'); g.scale(1, .5);
+    const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(25,35,20,.45)'); gr.addColorStop(.55, 'rgba(25,35,20,.24)'); gr.addColorStop(1, 'rgba(25,35,20,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }
+  c.drawImage(contactSp, x - w / 2, y - w / 4, w, w / 2);
+}
+function petWalkArt(pet){
+  const A = SX.art; if (!A || !pet) return null;
+  return A.get('pet_' + pet + '_walk') ? 'pet_' + pet + '_walk' : pet === 'shiba' && A.get('shiba_walk') ? 'shiba_walk' : null;
+}
+function drawWalkers(c, t){
+  const A = SX.art, fr = Math.floor(t * MAP_WALK_FPS), pet = S.data.pet, hx = 8, px = 18, y = 1;
+  if (A && A.get('hiker_walk')){ contactShadow(c, hx, y, MAP_HIKER_H * .55); A.drawFrame(c, 'hiker_walk', fr, hx, y, MAP_HIKER_H); }
+  else drawHiker(c, hx, y, t);
+  if (!pet) return;
+  const pa = petWalkArt(pet);
+  if (pa){ contactShadow(c, px, y, MAP_PET_H * 1.1); A.drawFrame(c, pa, fr, px, y, MAP_PET_H); }
+  else drawShiba(c, px, y, t);
+}
 function drawCrown(c, x, y){
   c.save(); c.lineWidth = .9; c.strokeStyle = INK; c.lineJoin = 'round';
   c.fillStyle = '#f6c945'; c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x - 7, y - 8); c.lineTo(x - 3, y - 4.5); c.lineTo(x, y - 9.5); c.lineTo(x + 3, y - 4.5); c.lineTo(x + 7, y - 8); c.lineTo(x + 6, y); c.closePath(); c.fill(); c.stroke();
@@ -430,9 +462,38 @@ function drawLock(c, x, y){
   c.lineWidth = .9; c.strokeStyle = INK; c.beginPath(); c.arc(x, y - 1.6, 2.2, Math.PI, TAU); c.stroke();
   c.fillStyle = '#d9a566'; irr(c, x - 3, y - 1.6, 6, 5, 1.2, 77); c.fill(); c.stroke();
 }
+// 路標美術圖 map_pin（裁掉透明邊後量的比例，換圖要重量）
+const PIN_ART = 'map_pin';
+const PIN_ART_H = 52;        // 整支路標在地圖上的高度（地圖單位）
+const PIN_FOOT = .513;       // 木樁底部中心的 x
+const PIN_BOARD = { cy:.407, h:.262, pad:.08, tilt:-.144 };   // 木牌：中心 y、高、兩端圓角留白（佔寬）、傾斜（弧度）
+const PIN_SLICE = { top:.226, xs:[.136, .401, .605, .867] };   // 木牌以下切五段，第 2、4 段只有木牌，名字長就拉寬這兩段
+const PIN_SEAM = .4;         // 拉寬的段多畫一點點蓋住接縫
+// 路標各部位位置（本地座標：山頂＝原點、未含偏移）；畫圖、排位置、點擊都用這一份
+function pinGeom(c, m){
+  const need = tw(c, m.name) + 17, e = SX.art && SX.art.get(PIN_ART);
+  if (!e) return { art:null, need, cx:0, py:-24, ph:14, bw:need, tilt:0, x0:-need / 2 - 2, x1:need / 2 + 12, y0:-47, y1:-15 };
+  const f = e.frames[0], k = PIN_ART_H / f.h, inner = f.w * k * (1 - 2 * PIN_BOARD.pad), extra = Math.max(0, need - inner);
+  const left = -PIN_FOOT * f.w * k - extra / 2, bw = f.w * k + extra, py = -(1 - PIN_BOARD.cy) * PIN_ART_H, ph = PIN_BOARD.h * PIN_ART_H;
+  return { art:e, f, k, extra, left, need, cx:(.5 - PIN_FOOT) * f.w * k, py, ph, bw, tilt:Math.atan(Math.tan(PIN_BOARD.tilt) * f.w * k / bw),
+    x0:left, x1:left + bw + 4, y0:-PIN_ART_H, y1:py + ph / 2 + 2 };
+}
+// 畫路標美術圖：腳底在原點；木牌那幾列切段，名字長時只拉寬純木牌的部分（木樁、小旗不變形）
+function drawPinArt(c, g){
+  const f = g.f, k = g.k, img = g.art.img, ty = PIN_SLICE.top * f.h, x0 = -PIN_FOOT * f.w * k;
+  c.drawImage(img, f.x, f.y, f.w, ty, x0, -PIN_ART_H, f.w * k, ty * k);
+  const xs = [0].concat(PIN_SLICE.xs.map(v => v * f.w), [f.w]);
+  let dx = g.left;
+  for (let i = 0; i < 5; i++){
+    const sw = xs[i + 1] - xs[i], stretch = i === 1 || i === 3, dw = sw * k + (stretch ? g.extra / 2 : 0);
+    c.drawImage(img, f.x + xs[i], f.y + ty, sw, f.h - ty, dx, -PIN_ART_H + ty * k, dw + (stretch ? PIN_SEAM : 0), (f.h - ty) * k);
+    dx += dw;
+  }
+}
 // 木牌外框（本地座標，未含偏移），用來避免名字互相重疊
-function pinBox(c, m){ const w = tw(c, m.name) + 17; return { w, x0:-w / 2 - 2, x1:w / 2 + 12, y0:-24 - 7 - 16, y1:-24 + 7 + 2 }; }
-const PIN_OFFS = [[0,0],[1,-4],[-1,-4],[1.9,-4],[-1.9,-4],[0,-20],[1,-24],[-1,-24],[1.9,-24],[-1.9,-24],[0,-40],[1,-44],[-1,-44]];
+function pinBox(c, m){ const g = pinGeom(c, m); return { w:g.bw, x0:g.x0, x1:g.x1, y0:g.y0, y1:g.y1 }; }
+// 讓位的候選位置：[x 偏幾個半寬, y 偏幾個木牌框高]
+const PIN_OFFS = [[0,0],[1,-.125],[-1,-.125],[1.9,-.125],[-1.9,-.125],[0,-.625],[1,-.75],[-1,-.75],[1.9,-.75],[-1.9,-.75],[0,-1.25],[1,-1.375],[-1,-1.375]];
 function layoutPins(c, order, ps){
   const placed = [], out = {};
   // 目前挑戰的山、選中的山先放，維持在原位
@@ -441,7 +502,7 @@ function layoutPins(c, order, ps){
   for (const o of list){
     const s = ps * (S.anim[o.m.id] || 1), b = pinBox(c, o.m); let best = null;
     for (const f of PIN_OFFS){
-      const ox = f[0] * (b.w / 2 + 8), oy = f[1];
+      const ox = f[0] * (b.w / 2 + 8), oy = f[1] * (b.y1 - b.y0);
       const r = { x0:o.q.x + (b.x0 + ox) * s, x1:o.q.x + (b.x1 + ox) * s, y0:o.q.y + (b.y0 + oy) * s, y1:o.q.y + (b.y1 + oy) * s };
       if (!placed.some(p => r.x0 < p.x1 + 2 && r.x1 > p.x0 - 2 && r.y0 < p.y1 + 2 && r.y1 > p.y0 - 2)){ best = { ox, oy, r }; break; }
     }
@@ -455,19 +516,29 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   const a = S.anim[id] || (S.anim[id] = 1), want = (S.hover === id || S.sel === id) ? 1.14 : 1; S.anim[id] = a + (want - a) * .2;
   ps *= S.anim[id];
   c.save(); c.translate(x, y); c.scale(ps, ps);
-  const name = m.name, w = tw(c, name) + 17, ph = 14, py = -24;
+  const name = m.name, G = pinGeom(c, m), w = G.bw, ph = G.ph, py = G.py;
   if (cur){ const r = 28 + Math.sin(t * 2.2) * 5, g = c.createRadialGradient(0, -6, 2, 0, -6, r);
     g.addColorStop(0, 'rgba(255,226,130,.75)'); g.addColorStop(.6, 'rgba(255,214,110,.3)'); g.addColorStop(1, 'rgba(255,214,110,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, -6, r, 0, TAU); c.fill(); }
   c.fillStyle = 'rgba(40,25,10,.22)'; c.beginPath(); c.ellipse(0, 0, 12, 4.4, 0, 0, TAU); c.fill();
   c.fillStyle = 'rgba(40,25,10,.38)'; c.beginPath(); c.ellipse(0, 0, 7, 2.6, 0, 0, TAU); c.fill();
-  if (cur){ drawHiker(c, 8, 1, t); drawShiba(c, 18, 1, t); }
+  if (cur) drawWalkers(c, t);
   if (locked) c.globalAlpha = .72;
   if (done) drawCairn(c, -9, 0);
-  // 木樁（偏移時變成一根斜斜的引線木樁，從山頂連到木牌）
-  c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(ox, oy + py + ph / 2);
-  c.strokeStyle = INK; c.lineWidth = 4.6; c.stroke(); c.strokeStyle = '#9a6a3f'; c.lineWidth = 2.6; c.stroke();
+  // 木樁（偏移時變成一根斜斜的引線木樁，從山頂連到木牌；美術圖自己有木樁，只在偏移時接到圖的樁底）
+  if (!G.art || ox || oy){ c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(ox, oy + (G.art ? 0 : py + ph / 2));
+    c.strokeStyle = INK; c.lineWidth = 4.6; c.stroke(); c.strokeStyle = '#9a6a3f'; c.lineWidth = 2.6; c.stroke(); }
   c.translate(ox, oy);
   c.lineWidth = 1; c.strokeStyle = INK; c.lineJoin = 'round';
+  if (G.art){
+    if (locked) c.filter = 'grayscale(.7)';   // 還沒解鎖：旗子、木牌褪色
+    drawPinArt(c, G); c.filter = 'none';
+    c.save(); c.translate(G.cx, py); c.rotate(G.tilt);
+    c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-G.need / 2 + 8.4, 0, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke();
+    c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, .6);
+    c.restore();
+    if (done) drawCrown(c, G.cx - w / 4, py - ph / 2 + 2);
+    if (locked) drawLock(c, G.cx + w / 2 - 4, py + ph / 2 - 1);
+  } else {
   // 旗桿與小旗
   const fx = w / 2 - 5, wave = Math.sin(t * 3 + idx) * 1.6;
   c.beginPath(); c.moveTo(fx, py - 1); c.lineTo(fx, py - 15); c.stroke();
@@ -482,18 +553,20 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, py + .6);
   if (done) drawCrown(c, 0, py - ph / 2 + .6);
   if (locked) drawLock(c, w / 2 - 1, py + ph / 2 + 1);
-  const ph2 = D.photos[id]; if (ph2 > 0){ c.fillStyle = '#4f9fd6'; c.beginPath(); c.arc(w / 2 - 1, py - ph / 2, 4.2, 0, TAU); c.fill(); c.lineWidth = .7; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#fff'; c.font = `bold 6px ${FONT}`; c.fillText(ph2 > 99 ? '99+' : ph2, w / 2 - 1, py - ph / 2 + .3); }
+  }
+  const bx = G.cx + w / 2 - 1, byT = py - ph / 2 + Math.tan(G.tilt) * w / 2;   // 照片數徽章：木牌右上角
+  const ph2 = D.photos[id]; if (ph2 > 0){ c.fillStyle = '#4f9fd6'; c.beginPath(); c.arc(bx, byT, 4.2, 0, TAU); c.fill(); c.lineWidth = .7; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#fff'; c.font = `bold 6px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ph2 > 99 ? '99+' : ph2, bx, byT + .3); }
   const pg = D.prog[id]; if (pg && pg.dist > 0 && !done && m.dist){ const f = clamp(pg.dist / m.dist, 0, 1);
     c.fillStyle = '#fbf0d5'; irr(c, -11, 4, 22, 3.6, 1.6, 55); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#8fcf6e'; c.fillRect(-10, 5, 20 * f, 1.6); }
   c.globalAlpha = 1;
   c.translate(-ox, -oy);
   if (locked){ // 手繪霧：半透明雲團覆蓋
     [[-15, -6, 58], [14, -8, 60], [0, -22, 64], [-4, 2, 56], [20, -20, 46]].forEach((f, i) => {
-      const dx = Math.sin(t * .5 + i * 1.7) * 3, ww = f[2], hh = ww * .55; c.globalAlpha = .86; c.drawImage(S.sprites[i % 3], f[0] + dx - ww / 2, f[1] - hh * .6, ww, hh); });
+      const dx = Math.sin(t * .5 + i * 1.7) * 3; c.globalAlpha = .86; drawCloud(c, i, f[0] + dx, f[1], f[2]); });
     c.globalAlpha = 1;
   }
   c.restore();
-  S.hits.push({ id, x0:x + Math.min(-12, ox - w / 2 - 6) * ps, x1:x + Math.max(cur ? 26 : 12, ox + w / 2 + 10) * ps, y0:y + (oy - 42) * ps, y1:y + 8 * ps, y });
+  S.hits.push({ id, x0:x + Math.min(-12, ox + G.x0 - 4) * ps, x1:x + Math.max(cur ? 26 : 12, ox + G.x1) * ps, y0:y + (oy + G.y0) * ps, y1:y + 8 * ps, y });
 }
 function drawPaths(c, t, ps){
   const D = S.data;
@@ -651,8 +724,12 @@ function bindInput(cv){
   cv.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-// 美術圖晚一點才載完：換成立體地圖，重新算山的位置與相機範圍
-if (SX.art) SX.art.onLoad(() => { if (!artMap() || (S.T && S.T.art)) return; S.dirty = true; ensure(); if (S.vw){ S.base = Math.max(S.vw / (S.bx.x1 - S.bx.x0), S.vh / (S.bx.y1 - S.bx.y0)); reset(true); } });
+// 美術圖晚一點才載完：雲朵換成美術圖；換成立體地圖，重新算山的位置與相機範圍（路標每格都會重看有沒有圖）
+if (SX.art) SX.art.onLoad(() => {
+  if (S.sprites) makeSprites();
+  if (!artMap() || (S.T && S.T.art)) return;
+  S.dirty = true; ensure(); if (S.vw){ S.base = Math.max(S.vw / (S.bx.x1 - S.bx.x0), S.vh / (S.bx.y1 - S.bx.y0)); reset(true); }
+});
 
 // ───────── 公開 API ─────────
 SX.worldmap = {
@@ -670,7 +747,7 @@ SX.worldmap = {
     const o = S.data, n = d || {};
     if (n.mountains && n.mountains !== o.mountains || n.coast && n.coast !== o.coast || n.ridge && n.ridge !== o.ridge) S.dirty = true;
     S.data = { mountains:n.mountains || o.mountains, coast:n.coast || o.coast, ridge:n.ridge || o.ridge,
-      done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {} };
+      done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {}, pet:n.pet || null };
     S.tw = {}; ensure();
   },
   onSelect(fn){ S.cb = fn; },

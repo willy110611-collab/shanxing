@@ -12,14 +12,21 @@ const SPEED = 0.2;           // 每秒走多少廣場寬
 const SAY_MS = 5000;         // 頭上冒字停留多久
 const PLAZA_ART_TOP = 0.47;   // plaza_bg 美術圖：石板地上緣（山門腳下）在畫面高度的比例；換圖要重量
 // 打招呼動作：k 是連線用的代號，ms 是動作長度（坐下會一直坐到下次走動）
+// 圖示美術圖是 'emo_' + k；pose 是做動作時換上的背影美術圖，poseCm 是那張圖整張要畫多高（公分，圖裡舉高的手也算進去，人才跟走路時一樣高）
 P.EMO = [
-  { k:'wave',  label:'揮手', icon:'👋', ms:2200 },
-  { k:'bow',   label:'鞠躬', icon:'🙇', ms:1600 },
+  { k:'wave',  label:'揮手', icon:'👋', ms:2200, pose:'hiker_wave',  poseCm:181 },
+  { k:'bow',   label:'鞠躬', icon:'🙇', ms:1600, pose:'hiker_bow',   poseCm:176 },
   { k:'jump',  label:'跳一下', icon:'✨', ms:1100 },
   { k:'sit',   label:'坐下', icon:'☕', ms:0 },
-  { k:'cheer', label:'歡呼', icon:'🎉', ms:2200 },
+  { k:'cheer', label:'歡呼', icon:'🎉', ms:2200, pose:'hiker_cheer', poseCm:186 },
 ];
 const EMO = {}; P.EMO.forEach(e => EMO[e.k] = e);
+P.emoArt = k => 'emo_' + k;     // 動作圖示的美術圖名字（選單按鈕也用這個）
+const ICON_PX = 24;             // 名牌旁動作圖示的大小
+const icons = {};               // 動作圖示：裁好的美術圖（第一次用到才裁）
+function emoIcon(k){ if (!icons[k] && SX.art) { const c = SX.art.crop(P.emoArt(k), 0); if (c) icons[k] = c; } return icons[k] || null; }
+// 別人的衣服色調：跟步道上的隊友一樣，美術圖用色相旋轉（SX.scene.drawPerson 同一套）
+const tintFilter = tint => 'hue-rotate(' + (150 + tint % 3 * 60) + 'deg)';
 
 let host = null, cv = null, ctx = null, W = 0, H = 0, DPR = 1, BG = null, raf = 0, last = 0, ro = null;
 let me = null, opt = {}, ppl = new Map(), taps = [];
@@ -186,20 +193,39 @@ function loop(now){
     let hop = 0, sq = 1, sway = 0;
     const e = p.emo, et = e ? now - p.emoT : 0;
     if (e && e.ms && et > e.ms) p.emo = null;
-    else if (e) {
+    const pose = p.emo && p.emo.pose && SX.art && SX.art.get(p.emo.pose) ? p.emo : null;   // 有動作美術圖就換上，沒有才用程式動作
+    if (p.emo && !pose) {
       const q = et / (e.ms || 1);
       if (e.k === 'jump') hop = Math.abs(Math.sin(q * Math.PI * 2)) * 26;
       else if (e.k === 'cheer') hop = Math.abs(Math.sin(q * Math.PI * 3)) * 16;
       else if (e.k === 'bow') sq = 1 - Math.sin(Math.min(1, q * 1.3) * Math.PI) * 0.16;
       else if (e.k === 'wave') sway = Math.sin(et / 120) * 0.08;
     }
-    ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
-    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip }, t) : 182;
-    ctx.restore();
+    let headCm;
+    if (pose) headCm = drawPose(p, pose, s);
+    else {
+      ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
+      headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip }, t) : 182;
+      ctx.restore();
+    }
     labels.push({ p, x:s.sx, y:s.sy - (headCm * sq + hop) * s.u - 6 });
   }
   // 名牌、動作圖示、對話框畫在最上層，不會被別人擋住
   for (const L of labels) drawLabel(L.p, L.x, L.y, now);
+}
+// 做動作的背影美術圖：腳底影子＋整張動作圖（別人換衣服色調）；回傳頭頂高度（公分）
+let POSE_SHADOW = null;
+function drawPose(p, e, s){
+  if (!POSE_SHADOW) {
+    POSE_SHADOW = mk(64, 32); const g = POSE_SHADOW.getContext('2d'); g.scale(1, 0.5);
+    const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(25,35,20,0.45)'); gr.addColorStop(0.55, 'rgba(25,35,20,0.24)'); gr.addColorStop(1, 'rgba(25,35,20,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  }
+  ctx.drawImage(POSE_SHADOW, s.sx - 48 * s.u, s.sy - 17 * s.u, 86 * s.u, 34 * s.u);
+  if (p.tint >= 0) ctx.filter = tintFilter(p.tint);
+  SX.art.drawFrame(ctx, e.pose, 0, s.sx, s.sy, e.poseCm * s.u, p.flip);
+  ctx.filter = 'none';
+  return e.poseCm;
 }
 function rr(x, y, w, h, r){ ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
 function drawLabel(p, x, y, now){
@@ -212,7 +238,11 @@ function drawLabel(p, x, y, now){
   let top = y - 12;
   if (p.emo && p.emo.icon) {
     const q = p.emo.ms ? (now - p.emoT) / p.emo.ms : 0, a = p.emo.ms ? Math.min(1, (1 - q) * 4) : 1;
-    ctx.globalAlpha = a; ctx.font = `20px ${FONT}`; ctx.fillText(p.emo.icon, x + nw / 2 + 8, y - 12 - Math.sin(now / 200) * 2); ctx.globalAlpha = 1;
+    const ix = x + nw / 2 + 8, iy = y - 12 - Math.sin(now / 200) * 2, ic = emoIcon(p.emo.k);
+    ctx.globalAlpha = a;
+    if (ic) { const k = ICON_PX / Math.max(ic.width, ic.height); ctx.drawImage(ic, ix - ic.width * k / 2, iy - ic.height * k / 2, ic.width * k, ic.height * k); }
+    else { ctx.font = `20px ${FONT}`; ctx.fillText(p.emo.icon, ix, iy); }
+    ctx.globalAlpha = 1;
   }
   // 說的話：冒在頭上 5 秒，最後半秒淡出
   const age = now - p.sayT;

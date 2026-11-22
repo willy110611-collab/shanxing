@@ -131,7 +131,7 @@
     body.innerHTML = `<div class="plzChat${logOpen ? ' open' : ''}" id="plzChat"><div class="plzLog" id="chatList"></div>
         <form class="chatIn" id="chatForm"><input id="chatTxt" maxlength="${sayMax}" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="cbtn go sm">送出</button></form></div>
       <button class="plzEmoBtn" id="emoBtn" aria-label="打招呼">👋</button>
-      <div class="plzEmoMenu" id="emoMenu">${PZ().EMO.map(e => `<button class="cbtn sm" data-emo="${e.k}"><span>${e.icon}</span>${e.label}</button>`).join('')}</div>`;
+      <div class="plzEmoMenu" id="emoMenu">${PZ().EMO.map(e => `<button class="cbtn sm" data-emo="${e.k}"><span>${SX.art ? SX.art.img(PZ().emoArt(e.k), e.icon) : e.icon}</span>${e.label}</button>`).join('')}</div>`;
     PZ().mount(body, {
       onMove: (x, y) => { if (lobby) lobby.send({ type: 'move', x, y }); $('#emoMenu').classList.remove('on'); },
       onTapPerson: personCard,
