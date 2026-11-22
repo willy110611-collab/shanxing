@@ -423,6 +423,10 @@
     const u = id => SX.art.url(id), css = [];
     const icons = { icon_map:'.i-map', icon_bag:'.i-bag', icon_album:'.i-photo', icon_settings:'.i-gear', icon_rest:'.i-tent' };
     for (const id in icons) if (u(id)) css.push(`${icons[id]}{background-image:url("${u(id)}")!important;filter:none!important}`);
+    // 休息選單：拍照、上傳照片的按鈕上方加小圖示
+    for (const [sel, id] of [['#rsPhoto', 'icon_camera'], ['#rsUp', 'icon_upload'], ['#rsStone', 'cairn']]) if (u(id)) css.push(`${sel}::before{content:"";width:30px;height:30px;background:url("${u(id)}") center/contain no-repeat}`);
+    // 完成的隱藏任務：打勾換成任務徽章
+    if (u('badge_quest')) css.push(`.quest li.done::before{width:30px;height:30px;border:0;border-radius:0;background:url("${u('badge_quest')}") center/contain no-repeat!important}`);
     for (const k of ['common', 'rare', 'legend']) if (u('rarity_' + k)) css.push(`.bag .slot.rar-${k}{background:url("${u('rarity_' + k)}") center/100% 100% no-repeat!important;border-color:transparent!important;box-shadow:none!important}`);
     if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
     if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }

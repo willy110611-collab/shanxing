@@ -18,7 +18,7 @@ const TWL = 720;        // 背景圖塊邏輯寬度
 const FONT = "'Huninn','PingFang TC','Microsoft JhengHei',sans-serif";
 const LW = 0.032;       // 道具墨線粗細（公尺）
 const HIT = { note:1, btree:1, cairn:1, bench:1, view:1, treasure:1 };
-const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW+1.0, mycairn:RW+0.35 };
+const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW+1.0, mycairn:RW+0.35, rail:RW+0.45, fall:RW+3.2 };
 const DEFWX = { kind:'sunny', time:'day' };
 
 let cv = null, ctx = null, W = 375, H = 812, DPR = 1, F = 450, HOR = 276, CAMH = 5, U = 1;
@@ -116,7 +116,8 @@ function mkTex(id, m){
   const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, m:m } : null;
 }
 function buildTex(){
-  TEX = { road:mkTex(TRAIL_TEX[TH.trail || 'dirt'], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2) };
+  TEX = { road:mkTex(TRAIL_TEX[TH.trail || 'dirt'], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2),
+    steps:TH.trail === 'stairs' ? null : mkTex('ground_steps', RW * 2) };   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
 }
 // 把貼圖對準這一段路：左緣 xl、近端 y1、遠端 y2、這段的世界位置 z0
 function texFill(T, xl, s1, y1, y2, z0, a){
@@ -273,7 +274,19 @@ function pTreasure(g){
 }
 function mkTab(list){ let sum = 0; for (let i = 0; i < list.length; i++) sum += list[i][1]; let acc = 0; return list.map(function(e){ acc += e[1] / sum; return { p:acc, arr:e[0] }; }); }
 function pick(tab, r){ for (let i = 0; i < tab.length; i++) if (r < tab[i].p) return tab[i].arr; return tab[tab.length - 1].arr; }
-function getSign(txt){ return signSpr[txt] || (signSpr[txt] = sprite(1.4, 1.5, 80, function(g){ pSign(g, txt); })); }
+function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) || sprite(1.4, 1.5, 80, function(g){ pSign(g, txt); })); }
+// 美術圖路標（sign_wood）：上面那塊箭頭木板寫字。木板位置是照這張圖量的（裁掉透明邊後的比例）
+const SIGN_BOARD = { x:0.54, y:0.175, w:0.62, h:0.075, rot:-0.07 };
+function artSignSpr(txt){
+  const c0 = ART.crop('sign_wood'); if (!c0) return null;
+  const c = mk(c0.width, c0.height), g = c.getContext('2d'), B = SIGN_BOARD; g.drawImage(c0, 0, 0);
+  g.save(); g.translate(c.width * B.x, c.height * B.y); g.rotate(B.rot);
+  let fs = c.height * B.h; g.font = '700 ' + fs + 'px ' + FONT; const tw = g.measureText(txt).width; if (tw > c.width * B.w) { fs *= c.width * B.w / tw; g.font = '700 ' + fs + 'px ' + FONT; }
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(58,36,22,.88)'; g.fillText(txt, 0, 0); g.restore();
+  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
+  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
+  return { c:c, h:h, w:1.7 * c.width / c.height, hm:1.7, ax:0.5 };
+}
 function buildSprites(){
   const r = mkrng(seed ^ 0x7f4a7c15), th = TH, a = [];
   SPR = {}; signSpr = {};
@@ -297,6 +310,8 @@ function buildSprites(){
   SPR.mycairn = artOr('cairn', 0.45, [sprite(0.6, 0.45, 80, function(g){ pCairn(g, false); })]);
   SPR.bench = artOr('bench', 0.9, [sprite(1.9, 0.9, 80, pBench)]);
   SPR.view = artOr('deck_view', 1.75, [sprite(3.7, 1.75, 70, pView)]);
+  SPR.rail = artOr('railing', 1.0, []);        // 只有美術圖：路旁的木欄杆
+  SPR.fall = artOr('waterfall', 4.2, []);      // 只有美術圖：路旁小瀑布
   SPR.treasure = [sprite(0.7, 0.55, 80, pTreasure)];
   SPR.summit = [sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
@@ -363,6 +378,9 @@ function buildProps(){
   for (m = 420 + r() * 250; m < lim; m += 700 + r() * 300) put('view', m, r() < 0.5 ? -1 : 1);
   for (m = 260 + r() * 400; m < lim; m += 600 + r() * 600) put('treasure', m, r() < 0.5 ? -1 : 1);
   for (m = 500; m < lim; m += 500) { o = put('sign', m, 1); if (o) { const left = total - m; o.text = left >= 1000 ? '山頂 ' + (left / 1000).toFixed(1) + 'K' : '山頂 ' + Math.round(left / 10) * 10 + 'm'; } }
+  // 只有美術圖才有的景物，放在最後（不影響上面固定道具的位置）：欄杆（木棧道、石階）、小瀑布（中低海拔）
+  if (ART.get('railing') && (TH.trail === 'wood' || TH.trail === 'stairs')) for (m = 70 + r() * 60; m < lim; m += 120 + r() * 90) put('rail', m, r() < 0.5 ? -1 : 1);
+  if (ART.get('waterfall') && !TH.alpine) for (m = 600 + r() * 400; m < lim; m += 900 + r() * 600) put('fall', m, r() < 0.5 ? -1 : 1);
   props.push({ type:'summit', m:total + 3, side:1, text:'' });
   mergeProps();
 }
@@ -649,12 +667,14 @@ S.setMountain = function(m){
   tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers();
 };
 // 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
-ART.onLoad(function(){ if (M && TH) buildSprites(); });
+ART.onLoad(function(){ if (M && TH) { buildProps(); buildSprites(); } });
 S.props = function(fromM, toM){
   const out = [];
   for (let i = 0; i < AP.length; i++) { const o = AP[i]; if (o.m >= fromM && o.m <= toM && HIT[o.type]) out.push({ type:o.type, m:o.m, side:o.side }); }
   return out;
 };
+S.allProps = function(){ return AP.map(function(o){ return { type:o.type, m:o.m, side:o.side, text:o.text }; }); };   // 測試用：目前這座山所有路旁道具
+S.stepAt = function(){ const out = []; for (let i = 0; i < N; i++) if (stepF[i] && !stepF[i - 1]) out.push(i * SEG); return out; };   // 測試用：階梯段起點（公尺）
 S.addCairn = function(m, side){ cairns.push({ type:'mycairn', m:Math.max(0, +m || 0), side:side < 0 ? -1 : 1, text:'' }); mergeProps(); };
 S.setCairns = function(list){
   cairns = [];
@@ -1026,7 +1046,8 @@ function drawWorld(b, t){
         ctx.fillStyle = LUT[(15 + (lvL ? 1 : 0)) * FOGN + fi]; ctx.fillRect(x2 - w2 * 1.04, y2, w2 * 2.08, yt - y2 + 0.7);
         ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, yt, x2 - e2, yt);
         ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt);
-        if (RT && ta > 0.03) { texFill(RT, x1 - w1, s1, yb, yt, z0, ta); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt); ctx.globalAlpha = fade; }
+        const ST = snowAmt > 0.5 ? RT : (TEX.steps || RT);   // 階梯段：有木頭階梯貼圖就用（雪天照舊用雪地）
+        if (ST && ta > 0.03) { texFill(ST, x1 - w1, s1, yb, yt, z0, ta); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt); ctx.globalAlpha = fade; }
         if (j < 44) {
           ctx.globalAlpha = 1 - j / 46; ctx.strokeStyle = INK; ctx.lineWidth = clamp(s2 * 0.022, 0.5, 2.2);
           ctx.beginPath(); ctx.moveTo(x2 - w2 * 1.04, y2); ctx.lineTo(x2 + w2 * 1.04, y2); ctx.moveTo(x2 - w2 * 1.04, yt); ctx.lineTo(x2 + w2 * 1.04, yt); ctx.stroke(); ctx.globalAlpha = fade;
@@ -1041,7 +1062,7 @@ function drawWorld(b, t){
         }
       }
       if (j < 34) {
-        if (isWood) {                                  // 木棧道的木板縫
+        if (isWood && !(stp && TEX.steps)) {          // 木棧道的木板縫（陡的那段換成木頭階梯貼圖時不畫）
           ctx.strokeStyle = LUT[13 * FOGN + fi]; ctx.lineWidth = clamp(s1 * 0.018, 0.5, 1.8); ctx.beginPath();
           for (k = 1; k <= 3; k++) { proj(j, k / 4, stp); ctx.moveTo(gx - RW * gs, gy); ctx.lineTo(gx + RW * gs, gy); }
           ctx.stroke();
