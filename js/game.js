@@ -40,7 +40,10 @@
       ['prog','done','stamps','bag','bagLog','quests','cairns','badges','encSeen'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
       if (!SV.stats.magpie || typeof SV.stats.magpie !== 'object') SV.stats.magpie = {};
       if (!SV.pets.includes('shiba')) SV.pets.unshift('shiba');
-      if (SV.cur && !SX.M[SV.cur]) SV.cur = null;    }
+      if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
+      // 山的全程改短過（玉山、雪山 11000 → 10900 公尺）：還沒登頂的進度停在山頂前一公尺，不能等於全程（出發時會被當成走完、從頭開始）
+      for (const id in SV.prog) { const p = SV.prog[id], m = SX.M[id]; if (m && p && !p.fin && p.dist >= m.dist) p.dist = m.dist - 1; }
+    }
   } catch(e){ SV = blank(); }
   // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
   if (!SV.born) { const ds = [...Object.values(SV.stamps), ...Object.values(SV.bagLog).map(x => x && x.first), ...Object.values(SV.encSeen).map(x => x && x.first), ...SV.photos.map(p => p.date)].filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d)); SV.born = ds.length ? new Date(Math.min(...ds)).toLocaleDateString('zh-TW') : today(); }
@@ -207,11 +210,14 @@
   const leadOf = m => (m.group && SX.M[SX.GROUP[m.group].lead]) || m;
   const diffOpen = m => { const L = leadOf(m); return L.diff <= 2 || SX.MOUNTAINS.some(x => SV.done[x.id] && x.diff >= L.diff - 1); };
   const gradeRank = id => SX.GRADE_ORDER.indexOf(SX.gradeOf(id));   // 不是百岳 → -1
-  const gradeNeed = m => { const g = SX.gradeOf(m.id); return g ? SX.GRADES[g].need : null; };
+  const gradeNeed = m => SX.gradeNeed(m.id);   // 遊戲裡還沒有官方要求那一級的山時，data.js 會往下找一級
   const gradeOpen = m => { const n = gradeNeed(m); return !n || SX.MOUNTAINS.some(x => SV.done[x.id] && gradeRank(x.id) >= SX.GRADE_ORDER.indexOf(n)); };
   const unlocked = m => SV.unlockAll || (diffOpen(m) && gradeOpen(m));
-  const lockText = m => !diffOpen(m) ? `先登頂任何一座難度 ${leadOf(m).diff - 1} 顆星以上的山，這裡就會開放。`
-    : `這是官方分級 ${SX.gradeOf(m.id)} 級的百岳，要先登頂過任何一座 ${gradeNeed(m)} 級以上的百岳才能申請。`;
+  const lockText = m => { if (!diffOpen(m)) return `先登頂任何一座難度 ${leadOf(m).diff - 1} 顆星以上的山，這裡就會開放。`;
+    const g = SX.gradeOf(m.id), n = gradeNeed(m), off = SX.GRADES[g].need;
+    return `這是官方分級 ${g} 級的百岳，要先登頂過任何一座 ${n} 級以上的百岳才能申請。` + (off !== n ? `（真實世界要 ${off} 級以上；遊戲裡還沒有 ${off} 級的山，先用 ${n} 級）` : ''); };
+  // 雪季提醒：分級有寫 snow 的山（C+），在雪季裡卡片多一行提醒，不擋玩家
+  const snowNote = id => { const g = SX.gradeOf(id), t = g && SX.GRADES[g].snow; return t && seasonNow().some(s => s.id === 'snow' && s.mountains.includes(SX.groupOf(id))) ? t : ''; };
   // 建議挑戰順序：已開放、還沒爬過的山裡，難度最低、時間最短的那座；全都爬過就推爬最少次的。正在爬的那座不推
   function recommendNext(){
     const going = id => { const p = SV.prog[id]; return id === SV.cur && p && p.dist > 0 && !p.fin; };
@@ -288,6 +294,7 @@
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
       <div class="rc-feat"><em>終點：</em>${m.end}${m.temple ? '（可以擲筊、求籤）' : ''}</div>
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
+      ${snowNote(id) ? `<div class="rc-feat"><em>提醒：</em>${snowNote(id)}</div>` : ''}
       ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。先登頂，或下山再來。</div>
         <div class="rc-btns"><button class="cbtn sm" id="rcDown">下山（${trN}的進度歸零）</button></div>
         <div class="rc-btns"><button class="cbtn go" id="rcBackTo">回到${trN}</button></div>`
@@ -682,7 +689,7 @@
     return `<svg viewBox="0 0 60 60"><g transform="rotate(5 30 30)"><rect x="8" y="14" width="44" height="33" rx="3" fill="#fff7e2" ${o} stroke-width="2.5"/><rect x="8" y="14" width="44" height="9" fill="${col}" ${o} stroke-width="2"/><path d="M14 30h20M14 36h26M14 41h14" stroke="${INK}" stroke-width="1.5" stroke-linecap="round" opacity=".55"/><path d="M43 29l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="${col}" ${o} stroke-width="1.2"/></g></svg>`;
   }
   function rollTreasure(mid){
-    const pool = SX.TREASURES.filter(x => (x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) &&(!x.season || seasonOk(x.season, mid)));
+    const pool = SX.TREASURES.filter(x => (x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) && (!x.peaks || x.peaks.includes(mid)) &&(!x.season || seasonOk(x.season, mid)));
     let sum = 0; pool.forEach(x => { sum += RAR_W[x.rarity] || 30; });
     let r = Math.random() * sum;
     for (const x of pool) { r -= RAR_W[x.rarity] || 30; if (r <= 0) return x; }
@@ -730,7 +737,7 @@
   function pickEncounterAt(mid, f, wx, skip, date){
     const k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(SX.groupOf(mid))) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(SX.groupOf(mid))) && (!w.peaks || w.peaks.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     const wt = e => encWeight(e) * (e.wxPref && e.wxPref.includes(wx.kind) ? WXPREF_X : 1);   // wxPref：在這種天氣比較容易遇到
@@ -1478,6 +1485,7 @@
       case 'encKinds': return SX.ENCOUNTERS.filter(e => SV.encSeen[e.id]).length;
       case 'stamps': return SX.MOUNTAINS.filter(m => SV.stamps[m.id]).length;
       case 'groupPeaks': return SX.peaksOf(b.group).filter(m => SV.done[m.id]).length;   // 山群徽章：這個山群登頂過幾座
+      case 'baiyue': return SX.MOUNTAINS.filter(m => m.by && SV.done[m.id]).length;   // 完百之路：登頂過幾座不同的百岳
     }
     return 0;
   }
@@ -1545,6 +1553,7 @@
     if (ws) out.push(ws.map(x => WN[x] || x).join('或') + '時');
     if (mts) { const ms = mts.filter(id => SX.M[id]);   // 山群寫的是山群代號，名字用山群名（合歡山），不是主峰名
       out.push(ms.length > 2 && ms.every(id => SX.M[id].alt >= 2000) ? '高山上' : ms.length > 3 ? `${SX.placeName(ms[0])}等 ${ms.length} 座山` : ms.map(SX.placeName).join('、')); }
+    if (w.peaks) out.push(w.peaks.length > 2 ? `${SX.M[w.peaks[0]].name}等 ${w.peaks.length} 座山` : w.peaks.map(id => SX.M[id].name).join('、'));   // 只在山群裡某幾座山：寫山名
     if (w.minFrac >= 0.85) out.push('山頂附近'); else if (w.minFrac >= 0.5) out.push('後半段的路上'); else if (w.minFrac >= 0.3) out.push('走了一段路之後'); else if (w.maxFrac != null && w.maxFrac <= 0.3) out.push('登山口附近');
     return out.length ? out.join('・') : '哪座山都可能遇到';
   }
