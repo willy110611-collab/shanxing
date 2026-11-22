@@ -16,7 +16,7 @@ const API = ['drawImage', 'fillRect', 'strokeRect', 'beginPath', 'moveTo', 'line
   'measureText', 'fillText', 'strokeText', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha', 'globalCompositeOperation', 'font', 'textAlign', 'textBaseline',
   'gpu', 'begin', 'grade', 'flush', 'drop', 'prep', 'stats', 'lost'];
 G.API = API;
-const SLOTS = 8;                 // 一批最多同時用幾張貼圖（顯示卡一次綁 8 張，換圖不用另外送一批）
+const SLOTS = 16;                // 一批最多同時用幾張貼圖（WebGL2 保證至少能同時綁 16 張；換圖不用另外送一批）
 const CAP = 1 << 16;             // 一批最多幾個頂點（滿了先送出去）
 const STRIDE = 24;               // 每個頂點：x y u v（4 個 float）＋ 顏色 RGBA（4 byte）＋ 第幾張貼圖（1 byte，255＝純色）
 const SOLID = 255;
@@ -29,7 +29,7 @@ void main(){ vT = aT; vC = aC; vS = int(aS + 0.5); gl_Position = vec4(aP.x / uR.
 const FS = `#version 300 es
 precision highp float;
 in vec2 vT; in vec4 vC; flat in int vS;
-uniform sampler2D t0, t1, t2, t3, t4, t5, t6, t7;
+uniform sampler2D ${Array.from({ length:SLOTS }, (_, i) => 't' + i).join(', ')};
 out vec4 o;
 // 縮小版挑哪一級：跟 trail.js 的 mip() 一樣挑「縮小不到兩倍」的那一級再線性內插（最接近的一級、往清楚那邊偏半級），
 // 不在兩級之間混（那樣比 Canvas 2D 糊）
@@ -37,10 +37,11 @@ const float B = -0.5;
 void main(){
   if (vS == 255) { o = vC; return; }
   vec4 c;
-  if (vS < 4) { if (vS < 2) c = vS == 0 ? texture(t0, vT, B) : texture(t1, vT, B); else c = vS == 2 ? texture(t2, vT, B) : texture(t3, vT, B); }
-  else { if (vS < 6) c = vS == 4 ? texture(t4, vT, B) : texture(t5, vT, B); else c = vS == 6 ? texture(t6, vT, B) : texture(t7, vT, B); }
+  ${pick(0, SLOTS)}
   o = c * vC;
 }`;
+// 第幾張貼圖：對半分的 if（GLSL ES 3.0 不能用變數當貼圖陣列的索引）
+function pick(a, b){ if (b - a === 1) return 'c = texture(t' + a + ', vT, B);'; const m = (a + b) >> 1; return 'if (vS < ' + m + ') { ' + pick(a, m) + ' } else { ' + pick(m, b) + ' }'; }
 // 整體調色：一張全螢幕的三角形，讀剛畫好的畫面 → 霧的灰白 → 時間天氣的 multiply → 午後暖光 soft-light（公式照 W3C 合成規格）
 const GVS = `#version 300 es
 in vec2 aP; void main(){ gl_Position = vec4(aP, 0.0, 1.0); }`;
@@ -127,6 +128,7 @@ function compile(gl, vs, fs){
 }
 P.init = function(){
   const gl = this.gl;
+  if (gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) < SLOTS) return false;   // 同時綁不了 16 張（WebGL2 本來就保證有）：用 Canvas 2D
   try {
     this.prog = compile(gl, VS, FS); this.gprog = compile(gl, GVS, GFS);
   } catch (e) { return false; }
