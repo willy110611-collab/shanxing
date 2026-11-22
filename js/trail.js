@@ -142,15 +142,16 @@ const GAIT = {
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
   upFull:0.35, upStride:0.75, upPace:0.8,   // 上坡（不是階梯）：坡度到 35% 算最陡，最陡時步子只剩 0.75、前進速度只剩 0.8（一步一步踩上去，腳不在地上滑）
+  stairPace:0.85,                       // 爬階梯：前進速度只剩這麼多（背大背包一階一階往上，約一秒一步多一點）
   stairCad:1.35,                        // 階梯上一步踩一階：踏面很短（很陡）時步頻最多是平路的這麼多倍，再快就放慢前進（腳不會原地狂踩、在階梯上滑）
   tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
   hold:1.5,                             // 換了一種走路圖以後，至少用這麼多秒才能再換（不會一閃一閃）
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
 };
 // 走路圖的高度修正：每張圖量「帽頂到鞋底」佔整格多高（量出來都在 97～100%），用一般走路圖當基準換算，換圖時人不會忽大忽小。重畫了圖要重新量
-// 一般走路：正背面十六格圖（格子播放順序在 art.js 的 WALK16 重排，左右腳輪流）
-const WALK_DRY = 'hiker_walk16', WALK_RAIN = 'hiker_rain_walk16';
-const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_stairs16:1, hiker_rain_stairs16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
+// 一般走路：hiker_step8（右腳一步 8 格＋鏡射成左腳一步，art.js 的 STEP8），換腳有兩腳並排那一格
+const WALK_DRY = 'hiker_step8', WALK_RAIN = 'hiker_rain_step8';
+const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_step8:1, hiker_rain_step8:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_stairs16:1, hiker_rain_stairs16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
 const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
@@ -1528,7 +1529,7 @@ function updGait(s, dt, dist){
   }
   // 前進速度：做動作時停下來，累了慢慢走；長按快走照原本的速度。慢慢變，不會一下子停住
   const cad = hero.stepL ? Math.min(1, G.stairCad * hero.stepL / (STRIDE / 2)) : 1;   // 很陡的階梯（踏面短）放慢，一步還是踩一階
-  const up = 1 - (1 - G.upPace) * hero.up;   // 上坡越陡走越慢
+  const up = (1 - (1 - G.upPace) * hero.up) * (1 - (1 - G.stairPace) * hero.stair);   // 上坡越陡走越慢；爬階梯更慢
   const tg = gait.act ? 0 : (s.boost ? 1 : G.pace[lvl]) * cad * up;
   gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
   if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
@@ -1549,8 +1550,8 @@ function gaitMode(dt, dist, stam){
   if (want !== gait.mode && (gait.modeT >= G.hold || (want === 'stairs' && gait.mode === 'turn'))) { gait.mode = want; gait.modeT = 0; gait.modeF = kc < 0; }
 }
 S.pace = function(){ return gait.pace; };
-// 測試用：這座山整條路因為上坡變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
-S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const gr = sAt(i) === 1 ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1); a += 1; b += 1 / (1 - (1 - GAIT.upPace) * u); } return Math.round((b / a - 1) * 1000) / 10; };
+// 測試用：這座山整條路因為上坡和爬階梯變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
+S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const st = sAt(i) === 1 && eAt(i + 1) > eAt(i), gr = st ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1); a += 1; b += 1 / ((1 - (1 - GAIT.upPace) * u) * (st ? GAIT.stairPace : 1)); } return Math.round((b / a - 1) * 1000) / 10; };
 S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv, ph:hero.ph, stepL:hero.stepL }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
 // 現在要用哪一張走路圖、要不要鏡射（寫在 gait.sid、gait.sf；每格都會跑，不產生新的陣列、字串）
 const RAIN_OF = { hiker_stairs16:'hiker_rain_stairs16', hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
@@ -1746,7 +1747,8 @@ function stepMates(dt){ for (const mt of mates) mt.d += (mt.target - mt.d) * Mat
 function drawMate(mt, j, f, t, fade){
   const d0 = curS ? curS.dist || 0 : 0, near = Math.abs(mt.d - d0) < 1.6;
   proj(j, f, false);
-  const X = gx + (near ? 0.95 : -0.35) * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
+  const ms = Math.floor(mt.d / SEG), mf = mt.d / SEG - ms, rw = rwF(ms, mf), onSt = sAt(ms) === 1;   // 隊友腳下這段的路半寬、是不是階梯
+  const X = gx + (near ? 0.5 : -0.25) * rw * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
   if (Y - 200 * u > H || na <= 0) return;   // 整個人（含名牌）都在畫面下緣以外才不畫
   fade *= na;
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
@@ -1757,7 +1759,7 @@ function drawMate(mt, j, f, t, fade){
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
-    const drawn = heroArt(ctx, { rest:mt.rest }, t, tintFilter(hashStr(mt.name)));
+    const drawn = heroArt(ctx, { rest:mt.rest, stair:onSt }, t);   // 隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
     if (!drawn) on2D(function(c){ if (mt.rest) heroRest(c, t); else heroWalk(c, t); });
   } finally {
     ctx.restore();
@@ -1845,7 +1847,8 @@ function heroArt(c, s, t, fl, me){
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
   const fw = s.face === 'front' ? 'hiker_front_walk8' : s.face === 'side' ? 'hiker_side_walk8' : null;   // 廣場：往鏡頭走用正面、往旁邊走用側面（plaza.js 決定方向、往左時整個人鏡射），停下來面向鏡頭
   if (fw && ART.get(fw)) return ART.drawFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
-  const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;   // 下雨天穿黃色雨衣
+  const st16 = s.stair && ART.get('hiker_stairs16') ? rainy('hiker_stairs16') : null;   // 隊友走到階梯段：用爬階梯圖
+  const walk = st16 || (isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY);   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
   return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
 }
