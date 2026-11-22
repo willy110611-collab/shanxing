@@ -170,6 +170,21 @@ function onTap(e){
   if (opt.onMove) opt.onMove(tx, ty);
 }
 
+// 走路朝哪邊（換正面／背面／側面走路圖）：方向先平滑，再用門檻＋最短停留時間決定，不會在斜走時一直換來換去
+// y 變大＝往鏡頭走（正面）、變小＝往裡面走（背面）、左右為主＝側面（往左時鏡射）；停下來面向鏡頭
+const FACE = { side:1.5, keepSide:0.8, hold:0.35, smooth:6 };
+function faceTick(p, ux, uy, dt){
+  const k = Math.min(1, dt * FACE.smooth);
+  p.vx = (p.vx || 0) + (ux - (p.vx || 0)) * k; p.vy = (p.vy || 0) + (uy - (p.vy || 0)) * k;
+  p.faceT = (p.faceT || 0) + dt;
+  const ax = Math.abs(p.vx), ay = Math.abs(p.vy), cur = p.face || 'front';
+  let f = cur;
+  if (p.mv < 0.3) f = 'front';
+  else if (cur === 'side' ? ax > ay * FACE.keepSide : ax > ay * FACE.side) f = 'side';
+  else if (ay > 0.2) f = p.vy > 0 ? 'front' : 'back';
+  if (f !== cur && p.faceT >= FACE.hold) { p.face = f; p.faceT = 0; }
+}
+
 // ───────── 每格畫面 ─────────
 function loop(now){
   if (!cv) return;
@@ -180,6 +195,7 @@ function loop(now){
     const dx = (p.tx - p.x) * 1.4, dy = p.ty - p.y, dist = Math.hypot(dx, dy), step = SPEED * dt * (0.7 + 0.3 * kAt(p.y));
     if (dist > 0.004) { const k = Math.min(1, step / dist); p.x += (p.tx - p.x) * k; p.y += dy * k; p.ph += step * 26; if (Math.abs(dx) > 0.01) p.flip = dx < 0; p.mv += (1 - p.mv) * Math.min(1, dt * 8); }
     else p.mv += (0 - p.mv) * Math.min(1, dt * 8);
+    faceTick(p, dist > 0.004 ? dx / dist : 0, dist > 0.004 ? dy / dist : 0, dt);
   }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.drawImage(BG, 0, 0, W, H);
@@ -202,7 +218,7 @@ function loop(now){
     }
     // 打招呼的動作圖也交給 drawPerson 畫（寵物、影子、衣服色調都同一套）
     ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
-    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip, pose:pose ? { id:pose.pose, cm:pose.poseCm } : null }, t) : 182;
+    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip, face:p.face || 'front', pose:pose ? { id:pose.pose, cm:pose.poseCm } : null }, t) : 182;
     ctx.restore();
     labels.push({ p, x:s.sx, y:s.sy - (headCm * sq + hop) * s.u - 6 });
   }

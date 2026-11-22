@@ -1523,6 +1523,8 @@ function heroArt(c, s, t, fl, me){
   if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return ART.drawFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
   const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
+  const fw = s.face === 'front' ? 'hiker_front_walk8' : s.face === 'side' ? 'hiker_side_walk8' : null;   // 廣場：往鏡頭走用正面、往旁邊走用側面（plaza.js 決定方向、往左時整個人鏡射），停下來面向鏡頭
+  if (fw && ART.get(fw)) return ART.drawFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
   const walk = isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk');   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
   return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
@@ -1575,7 +1577,7 @@ S.drawPerson = function(c, X, Y, u, p, t){
     if (p.pet) drawPet({ pet:p.pet, rest:p.sit }, X + (p.flip ? -62 : 62) * u, Y - 4 * u, u * 0.95, t);
     c.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
     c.save(); c.translate(X, Y); c.scale(p.flip ? -u : u, u);
-    const fl = p.tint >= 0 ? tintFilter(p.tint) : undefined, s = { rest:!!p.sit };   // 美術圖版本：換衣服色調
+    const fl = p.tint >= 0 ? tintFilter(p.tint) : undefined, s = { rest:!!p.sit, face:p.face };   // 美術圖版本：換衣服色調
     // p.pose：{ id, cm } 廣場打招呼的動作美術圖（揮手、鞠躬、歡呼），寵物和影子照樣畫
     const posed = p.pose && ART.get(p.pose.id) ? ART.drawFrame(c, p.pose.id, 0, 0, 0, p.pose.cm, false, fl) : false;
     const drawn = posed || heroArt(c, s, t, fl);
