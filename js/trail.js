@@ -243,7 +243,7 @@ function hazed(o){
   return o.h;
 }
 function artSpr(id, hm){
-  const o = keep('spr:' + id, function(){ const c0 = ART.crop(id); if (!c0) return null; const k = 1 - (SINK[id] || 0), c = sunk(c0, SINK[id] || 0); groundShade(c); return { c:c, k:k }; });
+  const o = keep('spr:' + id, function(){ const c0 = ART.crop(id); if (!c0) return null; const k = 1 - (SINK[id] || 0), c = sunk(c0, SINK[id] || 0); groundShade(c); if (SOFT_BASE[id]) softBase(c, hashStr(id)); return { c:c, k:k }; });
   return o ? { c:o.c, h:hazed(o), w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;   // shared：換山時不能釋放；埋進土裡的那截不算高度，寬度照原比例
 }
 // 樹埋進土裡：Gemini 的樹圖底部畫了一整圈樹根，照圖底貼在地面上，樹根就整片浮在地表上。
@@ -262,6 +262,27 @@ function sunk(c, s){
   g.globalCompositeOperation = 'destination-out'; g.fillStyle = gr; g.fillRect(0, h - fh, c.width, fh);
   free(c);
   return d;
+}
+// 草、花、蕨類的根部（美術圖底部是切齊的一條橫線，像貼紙被剪掉下緣）：每一欄淡掉的高度不一樣（圖高 4～13%，左右高低起伏），
+// 再在根部後面墊一團深褐綠的接觸陰影（只在透明的地方看得到），根像長在草皮、石縫裡。每張圖做一次存起來，畫的時候不用多花時間
+const SOFT_BASE = { grass_tuft:1, flowers:1, fern:1, grass_clumps:1 };
+function softBase(c, seedK){
+  const w = c.width, h = c.height; if (w < 4 || h < 8) return;
+  const g = c.getContext('2d'), im = g.getImageData(0, 0, w, h), d = im.data, r = mkrng(seedK), kn = [], n = Math.max(3, Math.round(w / 24));
+  for (let q = 0; q <= n; q++) kn.push(r());
+  for (let x = 0; x < w; x++) {
+    const u = x / (w - 1) * n, i = Math.min(n - 1, u | 0), t = u - i, sm = t * t * (3 - 2 * t), v = kn[i] * (1 - sm) + kn[i + 1] * sm;
+    const hc = h * (0.04 + 0.09 * v), cut = hc * 0.3;
+    for (let y = Math.max(0, Math.floor(h - hc)); y < h; y++) {
+      const e = clamp((h - y - cut) / (hc - cut), 0, 1), p = (y * w + x) * 4 + 3;
+      d[p] *= e * e * (3 - 2 * e);
+    }
+  }
+  g.putImageData(im, 0, 0);
+  const ew = w * 0.42, eh = Math.max(2, h * 0.07), cy = h - eh * 1.15;
+  g.save(); g.globalCompositeOperation = 'destination-over'; g.translate(w / 2, cy); g.scale(1, eh / ew);
+  const gr = g.createRadialGradient(0, 0, 0, 0, 0, ew); gr.addColorStop(0, 'rgba(44,46,22,0.5)'); gr.addColorStop(0.6, 'rgba(44,46,22,0.22)'); gr.addColorStop(1, 'rgba(44,46,22,0)');
+  g.fillStyle = gr; g.fillRect(-ew, -ew, ew * 2, ew * 2); g.restore();
 }
 // 底部壓暗：物件靠近地面的地方比較暗（環境遮蔽），才不會像貼在地上的紙片
 function groundShade(c){
@@ -324,13 +345,38 @@ function mirTex(id, m, r, mx, my, px){
   });
   return T ? { T:T, w:T.w, m:m, c:T.c, lv:T.lv } : null;
 }
+// 草地貼圖：ground_grass 一張代表 4 公尺，同一張一直重複，山坡上看得出一格一格的方塊。先做一張 2×2 的大圖（代表 8 公尺，只做一次）：
+// 底下是原圖 2×2，上面疊一張錯開半格的原圖，用一張大範圍、會循環的雜訊決定哪裡露出哪一張，再疊一層大範圍的明暗起伏。
+// 兩張都是無縫的、雜訊也照 8 公尺循環，所以大圖本身還是無縫；重複的距離變成兩倍，格子的規律被打散。畫的時候跟以前一樣一次貼完，不多花時間
+const GRASS_TILE = 512;   // 大圖每一格幾像素（整張 1024，顯示卡剛好是 2 的次方）
+function grassTex(){
+  if (!ctx) return null;
+  const T = keep('texg:ground_grass', function(){
+    const c0 = ART.crop('ground_grass'); if (!c0 || !patOK()) return null;
+    const S = GRASS_TILE, W2 = S * 2, a = mk(W2, W2), b = mk(W2, W2), ga = a.getContext('2d'), gb = b.getContext('2d'), ox = S * 0.5, oy = S * 0.37;
+    for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++) ga.drawImage(c0, x * S, y * S, S, S);
+    for (let x = -1; x < 2; x++) for (let y = -1; y < 2; y++) gb.drawImage(c0, x * S + ox, y * S + oy, S, S);
+    free(c0);
+    const A = ga.getImageData(0, 0, W2, W2), B = gb.getImageData(0, 0, W2, W2), d = A.data, e = B.data, r = mkrng(0x6a5d), L1 = 4, L2 = 8, n1 = [], n2 = [];
+    for (let k = 0; k < L1 * L1; k++) n1.push(r()); for (let k = 0; k < L2 * L2; k++) n2.push(r());
+    const pn = (n, L, x, y) => { const fx = x / W2 * L, fy = y / W2 * L, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty), i0 = ix % L, i1 = (ix + 1) % L, j0 = iy % L, j1 = (iy + 1) % L;
+      return lerp(lerp(n[j0 * L + i0], n[j0 * L + i1], sx), lerp(n[j1 * L + i0], n[j1 * L + i1], sx), sy); };   // 會循環的雜訊（每 L 格繞回來）
+    for (let y = 0; y < W2; y++) for (let x = 0; x < W2; x++) {
+      const m = clamp((pn(n1, L1, x, y) - 0.35) / 0.3, 0, 1), k = 0.92 + 0.16 * pn(n2, L2, x, y), p = (y * W2 + x) * 4;
+      d[p] = (d[p] + (e[p] - d[p]) * m) * k; d[p + 1] = (d[p + 1] + (e[p + 1] - d[p + 1]) * m) * k; d[p + 2] = (d[p + 2] + (e[p + 2] - d[p + 2]) * m) * k;
+    }
+    ga.putImageData(A, 0, 0); free(b);
+    return { w:W2, c:a, lv:{} };
+  });
+  return T ? { T:T, w:T.w, m:8, c:T.c, lv:T.lv } : null;
+}
 // 階梯立面（面對鏡頭那一面）的貼圖：石階用花崗岩石塊（約 5 排石頭）、土路和木棧道的陡段用木頭階梯（約 3 根橫木）
 // m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
 const RISER_J = 22;
 const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95] } };
 function buildTex(){
   const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
-  TEX = { road:mkTex(TRAIL_TEX[tr], RW * 2), grass:mkTex('ground_grass', 4), snow:mirTex('ground_snow', RW * 4, [0, 0, 1, 1], true, true, 512),   // 雪地那張上下左右接不起來（每 2.6 公尺一條明暗分界），鏡射拼成無縫的一組
+  TEX = { road:mkTex(TRAIL_TEX[tr], RW * 2), grass:grassTex(),snow:mirTex('ground_snow', RW * 4, [0, 0, 1, 1], true, true, 512),   // 雪地那張上下左右接不起來（每 2.6 公尺一條明暗分界），鏡射拼成無縫的一組
     steps:tr === 'stairs' ? null : mkTex('ground_steps', RW * 2),   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
     moss:tr === 'stairs' && !TH.alpine ? mirTex('ground_stone_moss', RW * 4.4, [0, 0, 1, 1], true, true, 512) : null,   // 鏡射拼成的一組 5.7 公尺寬：一半就比路寬，鏡射的對稱軸不會落在踏面中間   // 森林裡的石階：踏面一階石板、一階苔蘚石塊，才不會每階都同一種鋪面
     riser:rs ? (rs.r ? mirTex(rs.id, rs.m, rs.r, true, false, 640) : mkTex(rs.id, rs.m)) : null };
@@ -338,7 +384,7 @@ function buildTex(){
   RSH = roadShade();
   TEX.bank = tr === 'wood' ? null : mirTex('trail_bank', BANK_M, [0.14, 0.32, 0.87, 0.68], true, false, 512);   // 路肩土坎切面：泥土、石頭、樹根（木棧道沒有土坎）
 }
-// 土坎切面貼圖：圖寬代表沿路 BANK_M 公尺、圖高代表 BANK_H 公尺（土坎約 0.12～0.28 公尺高），BANK_J 段以內才貼（最後 6 段淡入）
+// 土坎切面貼圖：圖寬代表沿路 BANK_M 公尺、圖高代表 BANK_H 公尺（土坎約 0.05～0.13 公尺高：以前 0.12～0.28，路和草地之間那一面土坎在近處是一條很寬的直帶，看起來像兩層貼起來），BANK_J 段以內才貼（最後 6 段淡入）
 const BANK_M = 2.6, BANK_H = 0.32, BANK_J = 12;
 // 切面是一片斜斜往遠處延伸的四邊形：貼圖橫向沿著路往前、直向從土坎上緣往下（用這一段近端的兩個點和遠端上緣的點對齊）
 function bankFill(T, side, z0, bh, a){
@@ -485,7 +531,10 @@ function clumps(){
     const c = ART.crop('grass_clumps'); if (!c) return null;
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, col = x => { for (let y = 0; y < c.height; y++) if (d[(y * c.width + x) * 4 + 3] > 40) return true; return false; }, out = [];
     let x0 = -1;
-    for (let x = 0; x <= c.width; x++) { const on = x < c.width && col(x); if (on && x0 < 0) x0 = x; if (!on && x0 >= 0) { if (x - x0 > 6) { const s = mk(x - x0, c.height); s.getContext('2d').drawImage(c, x0, 0, x - x0, c.height, 0, 0, x - x0, c.height); out.push(s); } x0 = -1; } }
+    for (let x = 0; x <= c.width; x++) { const on = x < c.width && col(x); if (on && x0 < 0) x0 = x; if (!on && x0 >= 0) { if (x - x0 > 6) {
+        let y0 = c.height, y1 = 0; for (let y = 0; y < c.height; y++) for (let xx = x0; xx < x; xx++) if (d[(y * c.width + xx) * 4 + 3] > 40) { if (y < y0) y0 = y; y1 = y; break; }   // 每一叢裁到自己的上下範圍（根部才貼著圖的下緣，淡出才淡得到根）
+        const hh = Math.max(1, y1 - y0 + 1), s = mk(x - x0, hh); s.getContext('2d').drawImage(c, x0, y0, x - x0, hh, 0, 0, x - x0, hh); softBase(s, x0 + 7); out.push(s);
+      } x0 = -1; } }
     free(c);
     return out.length ? out : null;
   });
@@ -521,7 +570,8 @@ function drawTurf(i, j, y1, y2, s1, fq, fade, DS, dW, gw){   // dW：這段路�
         // 野地的草不整齊：一片密一片疏（patch 每幾段、每兩叢換一次）、有的位置空著露出地面，大小也不一樣；第一叢貼著路邊不跳
         const patch = Hh((i >> 2) * 13 + side, (n >> 1) + 70);
         if (n && Hh(i * 11 + q, n * 3 + side + 90) > 0.4 + 0.5 * patch) continue;
-        const sc = 0.6 + 0.75 * Hh(i * 13 + q, n + side * 30), far = aF > 0.01 && n % 3 === 0;
+        // 大小混著：多數 0.5～1.2 倍，偶爾一叢特別大（1.7 倍），山坡上的草才不會一樣高一樣大
+        const sc = (0.5 + 0.7 * Hh(i * 13 + q, n + side * 30)) * (Hh(i * 13 + q, n + side * 30 + 7) < 0.14 ? 1.7 : 1), far = aF > 0.01 && n % 3 === 0;
         if (aN < 0.01 && !far) continue;
         proj(j, (q + 0.1 + 0.8 * Hh(i * 3 + q, n + side * 50)) / TURF_R, false);
         const d = d0 + (n ? (Hh(i * 5 + q, n + side * 40) - 0.5) * step : 0), x = gx + side * d * gs, dwN = spN.w * gs * sc, dwF = far ? spF.w * gs * sc : 0;
@@ -1872,7 +1922,7 @@ const PLANKS = 4;         // 木棧道每段幾片木板
 const RISER_DK = 0.3;     // 階梯立面再壓暗多少（立面面對鏡頭、背光，要明顯比踏面暗，階梯才讀得出一階一階）
 const WOOD_VAR = 0.5;     // 每塊木頭／石階深淺變化的強度
 const WOOD_SH = 0.35;    // 木棧道投在左邊草地上的影子寬（公尺）
-function bankH(i, side){ return (TH.trail === 'wood' ? 0.05 : 0.12 + 0.16 * vn(i * 0.13 + (side > 0 ? 5.1 : 0), 53)) * (1 - endK(i)); }   // 山頂過後沒有路，路邊的土坎也跟著消失
+function bankH(i, side){ return (TH.trail === 'wood' ? 0.05 : 0.05 + 0.08 * vn(i * 0.13 + (side > 0 ? 5.1 : 0), 53)) * (1 - endK(i)); }   // 山頂過後沒有路，路邊的土坎也跟著消失
 function terrH(i, side, d){
   const rw = rwAt(i);   // 這一段的路半寬（每段不一樣，地形從路緣量起）
   if (d <= rw) return 0;
@@ -2022,7 +2072,7 @@ function buildSoft(){
     const o = (g * 2 + s) * SOFT_V;
     softE[o] = lerp(SOFT_IN[0], SOFT_IN[1], clamp(0.4 * vn(g * 0.45 + s * 17.3, 801) + 0.6 * Hh(g, 803 + s), 0, 1));
     softE[o + 1] = clamp(0.55 + vn(g * 0.33 + s * 29.1, 805) * 1.1 + (Hh(g, 807 + s) - 0.5) * 0.8, 0, 1.7) * (Hh(g, 806 + s) < 0.1 ? 0.15 : 1);   // 多半垂到土坎下半截、有時蓋進路面，偶爾一小段沒垂下來露出土坎
-    softE[o + 2] = 0.05 + 0.13 * Hh(g, 809 + s);
+    softE[o + 2] = 0.04 + 0.1 * Hh(g, 809 + s);
     softE[o + 3] = 0.02 + 0.1 * Hh(g, 811 + s);
     softE[o + 4] = Hh(g, 813 + s) < 0.7 ? 1 : 0;
     softE[o + 5] = 0.1 + 0.45 * Hh(g, 815 + s);
@@ -2035,7 +2085,7 @@ const SBAND = new Float32Array(18);   // 兩邊草地第一、二條線的近端
 const softG = new Int8Array(2);        // 兩邊草地第一條的明暗（drawWorld 畫草地時記下來，草唇用同一個顏色）
 // 一段平路兩邊的路緣（路面畫完之後叫）：x1、yb、s1 近端，x2、y2、s2 遠端，w1、w2 兩端的路半寬（像素），a 不透明度，ta 草地貼圖的不透明度，zA 這段近端的世界位置
 function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
-  const P = SOFT_P, nt = j < 10 ? 4 : j < 20 ? 2 : 1;   // 每截幾根草尖：近處多、遠處少（遠處一根只剩一兩個像素）
+  const P = SOFT_P, nt = j < 8 ? 6 : j < 16 ? 3 : 1;   // 每截幾根草尖：近處多、遠處少（遠處一根只剩一兩個像素）
   for (let k = 0; k <= SOFT_K; k++) {
     const f = k / SOFT_K, ak = f * s2 / ((1 - f) * s1 + f * s2), s = 1 / ((1 - f) / s1 + f / s2);   // 世界上固定的位置（走近時土邊不會滑動）換成畫面上的比例
     const x = lerp(x1, x2, ak), y = lerp(yb, y2, ak), hw = lerp(w1, w2, ak), g = i * SOFT_K + k;
@@ -2109,7 +2159,7 @@ function softLip(i, k, sd, what, nt){
     ctx.moveTo(P[o + 8], P[o + 9]); ctx.lineTo(P[q + 8], P[q + 9]); ctx.lineTo(P[q + 6], P[q + 7]); ctx.lineTo(P[o + 6], P[o + 7]); ctx.closePath();
     const tl = softE[e + 2] * (softE[e + 4] ? 1 : 0.4);   // 這一截草尖多長（有的一截只有短短的草毛）
     for (let t = 0; t < nt; t++) {
-      const id = g * 4 + t, h = Hh(id, 830 + sd); if (Hh(id, 834 + sd) < 0.15) continue;   // 草尖位置、粗細、長短、歪的方向都不一樣，偶爾空一根（不像鋸齒）
+      const id = g * 8 + t, h = Hh(id, 830 + sd); if (Hh(id, 834 + sd) < 0.15) continue;   // 草尖位置、粗細、長短、歪的方向都不一樣，偶爾空一根（不像鋸齒）
       const am = (t + 0.1 + 0.8 * Hh(id, 836 + sd)) / nt, hw = (0.22 + 0.3 * Hh(id, 838 + sd)) / nt, a0 = am - hw, a1 = am + hw, sm = lerp(sa, sb, am), L = tl * (0.3 + 1.1 * Hh(id, 832 + sd)) * sm, lean = (h - 0.5) * 0.9;
       const bx = lerp(P[o + 6], P[q + 6], am), by = lerp(P[o + 7], P[q + 7], am);
       ctx.moveTo(lerp(P[o + 6], P[q + 6], a0), lerp(P[o + 7], P[q + 7], a0) - L * 0.15); ctx.lineTo(lerp(P[o + 6], P[q + 6], a1), lerp(P[o + 7], P[q + 7], a1) - L * 0.15);
@@ -2121,7 +2171,7 @@ function softLip(i, k, sd, what, nt){
   const da = Math.min(1, u0 * 3) * 0.09 * sa, db = Math.min(1, u1 * 3) * 0.09 * sb;   // 陰影：草唇下緣往路面那邊、往下偏一小段
   ctx.moveTo(P[o + 6], P[o + 7]); ctx.lineTo(P[q + 6], P[q + 7]); ctx.lineTo(P[q + 6] - side * db, P[q + 7] + db * 0.5); ctx.lineTo(P[o + 6] - side * da, P[o + 7] + da * 0.5); ctx.closePath();
 }
-const SOFT_WEAR = [0.4, 0.55], SOFT_WEAR_A = 0.13;   // 路面那側漸層土色、草地那側磨損草色各多寬（公尺，每個節點再乘 0.7～1.3）、每一層多濃（三層疊）
+const SOFT_WEAR = [0.4, 0.55], SOFT_WEAR_A = 0.18;   // 路面那側漸層土色、草地那側磨損草色各多寬（公尺，每個節點再乘 0.7～1.3）、每一層多濃（三層疊）
 // 路緣的漸層帶（what 0＝路面那側往內、1＝草地那側從草唇下緣往外）：三層一層比一層窄，疊起來越靠路緣越濃；兩邊同一層一筆畫
 function softWear(i, what, col, a){
   const P = SOFT_P;
