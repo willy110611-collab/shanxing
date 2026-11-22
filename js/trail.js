@@ -9,12 +9,13 @@ const S = SX.scene = {};
 const INK = '#3a2a20', TAU = Math.PI * 2;
 const SEG = 1.6;        // 每段路長（公尺）
 const DRAW = 150;       // 繪製段數（約 240 m）
-const HORF = 0.27, FOOTF = 0.49;   // 地平線在畫面 27% 高、登山客腳底在 27%+49%=76%：稍微俯視，整個人都在選單上方
+const HORF = 0.34, FOOTF = 0.42;   // 地平線在畫面 34% 高、登山客腳底在 34%+42%=76%：鏡頭比較低、接近平視，狀態面板下面留得出一條天空和遠山
 const HZ = 4.2;         // 登山客在鏡頭前方幾公尺（鏡頭拉近、整個人要在畫面裡；原本 6）
 const RW = 1.3;         // 步道半寬
 const GW = 30;          // 稜線地面半寬
 const FOGN = 24;        // 霧色階數
 const STRIDE = 1.45;    // 一個完整步伐循環（兩步）的距離
+const CREST = 0.00045;  // 遠處地面往下彎（每公尺平方掉幾公尺，從登山客那裡開始算）：遠方的路像翻過一個坡頂，後面露出天空和遠山，不會一路往上蓋滿畫面
 const TWL = 720;        // 背景圖塊邏輯寬度
 const FONT = getComputedStyle(document.documentElement).getPropertyValue('--fontB').trim() || 'sans-serif';   // 字型在 css/style.css 的 --fontB
 const LW = 0.032;       // 道具墨線粗細（公尺）
@@ -712,23 +713,57 @@ function layer(TA, TB, grp, idx, off, y, h){ tile(TA[grp][idx], off, y, h, 1); i
 // 遠景美術圖：依時段挑一張；左右鏡射接續，轉彎時跟著視差平移
 const SKY_ART = { day:'sky_day', sunset:'sky_sunset', dusk:'sky_sunset', dawn:'sky_dawn', night:'sky_night' };
 function skyArt(key){ const e = ART.get(SKY_ART[key]); return e && e.frames.length ? e : null; }
-function drawSkyArt(e, off, a){
+// 遠景分三層視差：天空＋最遠的山、中間的山、近的山＋雲海，轉彎時越近的層移得越快，爬得越高近的層越往下沉
+// 每層是天空圖的一條（上緣羽化），層與層之間蓋一條霧帶，錯開的山稜線才不會疊成兩條
+// [圖高從幾成、到幾成、上緣羽化幾成, 轉彎平移比例, 爬到山頂時往下沉幾像素]
+const PLX = [[0, 0.52, 0, 0.16, 0], [0.33, 0.72, 0.1, 0.36, 10], [0.52, 1, 0.1, 0.62, 26]];
+let PLXC = {};            // 這座山用的各層圖（依時段），換山時釋放
+let MIST = null;          // 霧帶（上下淡、中間濃，用這座山的霧色），換山時重做
+function plxLayers(key, e){
+  let L = PLXC[key]; if (L) return L;
+  const ks = Object.keys(PLXC);
+  if (ks.length >= 3) for (const k of ks) if (k !== palA && k !== palB) { PLXC[k].forEach(l => free(l.c)); delete PLXC[k]; }
+  const f = e.frames[0];
+  L = PLXC[key] = PLX.map(function(p, n){
+    if (!n) return { c:null, p:p };   // 最上層直接畫原圖那一段，不另外存一張
+    const h = Math.round(f.h * (p[1] - p[0])), d = mk(f.w, h), g = d.getContext('2d'), fh = f.h * p[2];
+    g.drawImage(e.img, f.x, f.y + f.h * p[0], f.w, h, 0, 0, f.w, h);
+    const gr = g.createLinearGradient(0, 0, 0, fh); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalCompositeOperation = 'destination-out'; g.fillStyle = gr; g.fillRect(0, 0, f.w, fh);
+    return { c:d, p:p };
+  });
+  return L;
+}
+function freePlx(){ for (const k in PLXC) PLXC[k].forEach(l => free(l.c)); PLXC = {}; free(MIST); MIST = null; }
+function mist(){
+  if (MIST) return MIST;
+  const c = MIST = mk(4, 64), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 64);
+  gr.addColorStop(0, rgba(hazeRgb, 0)); gr.addColorStop(0.5, rgba(hazeRgb, 0.55)); gr.addColorStop(1, rgba(hazeRgb, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 64);
+  return c;
+}
+function drawSkyArt(e, key, hd, a, frac){
   if (a <= 0.01) return;
-  const f = e.frames[0], h = HOR + 150 * U, w = Math.max(W * 1.05, h * f.w / f.h);
-  let k = Math.floor(off / w), x = -(off - k * w);
+  const f = e.frames[0], h = HOR + 150 * U, w = Math.max(W * 1.05, h * f.w / f.h), L = plxLayers(key, e), M = mist();
   ctx.globalAlpha = a;
-  for (; x < W; x += w, k++) {
-    if (k & 1) { ctx.save(); ctx.translate(x + w, 0); ctx.scale(-1, 1); ctx.drawImage(e.img, f.x, f.y, f.w, f.h, 0, 0, w + 1, h); ctx.restore(); }
-    else ctx.drawImage(e.img, f.x, f.y, f.w, f.h, x, 0, w + 1, h);
+  for (let n = 0; n < L.length; n++) {
+    const p = L[n].p, y0 = h * p[0] + p[4] * U * frac, lh = h * (p[1] - p[0]), off = hd * p[3];
+    if (n) ctx.drawImage(M, 0, 0, 4, 64, 0, y0 - 6 * U, W, h * p[2] + 20 * U);   // 霧帶蓋在上一層的接縫上
+    let k = Math.floor(off / w), x = -(off - k * w);
+    for (; x < W; x += w, k++) {
+      const src = L[n].c, sx = src ? 0 : f.x, sy = src ? 0 : f.y, sw = src ? src.width : f.w, sh = src ? src.height : f.h * p[1];
+      if (k & 1) { ctx.save(); ctx.translate(x + w, 0); ctx.scale(-1, 1); ctx.drawImage(src || e.img, sx, sy, sw, sh, 0, y0, w + 1, lh); ctx.restore(); }
+      else ctx.drawImage(src || e.img, sx, sy, sw, sh, x, y0, w + 1, lh);
+    }
   }
   ctx.globalAlpha = 1;
 }
 function drawBG(t, dist){
   const SA = skyArt(palA);
   if (SA) {
-    const SB = palB !== palA ? skyArt(palB) : null, hd = headAt(dist) * F * 0.35;
+    const SB = palB !== palA ? skyArt(palB) : null, hd = headAt(dist) * F, fr = clamp(dist / total, 0, 1);
     ctx.fillStyle = PAL[palA].valley; ctx.fillRect(0, 0, W, H);
-    drawSkyArt(SA, hd, 1); if (SB) drawSkyArt(SB, hd, palK);
+    drawSkyArt(SA, palA, hd, 1, fr); if (SB) drawSkyArt(SB, palB, hd, palK, fr);
     if (isCloudy || isRain || isSnow) tile(getTiles(palA).c[1], hd + t * 5, -40 * U, 190 * U, 0.62);
     if (snowFall > 0.02) { ctx.globalAlpha = snowFall * 0.5; ctx.fillStyle = '#d6dee9'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }   // 下雪：天空蓋一層灰白
     return;
@@ -880,10 +915,11 @@ S.setMountain = function(m){
   VG = { treeL:mixs(mid, '#4f9060', 0.35), treeS:mixs(mid, '#243f4a', 0.55), bushL:mixs(near, '#4f9a58', 0.5), bushS:mixs(mid, '#28484a', 0.45), grassL:mixs(near, '#d8e07a', 0.25), grassS:mixs(near, '#3f6f50', 0.5) };
   buildCurves(m); buildElev(m); cairns = []; buildProps(); buildPalettes(); buildSprites();
   for (const k in tileSets) freeTiles(tileSets[k]);
+  freePlx();
   tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers();
 };
 // 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
-ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); lutKey = -1; buildProps(); buildSprites(); } });
+ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); } });
 // 空氣透視的霧色：取白天天空圖「地平線那一條」的平均色（暖金／淡青），遠處的樹、草、地面才會融進遠山和雲海
 // 沒有天空圖就用這座山的遠山色調淡
 function setHaze(){
@@ -1712,7 +1748,7 @@ S.render = function(s){
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
   const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b; offG = off;
   let j, x = 0, dx = -off * cAt(b);
-  for (j = 0; j <= DRAW + 1; j++) { pC[j] = x; pW[j] = eAt(b + j); x += dx; dx += cAt(b + j); }
+  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc; x += dx; dx += cAt(b + j); }
   const hj = HZ / SEG + off; jhG = Math.floor(hj); fhG = hj - jhG;
   camX = lerp(pC[jhG], pC[jhG + 1], fhG) + Math.sin(hero.ph) * 0.018 * hero.mv;            // 隨步伐極輕微晃動
   camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH + Math.sin(hero.ph * 2) * 0.014 * hero.mv;
