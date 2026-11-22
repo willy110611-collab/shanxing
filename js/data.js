@@ -35,15 +35,32 @@ SX.MOUNTAINS = [
     feat:'之字形草坡、杜鵑花叢、山頂看奇萊和雪山', end:'合歡北峰三角點' },
   { id:'hh_west', name:'合歡西峰', group:'hehuan', by:83, area:'南投', lon:121.237, lat:24.19, startAlt:3000, alt:3144, diff:4,
     feat:'翻過北峰、長長的箭竹稜線、上上下下好幾個鞍部', end:'合歡西峰三角點' },
-  { id:'jiaming', name:'嘉明湖', area:'台東', lon:121.02, lat:23.29, startAlt:2320, alt:3310, dist:13000, diff:4,
+  // 嘉明湖線：嘉明湖本身不是百岳（沒有 by），當山群的代表；山群裡的百岳是向陽山、三叉山
+  { id:'jiaming', name:'嘉明湖', group:'jiaming', area:'台東', lon:121.02, lat:23.29, startAlt:2320, alt:3310, dist:13000, diff:4,
     feat:'天使的眼淚、高山草原、山羌出沒', end:'嘉明湖畔',
     theme:{ sky:['#78b2e4','#e3f0f6'], far:'#8f9fbc', mid:'#86a56e', near:'#b6c56e', trail:'dirt', wall:[0.6,0.3], alpine:true, lake:true, grass:true } },
-  { id:'xueshan', name:'雪山', by:5, area:'台中', lon:121.23, lat:24.38, startAlt:2140, alt:3886, dist:11000, diff:5,
+  { id:'xiangyang', name:'向陽山', group:'jiaming', by:16, area:'台東・高雄', lon:121.005, lat:23.282, startAlt:2320, alt:3600, diff:4,
+    feat:'向陽大崩壁、紅檜松林、黑水塘', end:'向陽山' },
+  { id:'sancha', name:'三叉山', group:'jiaming', by:28, area:'台東・花蓮', lon:121.028, lat:23.30, startAlt:2320, alt:3494, diff:5,
+    feat:'一等三角點、無邊草原、遠望嘉明湖', end:'三叉山一等三角點' },
+  // 雪主東：雪山主峰＋雪山東峰
+  { id:'xueshan', name:'雪山主峰', group:'xueshan', by:5, area:'台中', lon:121.23, lat:24.38, startAlt:2140, alt:3886, dist:10900, diff:5,
     feat:'黑森林、雪山圈谷、冰河地形', end:'雪山主峰',
     theme:{ sky:['#6faae0','#e4eef6'], far:'#8a96b6', mid:'#3f6e58', near:'#93b06a', trail:'dirt', wall:[0.95,0.3], snow:true, alpine:true } },
-  { id:'yushan', name:'玉山', by:1, area:'嘉義・南投', lon:120.957, lat:23.47, startAlt:2610, alt:3952, dist:11000, diff:5,
+  { id:'xueshan_east', name:'雪山東峰', group:'xueshan', by:74, area:'台中', lon:121.255, lat:24.388, startAlt:2140, alt:3199, diff:4,
+    feat:'哭坡、七卡山莊、遠看聖稜線', end:'雪山東峰' },
+  // 玉山群峰：主峰、前峰、西峰、北峰（B 級）、東峰（C+ 級，十峻之首）
+  { id:'yushan', name:'玉山主峰', group:'yushan', by:1, area:'嘉義・南投', lon:120.957, lat:23.47, startAlt:2610, alt:3952, dist:10900, diff:5,
     feat:'排雲山莊、碎石坡、主峰疊石', end:'玉山主峰',
     theme:{ sky:['#5f9edc','#e2ecf5'], far:'#8790b2', mid:'#6f8f70', near:'#a7b07a', trail:'scree', wall:[0.6,0.3], snow:true, alpine:true } },
+  { id:'yushan_front', name:'玉山前峰', group:'yushan', by:65, area:'嘉義・南投', lon:120.913, lat:23.475, startAlt:2610, alt:3236, diff:4,
+    feat:'前峰不前、碎石陡坡、俯看塔塔加', end:'玉山前峰' },
+  { id:'yushan_west', name:'玉山西峰', group:'yushan', by:24, area:'嘉義・南投', lon:120.925, lat:23.469, startAlt:2610, alt:3528, diff:5,
+    feat:'冷杉林、西峰山神廟、正面看主峰', end:'玉山西峰' },
+  { id:'yushan_north', name:'玉山北峰', group:'yushan', by:3, area:'南投', lon:120.96, lat:23.487, startAlt:2610, alt:3920, diff:5,
+    feat:'玉山氣象站、看主峰最美的角度', end:'玉山北峰氣象站' },
+  { id:'yushan_east', name:'玉山東峰', group:'yushan', by:2, area:'南投', lon:120.967, lat:23.47, startAlt:2610, alt:3940, diff:5,
+    feat:'十峻之首、岩壁攀爬、頭盔上陣', end:'玉山東峰' },
 ];
 SX.M = {}; SX.MOUNTAINS.forEach(m => SX.M[m.id] = m);
 
@@ -167,17 +184,41 @@ SX.REC = {
   jiaming: { recMin:700, recNote:'單程步行約 11 至 12 小時，多數山友兩天一夜', dist:13000,
     route:[[0.14,0.93],[0.22,0.89],[0.28,0.84],[0.36,0.82],[0.42,0.76],[0.50,0.74],[0.56,0.68],[0.52,0.61],[0.60,0.56],[0.66,0.50],[0.62,0.43],[0.70,0.37],[0.76,0.31],[0.70,0.24],[0.78,0.17],[0.84,0.10]],
     waypoints:[{m:0,name:'向陽登山口'},{m:3800,name:'高山草原入口'},{m:7600,name:'中途山屋'},{m:10400,name:'觀景台'},{m:13000,name:'嘉明湖畔'}] },
-  xueshan: { recMin:540, recNote:'雪山登山口到主峰約 9 小時，建議住 369 山莊', dist:11000,
+  xiangyang: { recMin:330, recNote:'向陽登山口到向陽山約 5 個半小時', dist:7400,
+    route:[[0.20,0.93],[0.28,0.87],[0.26,0.79],[0.34,0.72],[0.42,0.68],[0.40,0.60],[0.48,0.54],[0.56,0.50],[0.54,0.42],[0.62,0.36],[0.60,0.27],[0.66,0.19],[0.64,0.10]],
+    waypoints:[{m:0,name:'向陽登山口'},{m:2200,name:'松林步道'},{m:4300,name:'向陽山屋'},{m:5800,name:'森林界線'},{m:7000,name:'向陽山叉路'},{m:7400,name:'向陽山'}] },
+  sancha: { recMin:540, recNote:'向陽登山口到三叉山約 9 小時，多數山友住嘉明湖山屋', dist:11900,
+    route:[[0.12,0.93],[0.20,0.88],[0.26,0.82],[0.34,0.79],[0.40,0.73],[0.48,0.70],[0.54,0.64],[0.52,0.56],[0.60,0.50],[0.68,0.46],[0.74,0.40],[0.72,0.31],[0.80,0.24],[0.86,0.16],[0.84,0.08]],
+    waypoints:[{m:0,name:'向陽登山口'},{m:4300,name:'向陽山屋'},{m:7000,name:'向陽山叉路'},{m:8400,name:'嘉明湖避難山屋'},{m:11500,name:'三叉山叉路'},{m:11900,name:'三叉山一等三角點'}] },
+  xueshan: { recMin:540, recNote:'雪山登山口到主峰約 9 小時，建議住 369 山莊', dist:10900,
     route:[[0.14,0.93],[0.22,0.88],[0.28,0.84],[0.36,0.80],[0.42,0.74],[0.48,0.70],[0.44,0.63],[0.54,0.60],[0.58,0.53],[0.52,0.46],[0.62,0.42],[0.68,0.35],[0.64,0.28],[0.72,0.21],[0.76,0.14],[0.70,0.07]],
-    waypoints:[{m:0,name:'雪山登山口'},{m:3500,name:'369 山莊'},{m:6000,name:'黑森林'},{m:9000,name:'圈谷'},{m:11000,name:'雪山主峰'}] },
-  yushan: { recMin:510, recNote:'塔塔加到玉山主峰約 8 至 9 小時，需住排雲山莊', dist:11000,
+    waypoints:[{m:0,name:'雪山登山口'},{m:2000,name:'七卡山莊'},{m:3900,name:'哭坡觀景台'},{m:4400,name:'雪山東峰'},{m:7000,name:'369 山莊'},{m:8000,name:'黑森林'},{m:9900,name:'圈谷'},{m:10900,name:'雪山主峰'}] },
+  xueshan_east: { recMin:270, recNote:'雪山登山口到東峰約 4 個半小時，哭坡最累', dist:4400,
+    route:[[0.30,0.93],[0.36,0.86],[0.32,0.78],[0.40,0.71],[0.46,0.64],[0.42,0.56],[0.50,0.49],[0.48,0.40],[0.56,0.33],[0.54,0.24],[0.60,0.16],[0.58,0.08]],
+    waypoints:[{m:0,name:'雪山登山口'},{m:2000,name:'七卡山莊'},{m:2800,name:'哭坡起點'},{m:3900,name:'哭坡觀景台'},{m:4400,name:'雪山東峰'}] },
+  yushan: { recMin:510, recNote:'塔塔加到玉山主峰約 8 至 9 小時，需住排雲山莊', dist:10900,
     route:[[0.18,0.93],[0.26,0.88],[0.32,0.84],[0.40,0.81],[0.46,0.76],[0.52,0.72],[0.48,0.66],[0.56,0.62],[0.62,0.57],[0.58,0.50],[0.66,0.45],[0.62,0.38],[0.70,0.32],[0.66,0.25],[0.72,0.18],[0.66,0.10],[0.70,0.05]],
-    waypoints:[{m:0,name:'塔塔加登山口'},{m:2000,name:'孟祿亭'},{m:4000,name:'白木林'},{m:7000,name:'排雲山莊'},{m:9000,name:'風口'},{m:11000,name:'玉山主峰'}] },
+    waypoints:[{m:0,name:'塔塔加登山口'},{m:1700,name:'孟祿亭'},{m:2200,name:'前峰登山口'},{m:4400,name:'白木林觀景台'},{m:6700,name:'大峭壁'},{m:8500,name:'排雲山莊'},{m:10500,name:'風口'},{m:10900,name:'玉山主峰'}] },
+  yushan_front: { recMin:165, recNote:'塔塔加到前峰約 2 小時 45 分，最後一段很陡', dist:3000,
+    route:[[0.24,0.93],[0.32,0.86],[0.40,0.80],[0.46,0.73],[0.42,0.64],[0.50,0.56],[0.46,0.47],[0.54,0.39],[0.50,0.30],[0.56,0.21],[0.54,0.12]],
+    waypoints:[{m:0,name:'塔塔加登山口'},{m:1700,name:'孟祿亭'},{m:2200,name:'前峰登山口'},{m:2600,name:'碎石陡坡'},{m:3000,name:'玉山前峰'}] },
+  yushan_west: { recMin:480, recNote:'塔塔加經排雲山莊到西峰約 8 小時', dist:11500,
+    route:[[0.62,0.93],[0.56,0.88],[0.62,0.82],[0.54,0.77],[0.58,0.70],[0.50,0.66],[0.54,0.59],[0.46,0.54],[0.42,0.47],[0.36,0.42],[0.32,0.35],[0.26,0.29],[0.28,0.21],[0.22,0.14],[0.24,0.07]],
+    waypoints:[{m:0,name:'塔塔加登山口'},{m:2200,name:'前峰登山口'},{m:4400,name:'白木林觀景台'},{m:8500,name:'排雲山莊'},{m:10000,name:'西峰冷杉林'},{m:11200,name:'西峰山神廟'},{m:11500,name:'玉山西峰'}] },
+  yushan_north: { recMin:570, recNote:'經排雲、風口到北峰約 9 個半小時', dist:12000,
+    route:[[0.18,0.93],[0.26,0.88],[0.32,0.84],[0.40,0.81],[0.46,0.76],[0.52,0.72],[0.48,0.66],[0.56,0.62],[0.62,0.57],[0.58,0.50],[0.66,0.45],[0.62,0.38],[0.60,0.30],[0.54,0.22],[0.50,0.14],[0.44,0.07]],
+    waypoints:[{m:0,name:'塔塔加登山口'},{m:4400,name:'白木林觀景台'},{m:8500,name:'排雲山莊'},{m:10500,name:'風口'},{m:11500,name:'北峰碎石坡'},{m:12000,name:'玉山北峰氣象站'}] },
+  yushan_east: { recMin:600, recNote:'經風口攀上東峰約 10 小時，岩壁要戴頭盔', dist:12000,
+    route:[[0.18,0.93],[0.26,0.88],[0.32,0.84],[0.40,0.81],[0.46,0.76],[0.52,0.72],[0.48,0.66],[0.56,0.62],[0.62,0.57],[0.58,0.50],[0.66,0.45],[0.70,0.38],[0.76,0.31],[0.74,0.22],[0.80,0.14],[0.78,0.06]],
+    waypoints:[{m:0,name:'塔塔加登山口'},{m:8500,name:'排雲山莊'},{m:10500,name:'風口'},{m:11000,name:'東峰叉路碎石坡'},{m:11600,name:'東峰岩溝'},{m:12000,name:'玉山東峰'}] },
 };
 // 山群：地圖上一根旗子、點開是「群峰」卡片。lead 是代表這個山群的山（旗子位置、步道外觀、解鎖規則都看它）
 // 季節、奇遇、寶物掉落寫山群代號，就代表山群裡每一座山（一律用 SX.groupOf 判斷，不要把每座山的代號抄進去）
 SX.GROUPS = [
   { id:'hehuan', name:'合歡山', full:'合歡群峰', lead:'hehuan' },
+  { id:'yushan', name:'玉山', full:'玉山群峰', lead:'yushan' },
+  { id:'xueshan', name:'雪山', full:'雪山・雪主東', lead:'xueshan' },
+  { id:'jiaming', name:'嘉明湖', full:'嘉明湖・向陽三叉', lead:'jiaming' },
 ];
 SX.GROUP = {}; SX.GROUPS.forEach(g => SX.GROUP[g.id] = g);
 SX.groupOf = id => (SX.M[id] && SX.M[id].group) || id;          // 山 → 山群代號（不在山群裡的山就是自己）
@@ -217,9 +258,9 @@ SX.BAIYUE_GROUPS = [
   { name:'合歡群峰', peaks:[[36,'合歡主峰',3416,'A'],[34,'合歡北峰',3422,'A'],[83,'合歡西峰',3144,'A'],[35,'合歡東峰',3416,'A'],[66,'石門山',3236,'A']] },
   { name:'東台一霸', peaks:[[45,'新康山',3335,'C'],[99,'布拉克桑山',3036,'C']] },
   { name:'干卓萬山塊', peaks:[[55,'干卓萬山',3282,'C'],[43,'卓社大山',3343,'C'],[64,'牧山',3239,'C'],[59,'火山',3257,'C']] },
-  { name:'玉山群峰', peaks:[[1,'玉山',3952,'A'],[65,'玉山前峰',3236,'A'],[24,'玉山西峰',3528,'A'],[3,'玉山北峰',3920,'B'],[2,'玉山東峰',3940,'C+'],[4,'玉山南峰',3900,'C+'],[10,'東小南山',3709,'C'],[38,'南玉山',3381,'C'],[96,'鹿山',3043,'C']] },
+  { name:'玉山群峰', peaks:[[1,'玉山主峰',3952,'A'],[65,'玉山前峰',3236,'A'],[24,'玉山西峰',3528,'A'],[3,'玉山北峰',3920,'B'],[2,'玉山東峰',3940,'C+'],[4,'玉山南峰',3900,'C+'],[10,'東小南山',3709,'C'],[38,'南玉山',3381,'C'],[96,'鹿山',3043,'C']] },
   { name:'巒郡', peaks:[[54,'郡大山',3292,'A'],[97,'巒大山',3042,'C+']] },
-  { name:'雪山西南稜', peaks:[[23,'大雪山',3529,'C'],[5,'雪山',3884,'A'],[79,'中雪山',3172,'A'],[26,'頭鷹山',3508,'C'],[50,'火石山',3308,'C']] },
+  { name:'雪山西南稜', peaks:[[23,'大雪山',3529,'C'],[5,'雪山主峰',3884,'A'],[79,'中雪山',3172,'A'],[26,'頭鷹山',3508,'C'],[50,'火石山',3308,'C']] },
   { name:'雪北線', peaks:[[74,'雪山東峰',3199,'A'],[12,'雪山北峰',3702,'C+'],[47,'志佳陽山',3327,'A']] },
   { name:'武陵四秀', peaks:[[48,'桃山',3324,'A'],[85,'喀拉業山',3132,'A'],[51,'池有山',3301,'A'],[22,'品田山',3529,'B']] },
   { name:'大小劍', peaks:[[17,'大劍山',3593,'B'],[67,'劍山',3223,'C'],[49,'佳陽山',3313,'B']] },
@@ -234,14 +275,22 @@ SX.BAIYUE_GROUPS.forEach(g => g.peaks.forEach(p => SX.BAIYUE.push({ rank:p[0], n
 SX.BAIYUE.sort((a, b) => a.rank - b.rank);
 SX.BY = {}; SX.BAIYUE.forEach(p => SX.BY[p.rank] = p);
 // 官方登山分級（一般季節）：need 是要先登頂過哪一級（或更難）的百岳才開放
+// 遊戲裡還沒有 need 那一級的百岳時，改看再下一級（SX.gradeNeed 算，例如還沒有 C 級的山，C+ 就先要 B 級）
+// snow：雪季時卡片上的提醒（只提醒、不擋）
 SX.GRADES = {
   'A':  { need:null, text:'一般健行路線，大約 1～3 天' },
   'B':  { need:'A',  text:'中級縱走，大約 4～5 天，或 1～3 天但有危險地形' },
   'C':  { need:'B',  text:'高級縱走，大約 5 天以上' },
-  'C+': { need:'C',  text:'高級縱走，有垂降和攀岩地形' },
+  'C+': { need:'C',  text:'高級縱走，有垂降和攀岩地形', snow:'雪季管制中：真實世界這時要三人以上組隊才能申請' },
 };
 SX.GRADE_ORDER = ['A', 'B', 'C', 'C+'];
 SX.gradeOf = id => { const m = SX.M[id], b = m && m.by && SX.BY[m.by]; return b ? b.grade : null; };   // 不是百岳的山沒有分級
+// 這座山實際要先登頂哪一級：照 need 往下找，找到遊戲裡真的有山的那一級（不然玩家永遠解不開）
+SX.gradeNeed = id => {
+  const g = SX.gradeOf(id); let n = g ? SX.GRADES[g].need : null;
+  while (n && !SX.MOUNTAINS.some(m => SX.gradeOf(m.id) === n)) n = SX.GRADES[n].need;
+  return n;
+};
 
 // 寵物：柴柴起始即有，其餘為未來解鎖
 SX.PETS = [
@@ -272,6 +321,7 @@ SX.seasonsAt = function(d){
 };
 
 // 隨機遭遇：where 可限制海拔比例（minFrac/maxFrac 0..1）、山、天氣(wx)、時段(time)；rare 為稀有遭遇
+// where.mountains 寫山群代號（山群裡每座山都算）；只屬於山群裡某幾座山的故事寫 where.peaks（例如只有雪山主峰會經過黑森林）
 SX.ENCOUNTERS = [
   { id:'e01', text:'迎面走來一位山友，笑著說：「加油！快到了！」', where:{}, choices:null },
   { id:'e02', text:'草叢裡傳來窸窣聲，一隻山羌探出頭來，又飛快縮了回去。', where:{ mountains:['alishan','taiping','hehuan','jiaming','xueshan','yushan'] }, choices:[
@@ -431,30 +481,80 @@ SX.ENCOUNTERS = [
   { id:'e50', text:'遠處的草坡上，幾隻水鹿正低頭吃草，大耳朵一轉一轉的。', where:{ mountains:['jiaming','xueshan','yushan'], minFrac:0.4 }, time:['dawn','dusk','night'], rare:true, choices:[
       { label:'停在原地，遠遠看著', result:'帶頭的水鹿抬頭看了你一眼，又安心地繼續吃草。', effect:{ temp:3 } },
       { label:'不開閃光，輕輕拍一張', result:'照片裡的水鹿站在暮色裡，像一幅安靜的畫。', effect:{ photo:true } } ] },
-  { id:'e51', text:'夜深了，嘉明湖的水面上浮著一輪月亮。湛藍的「天使的眼淚」，此刻正安安靜靜地抱著月光。', where:{ mountains:['jiaming'], minFrac:0.8 }, time:['night'], wx:['clear'], rare:true, weight:0.2, choices:[
+  { id:'e51', text:'夜深了，嘉明湖的水面上浮著一輪月亮。湛藍的「天使的眼淚」，此刻正安安靜靜地抱著月光。', where:{ peaks:['jiaming'], minFrac:0.8 }, time:['night'], wx:['clear'], rare:true, weight:0.2, choices:[
       { label:'在湖邊坐下來，只是看', result:'你什麼都沒說，湖也什麼都沒說，這樣就很好。', effect:{ item:'t_moon_lake_photo', temp:3 } },
       { label:'對著湖許一個願', result:'一陣風吹過，月亮在水面輕輕晃了一下，好像聽到了。', effect:{ stam:20, temp:2 } } ] },
   { id:'e52', text:'山屋外，登山協作大哥正在煮一大鍋熱湯，看到你就招手：「來，喝一碗暖暖身子。」', where:{ mountains:['jiaming','xueshan','yushan'], minFrac:0.4 }, choices:[
       { label:'雙手接過來，說謝謝', result:'湯裡有高麗菜和香菇，你喝完全身都暖了。大哥笑說明天要早起喔。', effect:{ stam:18, temp:3 } },
       { label:'幫忙洗碗', result:'大哥說你是今天最乖的山友，還多分你一顆水煮蛋。', effect:{ stam:10, temp:2 } } ] },
-  { id:'e53', text:'走進黑森林，高大的冷杉擋住了天空，地上鋪著厚厚的苔蘚，連腳步聲都變小了。', where:{ mountains:['xueshan'], minFrac:0.55, maxFrac:0.85 }, wxPref:['fog'], choices:[
+  { id:'e53', text:'走進黑森林，高大的冷杉擋住了天空，地上鋪著厚厚的苔蘚，連腳步聲都變小了。', where:{ peaks:['xueshan'], minFrac:0.55, maxFrac:0.85 }, wxPref:['fog'], choices:[
       { label:'放輕腳步，聞聞森林的味道', result:'空氣裡有淡淡的木頭香，你覺得自己好像走進了童話書。', effect:{ temp:2 } },
       { label:'停下來聽有沒有鳥叫', result:'遠遠傳來一兩聲啾啾，森林好像在跟你打招呼。', effect:{ stam:6 } } ] },
-  { id:'e54', text:'傍晚走到 369 山莊，橘色的光照在黃色屋頂上，山友們坐在門口看夕陽。', where:{ mountains:['xueshan'], minFrac:0.45, maxFrac:0.75 }, time:['dusk'], choices:[
+  { id:'e54', text:'傍晚走到 369 山莊，橘色的光照在黃色屋頂上，山友們坐在門口看夕陽。', where:{ peaks:['xueshan'], minFrac:0.45, maxFrac:0.75 }, time:['dusk'], choices:[
       { label:'進山莊蓋紀念章', result:'管理員幫你把章蓋得端端正正，還提醒你今晚早點睡。', effect:{ item:'t_369_stamp', temp:1 } },
       { label:'跟大家一起看夕陽', result:'光慢慢從橘色變成粉紅色，沒有人說話，大家都捨不得。', effect:{ photo:true, temp:2 } } ] },
-  { id:'e55', text:'圈谷的碎石坡旁，石縫邊有一隻小小的山椒魚，濕濕亮亮的，正慢慢爬回陰影裡。', where:{ mountains:['xueshan'], minFrac:0.85 }, wxPref:['rain','fog'], rare:true, weight:0.15, choices:[
+  { id:'e55', text:'圈谷的碎石坡旁，石縫邊有一隻小小的山椒魚，濕濕亮亮的，正慢慢爬回陰影裡。', where:{ peaks:['xueshan'], minFrac:0.85 }, wxPref:['rain','fog'], rare:true, weight:0.15, choices:[
       { label:'屏住呼吸，遠遠看著', result:'牠是冰河時期留下來的小居民。你不翻石頭、不打擾，只把牠記在心裡。', effect:{ item:'t_salamander_card', temp:3 } },
       { label:'輕輕繞開，讓牠好好休息', result:'你把腳步放得好輕好輕，像怕吵醒一個很老很老的夢。', effect:{ temp:2 } } ] },
-  { id:'e56', text:'凌晨的排雲山莊，大家戴著頭燈在門口集合，準備摸黑出發去看日出。', where:{ mountains:['yushan'], minFrac:0.55 }, time:['night','dawn'], choices:[
+  { id:'e56', text:'凌晨的排雲山莊，大家戴著頭燈在門口集合，準備摸黑出發去看日出。', where:{ peaks:['yushan','yushan_west','yushan_north','yushan_east'], minFrac:0.65 }, time:['night','dawn'], choices:[
       { label:'蓋個章再出發', result:'紅色的章印在頭燈下很清楚，你把它小心收好。', effect:{ item:'t_paiyun_stamp' } },
       { label:'跟隊友互相檢查裝備', result:'大家幫彼此拉好外套拉鍊，一起說：「出發！」', effect:{ stam:6, temp:2 } } ] },
   { id:'e57', text:'霧裡出現一片銀白色的枯樹林，是白木林。旁邊的玉山圓柏貼著地面長，努力地抓住山坡。', where:{ mountains:['yushan','hehuan'], minFrac:0.7 }, wx:['fog','cloud'], rare:true, choices:[
       { label:'拍下霧中的白木林', result:'樹枝像在霧裡寫字，你按下快門，好像收到一封很安靜的信。', effect:{ item:'t_whitewood_photo' } },
       { label:'摸摸自己的心跳，慢慢走', result:'高山上的樹長得好慢好慢，你也決定慢慢來。', effect:{ stam:8, temp:1 } } ] },
+  // 百岳第二階段：玉山群峰、雪主東、嘉明湖線每座山的小故事（只屬於某一座山的寫 where.peaks）
+  { id:'e58', text:'下山的山友笑著對你說：「前峰不前喔！」說完還指了指上面那段碎石陡坡。', where:{ peaks:['yushan_front'], minFrac:0.5 }, choices:[
+      { label:'謝謝提醒，慢慢走', result:'山友從背包拿出一張貼紙送你：「爬完再貼，比較有成就感。」', effect:{ temp:1, item:'t_front_sticker' } },
+      { label:'不信，衝上去', result:'衝了二十步就喘到說不出話，你終於懂「前峰不前」是什麼意思了。', effect:{ stam:-3 } } ] },
+  { id:'e59', text:'碎石坡上回頭一看，塔塔加和鹿林山整片在腳下，雲正從山谷慢慢爬上來。', where:{ peaks:['yushan_front'], minFrac:0.7 }, wx:['clear','cloud'], choices:[
+      { label:'拍下雲爬上來的樣子', result:'雲一層一層往上漫，照片裡的山脊像浮在白色的海上。', effect:{ photo:true } },
+      { label:'坐在石頭上喘口氣', result:'風從谷底吹上來，涼涼的，你的呼吸慢慢平穩下來。', effect:{ stam:8 } } ] },
+  { id:'e60', text:'冷杉林裡藏著一間小小的山神廟，有人在前面放了一顆糖，和一張寫著「平安下山」的紙條。', where:{ peaks:['yushan_west'], minFrac:0.9 }, choices:[
+      { label:'合掌鞠躬', result:'你在廟前站了一會兒，拍下一張石階的照片，背面寫上「謝謝山讓我們過」。', effect:{ item:'t_shrine_card' } },
+      { label:'也留一張紙條', result:'你寫了「大家都平安」，壓在那顆糖旁邊。', effect:{ temp:2 } } ] },
+  { id:'e61', text:'從西峰正面望過去，玉山主峰整座山像一面巨大的屏風，午後的雲影慢慢從上面滑過。', where:{ peaks:['yushan_west'], minFrac:0.85 }, time:['day'], wx:['clear','cloud'], rare:true, choices:[
+      { label:'拍下整面山壁', result:'鏡頭塞不下整座主峰，你退了好幾步才拍到。', effect:{ photo:true } },
+      { label:'坐下來看雲影走過去', result:'雲影從左邊滑到右邊，花了好久好久，你一點都不急。', effect:{ temp:3 } } ] },
+  { id:'e62', text:'北峰氣象站的觀測員剛做完整點觀測，探出頭來跟你聊天：今天風速幾級、這幾天會不會下雪。', where:{ peaks:['yushan_north'], minFrac:0.9 }, choices:[
+      { label:'聽他講今天的紀錄', result:'他撕下一張寫好的格子表送你：「今天的天氣，給你帶下山。」', effect:{ item:'t_weather_log', temp:1 } },
+      { label:'問他哪天會下雪', result:'他看看天空笑說：「山上的雪，要看山的心情。」', effect:{ temp:2 } } ] },
+  { id:'e63', text:'北峰的傍晚，玉山主峰被夕陽照成金色，主峰的影子長長地落在雲海上。', where:{ peaks:['yushan_north'], minFrac:0.85 }, time:['dusk'], wx:['clear'], rare:true, choices:[
+      { label:'拍下金色的主峰', result:'你按下快門的時候，連手都被照成金色的。', effect:{ photo:true, temp:2 } },
+      { label:'安靜看到天黑', result:'金色慢慢退成粉紅、再退成藍色，星星一顆一顆出來了。', effect:{ temp:3 } } ] },
+  { id:'e64', text:'東峰岩溝前，隊友遞來一頂頭盔：「三點不動一點動，慢慢來。」', where:{ peaks:['yushan_east'], minFrac:0.9 }, choices:[
+      { label:'照做，慢慢攀', result:'手腳一次只動一個，你一步一步穩穩地爬上了岩溝。', effect:{ temp:2 } },
+      { label:'直接手腳並用衝', result:'石頭比你想的滑，你嚇出一身汗，乖乖慢下來。', effect:{ stam:-5 } } ] },
+  { id:'e65', text:'岩縫裡開著一小朵毛茸茸的白花，是只長在高山上的玉山薄雪草。', where:{ peaks:['yushan_east'], minFrac:0.8 }, wx:['clear','cloud'], rare:true, choices:[
+      { label:'在岩壁下畫一張速寫', result:'你拿出鉛筆，把岩壁和那朵小白花畫進本子裡，岩紋一條一條都畫得很用力。', effect:{ item:'t_ridge_sketch' } },
+      { label:'蹲下來看就好', result:'風一吹，小白花輕輕點頭，你也對它點點頭。', effect:{ temp:2 } } ] },
+  { id:'e66', text:'哭坡的木階上坐著一位山友，喘得說不出話。你分他一口水，他說：「這坡真的會哭。」', where:{ peaks:['xueshan_east'], minFrac:0.6, maxFrac:0.9 }, choices:[
+      { label:'陪他一起笑出來', result:'他從口袋拿出一張歪歪的手寫小證書送你：「先幫你頒，你一定會爬完。」', effect:{ item:'t_crying_slope', temp:2 } },
+      { label:'坐下來一起休息', result:'兩個人一起看著木階發呆，休息完腳好像沒那麼重了。', effect:{ stam:6 } } ] },
+  { id:'e67', text:'東峰三角點旁往東看，南湖大山和中央尖山並排站著，清清楚楚。', where:{ peaks:['xueshan_east'], minFrac:0.9 }, wx:['clear'], rare:true, choices:[
+      { label:'拍下兩座大山', result:'一座寬寬的、一座尖尖的，你把它們收進同一張照片裡。', effect:{ photo:true } },
+      { label:'記住它們的樣子', result:'你在心裡說：總有一天要去那裡。', effect:{ temp:3 } } ] },
+  { id:'e68', text:'黑森林裡，冷杉一棵比一棵高，霧從樹縫中一條一條透出光來。', where:{ peaks:['xueshan'], minFrac:0.65, maxFrac:0.85 }, wx:['fog','cloud'], choices:[
+      { label:'站在光裡深呼吸', result:'光照在臉上暖暖的，霧裡有木頭和苔蘚的味道。', effect:{ stam:8, temp:1 } },
+      { label:'拍下一道一道的光', result:'照片裡的光像從天上垂下來的絲線。', effect:{ photo:true } } ] },
+  { id:'e69', text:'圈谷的碎石上，一群岩鷚跳來跳去，一點也不怕人。', where:{ peaks:['xueshan'], minFrac:0.85 }, choices:[
+      { label:'拿出圖鑑卡對照', result:'你翻到圈谷那一頁，原來這個大碗是很久以前冰河挖出來的。', effect:{ item:'t_cirque_card' } },
+      { label:'蹲下來看牠們跳', result:'一隻岩鷚跳到你腳邊，歪頭看了你一眼又跳走了。', effect:{ temp:2 } } ] },
+  { id:'e70', text:'霧突然散開，對面整片向陽大崩壁露了出來，像被巨人用手指刮過一樣。', where:{ mountains:['jiaming'], minFrac:0.3 }, wxPref:['fog'], choices:[
+      { label:'拿出炭筆畫下來', result:'你趕在霧合起來之前，把一層一層的岩層畫進本子裡。', effect:{ item:'t_landslide_sketch' } },
+      { label:'站著看到霧又合起來', result:'崩壁慢慢消失在白霧裡，好像剛剛只是一場夢。', effect:{ temp:2 } } ] },
+  { id:'e71', text:'黑水塘邊，一頭水鹿低頭喝水，抬頭看了你一眼，又繼續喝。', where:{ peaks:['xiangyang'], minFrac:0.7 }, time:['dawn','dusk'], rare:true, choices:[
+      { label:'停在原地，遠遠看著', result:'水鹿喝完水慢慢走進箭竹林，水面又安靜下來。', effect:{ temp:3 } },
+      { label:'不開閃光，輕輕拍一張', result:'照片裡的水鹿和牠的倒影，一模一樣。', effect:{ photo:true } } ] },
+  { id:'e72', text:'三叉山的大草原上風好大，草浪一波一波往山下跑，遠方的嘉明湖小小一顆藍。', where:{ peaks:['sancha'], minFrac:0.75 }, wx:['clear','cloud'], choices:[
+      { label:'張開手讓風吹', result:'風把外套吹得鼓鼓的，你覺得自己快要飛起來了。', effect:{ temp:3 } },
+      { label:'拍下草浪和那一點藍', result:'照片裡的嘉明湖小到要放大才看得到，但你知道它在那裡。', effect:{ photo:true } } ] },
+  { id:'e73', text:'山頂附近有一座紀念碑，紀念 1945 年在這裡遇上颱風、沒能回家的搜救人員。', where:{ peaks:['sancha'], minFrac:0.9 }, choices:[
+      { label:'安靜站一會兒', result:'風吹過草原，你在心裡說了一聲謝謝。', effect:{ temp:1 } },
+      { label:'輕輕鞠個躬再走', result:'你把腳步放慢，記住這座山也有這樣的故事。', effect:{ temp:1 } } ] },
 ];
 
 // 寶物：rarity 為 普通 / 稀有 / 傳說；drop 可為山 id 陣列或 'any'；多為照片、卡片、紀念章、拓印，不取走自然物
+// 只在山群裡某幾座山掉的寶物，多寫 peaks（drop 還是寫山群代號，peaks 再縮小到那幾座山）
 SX.TREASURES = [
   { id:'t_clean_pledge', name:'環保小卡', rarity:'普通', desc:'一張寫著「帶走垃圾，留下美景」的小卡片。', drop:'any' },
   { id:'t_cairn_stone', name:'石堆祝福卡', rarity:'普通', desc:'在石堆旁拍下的照片，記錄了一份小小的祝福。', drop:['xiangshan','qixing','guanyin','matcha'] },
@@ -473,8 +573,8 @@ SX.TREASURES = [
   { id:'t_deer_track_card', name:'山羌足跡拓印卡', rarity:'稀有', desc:'用紙拓下的小小蹄印，提醒你山裡還有很多住客。', drop:['jiaming','xueshan','taiping'] },
   { id:'t_cloud_bottle', name:'雲海瓶', rarity:'稀有', desc:'把雲海的照片裝進小瓶子裡，打開就能想起那天的白色海洋。', drop:['alishan','hehuan','taiping'] },
   { id:'t_rhodo_card', name:'高山杜鵑明信卡', rarity:'稀有', desc:'杜鵑花盛開時的明信卡，花朵粉粉的，很可愛。', drop:['hehuan','taiping','qixing'] },
-  { id:'t_lake_map', name:'嘉明湖湖畔地圖', rarity:'稀有', desc:'手繪的湖畔小地圖，標示著哪裡可以安靜地坐著看水。', drop:['jiaming'] },
-  { id:'t_angel_tear_card', name:'天使的眼淚明信片', rarity:'傳說', desc:'嘉明湖畔的美景明信片，傳說看到的人心裡會多一點溫柔。', drop:['jiaming'] },
+  { id:'t_lake_map', name:'嘉明湖湖畔地圖', rarity:'稀有', desc:'手繪的湖畔小地圖，標示著哪裡可以安靜地坐著看水。', drop:['jiaming'], peaks:['jiaming'] },
+  { id:'t_angel_tear_card', name:'天使的眼淚明信片', rarity:'傳說', desc:'嘉明湖畔的美景明信片，傳說看到的人心裡會多一點溫柔。', drop:['jiaming'], peaks:['jiaming'] },
   { id:'t_starlight_stamp', name:'滿天星空紀念章', rarity:'傳說', desc:'在合歡山的夜晚拍下星空，印成一枚金色的小章。', drop:['hehuan'] },
   { id:'t_old_triangle', name:'百年三角點的回憶', rarity:'傳說', desc:'一張老照片，記錄了很久以前測量的人們站在山頂的樣子。', drop:['qixing','taiping','xueshan'] },
   { id:'t_summit_dawn', name:'晨光山頂照片', rarity:'傳說', desc:'在天還沒亮前登頂，等到第一道光照亮山稜線。', drop:['yushan','alishan','xueshan'] },
@@ -487,11 +587,20 @@ SX.TREASURES = [
   { id:'t_cuifeng_card', name:'翠峰湖倒影明信片', rarity:'稀有', desc:'霧裡的翠峰湖像一面鏡子，森林上下各有一片。', drop:['taiping'] },
   { id:'t_rosefinch_photo', name:'酒紅朱雀的一瞥', rarity:'稀有', desc:'箭竹叢上的一抹酒紅色，是高山上最可愛的小訪客。', drop:['hehuan','xueshan','yushan'] },
   { id:'t_whitebrow_card', name:'金翼白眉圖鑑卡', rarity:'稀有', desc:'記錄了金翼白眉的歌聲和翅膀上的金色，牠總是在步道邊唱歌給山友聽。', drop:['hehuan','xueshan','yushan','jiaming'] },
-  { id:'t_369_stamp', name:'369山莊紀念章', rarity:'普通', desc:'雪山 369 山莊的章，章裡有黃色屋頂和一大片山坡。', drop:['xueshan'] },
-  { id:'t_paiyun_stamp', name:'排雲山莊紀念章', rarity:'普通', desc:'在攻頂玉山前一晚蓋下的章，代表你曾在台灣最高的山屋住過一晚。', drop:['yushan'] },
+  { id:'t_369_stamp', name:'369山莊紀念章', rarity:'普通', desc:'雪山 369 山莊的章，章裡有黃色屋頂和一大片山坡。', drop:['xueshan'], peaks:['xueshan'] },
+  { id:'t_paiyun_stamp', name:'排雲山莊紀念章', rarity:'普通', desc:'在攻頂玉山前一晚蓋下的章，代表你曾在台灣最高的山屋住過一晚。', drop:['yushan'], peaks:['yushan','yushan_west','yushan_north','yushan_east'] },
   { id:'t_whitewood_photo', name:'白木林照片', rarity:'稀有', desc:'霧中的銀白色枯樹林，安靜得像一幅水墨畫。', drop:['yushan','hehuan'] },
-  { id:'t_salamander_card', name:'雪山山椒魚圖鑑卡', rarity:'傳說', desc:'冰河時期留下來的小居民，只住在高山冷冷的石縫邊。能遇見牠，是山給你的禮物。', drop:['xueshan'] },
-  { id:'t_moon_lake_photo', name:'天使的眼淚月光照片', rarity:'傳說', desc:'夜裡的嘉明湖抱著一輪月亮，湛藍的湖水在月光下閃著銀色。', drop:['jiaming'] },
+  { id:'t_salamander_card', name:'雪山山椒魚圖鑑卡', rarity:'傳說', desc:'冰河時期留下來的小居民，只住在高山冷冷的石縫邊。能遇見牠，是山給你的禮物。', drop:['xueshan'], peaks:['xueshan'] },
+  { id:'t_moon_lake_photo', name:'天使的眼淚月光照片', rarity:'傳說', desc:'夜裡的嘉明湖抱著一輪月亮，湛藍的湖水在月光下閃著銀色。', drop:['jiaming'], peaks:['jiaming'] },
+  // 百岳第二階段寶物（第 15 批）：玉山群峰、雪主東、嘉明湖線
+  { id:'t_front_sticker', name:'「前峰不前」貼紙', rarity:'普通', desc:'山友之間流傳的手繪貼紙，畫著一個喘到吐舌頭的小人，在陡坡上努力往上爬。', drop:['yushan'], peaks:['yushan_front'] },
+  { id:'t_shrine_card', name:'西峰山神廟平安小卡', rarity:'稀有', desc:'冷杉林裡小小山神廟的石階照片，背面寫著「謝謝山讓我們過」。', drop:['yushan'], peaks:['yushan_west'] },
+  { id:'t_weather_log', name:'玉山氣象站觀測紀錄卡', rarity:'稀有', desc:'一張手寫的格子表，記下這一天北峰上的溫度和風向。', drop:['yushan'], peaks:['yushan_north'] },
+  { id:'t_ridge_sketch', name:'十峻之首岩壁速寫', rarity:'傳說', desc:'在玉山東峰岩壁下畫的鉛筆速寫，岩紋一條一條都畫得很用力。', drop:['yushan'], peaks:['yushan_east'] },
+  { id:'t_crying_slope', name:'哭坡過關證書', rarity:'普通', desc:'一張歪歪的手寫小證書：「本人已爬完哭坡，沒有哭（大概）。」', drop:['xueshan'] },
+  { id:'t_cirque_card', name:'圈谷冰河遺跡圖鑑卡', rarity:'稀有', desc:'畫著雪山圈谷怎麼被冰河一點一點挖出來的小圖解。', drop:['xueshan'], peaks:['xueshan'] },
+  { id:'t_landslide_sketch', name:'向陽大崩壁素描卡', rarity:'稀有', desc:'用炭筆畫的向陽大崩壁，一層一層的岩層畫得很清楚。', drop:['jiaming'] },
+  { id:'t_sancha_rubbing', name:'三叉山一等三角點拓印', rarity:'稀有', desc:'台灣只有十座百岳的山頂是一等三角點，這是其中一座。石頭還留在山上，你只帶走了紙。', drop:['jiaming'], peaks:['sancha'] },
   // 季節限定寶物：只在 season 的期間、該季節的山上掉落（drop 'any' 代表季節的每一座山）
   { id:'t_snow_crystal_stamp', name:'雪季冰晶章', rarity:'傳說', season:'snow', desc:'只有下雪的季節才蓋得到的章，章印是一片六角形的雪花。', drop:'any' },
   { id:'t_sakura_bookmark', name:'阿里山櫻花書籤', rarity:'稀有', season:'sakura', desc:'印著阿里山櫻花和小火車的書籤，夾在書裡就像把春天帶回家。', drop:['alishan'] },
@@ -549,6 +658,10 @@ SX.BADGES = [
   { id:'stamp',   name:'集印帳',     glyph:'印', stat:'stamps',      unit:'座', tiers:[3, 6, 'all'], desc:'集印帳蓋到章的山' },
   // 山群徽章：stat 'groupPeaks' 算 group 這個山群登頂過幾座（'all' 就是山群裡全部的山）
   { id:'g_hehuan', name:'合歡群峰全制霸', glyph:'歡', stat:'groupPeaks', group:'hehuan', unit:'座', tiers:[1, 3, 'all'], desc:'合歡群峰五座百岳，登頂過幾座' },
+  // 玉山群峰一共九座，遊戲裡現在有五座：等級先寫數字，其他四座開放時再加一級 'all'（已經拿到的等級不會變）
+  { id:'g_yushan', name:'玉山群峰全制霸', glyph:'玉', stat:'groupPeaks', group:'yushan', unit:'座', tiers:[1, 3, 5], desc:'玉山群峰的百岳，登頂過幾座' },
+  // 完百之路：stat 'baiyue' 算登頂過幾座不同的百岳；之後開放更多百岳時往後加 30、50、100
+  { id:'baiyue', name:'完百之路', glyph:'岳', stat:'baiyue', unit:'座', tiers:[10], desc:'登頂過幾座不同的台灣百岳' },
 ];
 
 // 世界區域：目前只有台灣。之後可以加入世界名山（例如富士山、少女峰、吉力馬札羅），現在先不啟用。
