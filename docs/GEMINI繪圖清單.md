@@ -245,6 +245,10 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `enc_e30` | An old postcard blown onto the trail side by the wind (blank back, no readable text) |
 | `enc_e31` | The hiker slipping and grabbing a tree trunk, a little scared |
 | `enc_e32` | A grandpa playing Chinese chess in a trail pavilion, inviting the hiker to sit |
+| `enc_es_sakura` | 季節限定（櫻花季）：A gust of wind making mountain cherry blossom petals fall like rain over a forest trail, the path turning pink |
+| `enc_es_rhodo` | 季節限定（杜鵑季）：A whole alpine slope covered in blooming pink-white Yushan rhododendrons, the hiker standing at a bend in the trail |
+| `enc_es_firefly` | 季節限定（螢火蟲季）：Thousands of fireflies glowing over a dark forest valley at night like fallen stars, the hiker with headlamp switched off |
+| `enc_es_snow` | 季節限定（雪季）：The first light snowfall of the year on a high mountain trail, tiny snowflakes landing on the hiker's glove |
 
 ## 放進 `07.奇遇`：登頂插圖（16:9，不用去背，抵達山頂時顯示）
 
@@ -287,3 +291,20 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `grass_clumps` | 16:9 | 洋紅底。A row of 8 separate short wild grass clumps of different shapes (ankle height), seen slightly from above at a low angle, evenly spaced, each fully visible, same lighting from the upper right. |
 | `trail_bank` | 16:9 | 洋紅底。A horizontal strip of a small soil bank at the edge of a mountain trail seen from the side: a short vertical dirt cut with exposed tree roots and small pebbles, moss on top edge, seamless tileable left-right. |
 | `icon_lock` | 1:1 | 洋紅底。A small round brass padlock icon in the same style as the other round icons (warm brass, ink outline, a tiny mountain engraved on the lock body), closed shackle, no text. 放 `06.介面`（地圖上還不能爬的山用） |
+
+## 第十一批：季節限定寶物（放進 `04.背包`，1:1、洋紅底）
+
+只有在真實日期的季節內才拿得到的寶物（例如櫻花季 2/1～3/31 在阿里山、太平山）。畫法跟第四批一樣：
+每張提示詞：`Isolated single collectible item illustration for a cozy game inventory, ` + 下面的內容 + 去背規則。**檔名 = 前面的英文 id**。
+季節感要明顯（顏色、花、雪），稀有的加一點淡淡的光，傳說的加金色邊框或金光。
+
+| 檔名 | 名稱 | 季節 | 內容 |
+|---|---|---|---|
+| `t_snow_crystal_stamp` | 雪季冰晶章 | 雪季 | an icy pale-blue round stamp impression shaped like a six-pointed snowflake on paper, frosty sparkles, golden glow (legendary) |
+| `t_sakura_bookmark` | 阿里山櫻花書籤 | 櫻花季 | a paper bookmark printed with pink mountain cherry blossoms and a tiny red forest train, with a pink ribbon tassel |
+| `t_sakura_photo` | 櫻花雨照片 | 櫻花季 | a polaroid photo of cherry blossom petals falling like rain over a forest trail, soft pink |
+| `t_rhodo_pressed` | 玉山杜鵑押花 | 杜鵑季 | a small card with pressed pink-white Yushan rhododendron petals under a thin film, handwritten-style border (no readable text) |
+| `t_firefly_jar` | 螢火蟲光點瓶 | 螢火蟲季 | a small corked glass jar holding a night-forest photo full of tiny glowing yellow-green dots, glowing softly, golden glow (legendary) |
+| `t_cloudfall_photo` | 夏日雲瀑照片 | 夏日雲瀑 | a polaroid photo of white clouds pouring over a green mountain ridge like a waterfall after a summer afternoon storm |
+| `t_maple_postcard` | 楓紅明信片 | 楓紅芒草季 | a postcard of an autumn hillside, half red maple leaves and half silvery-white silver grass |
+| `t_cloudsea_card` | 冬日雲海明信片 | 雲海季 | a postcard of a calm winter dawn sea of clouds with distant blue mountain peaks like islands |

@@ -167,6 +167,26 @@ SX.PETS = [
   { id:'magpie', name:'藍鵲', desc:'嗓門很大的報告員，遇到牠就知道前面有好天氣。', unlocked:false, unlockText:'在三座以上不同的山上撿到過紀念章' },
 ];
 
+// 季節限定：照真實日期（台灣時間 UTC+8），from / to 是「月-日」，可以跨年（例如 10-01 到 03-31）
+// mountains 是這個季節在哪幾座山；time 有寫的話只有那些時段才算（螢火蟲只在夜晚）
+// 季節限定的寶物、奇遇在自己身上寫 season:'季節代號'，只有在季節內、在這些山上才會出現；錯過就要等明年
+SX.SEASONS = [
+  { id:'snow', name:'雪季', from:'01-01', to:'02-28', mountains:['hehuan','xueshan','yushan'] },
+  { id:'sakura', name:'櫻花季', from:'02-01', to:'03-31', mountains:['alishan','taiping'] },
+  { id:'rhodo', name:'杜鵑季', from:'04-01', to:'05-31', mountains:['hehuan','yushan','xueshan'] },
+  { id:'firefly', name:'螢火蟲季', from:'04-01', to:'05-15', mountains:['xiangshan','qixing','guanyin','matcha'], time:['night'] },
+  { id:'summer', name:'夏日雲瀑', from:'07-01', to:'08-31', mountains:['hehuan','taiping','alishan'] },
+  { id:'maple', name:'楓紅芒草季', from:'10-15', to:'12-15', mountains:['qixing','matcha'] },
+  { id:'cloudsea', name:'雲海季', from:'10-01', to:'03-31', mountains:['alishan','hehuan','jiaming','xueshan','yushan'] },
+];
+SX.SEASON = {}; SX.SEASONS.forEach(s => SX.SEASON[s.id] = s);
+SX.mdNum = s => +s.replace('-', '');   // '03-31' → 331
+// 這一天（台灣時間）正在進行的季節
+SX.seasonsAt = function(d){
+  const t = new Date(d.getTime() + 8 * 3600e3), md = (t.getUTCMonth() + 1) * 100 + t.getUTCDate();
+  return SX.SEASONS.filter(s => { const a = SX.mdNum(s.from), b = SX.mdNum(s.to); return a <= b ? md >= a && md <= b : md >= a || md <= b; });
+};
+
 // 隨機遭遇：where 可限制海拔比例（minFrac/maxFrac 0..1）、山、天氣(wx)、時段(time)；rare 為稀有遭遇
 SX.ENCOUNTERS = [
   { id:'e01', text:'迎面走來一位山友，笑著說：「加油！快到了！」', where:{}, choices:null },
@@ -252,6 +272,19 @@ SX.ENCOUNTERS = [
   { id:'e32', text:'在涼亭裡遇到一位爺爺，他正在下棋，還很熱情地招你過去坐。', where:{ mountains:['xiangshan','qixing','guanyin','alishan'] }, choices:[
       { label:'坐下來看他下棋', result:'爺爺贏了你一步，他笑得很開心。', effect:{ temp:3 } },
       { label:'禮貌道謝，繼續走', result:'爺爺說：「下次再來找我下棋喔！」', effect:{ temp:1 } } ] },
+  // 季節限定奇遇（season 見 SX.SEASONS，山與時段跟著季節走）
+  { id:'es_sakura', season:'sakura', text:'一陣風吹過，整排山櫻花瓣像下雨一樣飄下來，步道一下子變成粉紅色。', where:{}, choices:[
+      { label:'舉起相機，拍下櫻花雨', result:'你按下快門，花瓣剛好落在鏡頭前，是一張很幸運的照片。', effect:{ item:'t_sakura_photo' } },
+      { label:'站在花雨裡深呼吸', result:'空氣裡有淡淡的花香，你覺得心裡也開花了。', effect:{ temp:2, stam:5 } } ] },
+  { id:'es_rhodo', season:'rhodo', text:'轉過一個彎，整片山坡開滿了粉白色的玉山杜鵑，像一片花海。', where:{ minFrac:0.3 }, choices:[
+      { label:'坐在步道邊看花', result:'蜜蜂在花間忙碌，你什麼都不想，只是看著。', effect:{ stam:10, temp:2 } },
+      { label:'拍一張花海照片', result:'粉色和白色在照片裡一層一層地開著。', effect:{ photo:true } } ] },
+  { id:'es_firefly', season:'firefly', text:'整片山谷亮起成千上萬的小光點，螢火蟲像是從天上掉下來的星星。', where:{}, rare:true, choices:[
+      { label:'關掉頭燈，安靜地看', result:'光點在你身邊慢慢飄，你把這個晚上收進心裡的小瓶子。', effect:{ temp:3, item:'t_firefly_jar' } },
+      { label:'壓低聲音，慢慢走過', result:'你小心不打擾牠們，光點一路陪你走了好遠。', effect:{ temp:2 } } ] },
+  { id:'es_snow', season:'snow', text:'天空忽然飄下細細的白色顆粒，今年的第一場雪落在你的手套上。', where:{ minFrac:0.4 }, rare:true, choices:[
+      { label:'伸手接住雪花', result:'雪花在手套上停了一下才融化，你看清楚了它六個角的形狀。', effect:{ temp:-1, photo:true } },
+      { label:'拉緊外套，繼續往上', result:'雪踩起來沙沙響，你一步一步走得很穩。', effect:{ stam:-4, temp:-2 } } ] },
 ];
 
 // 寶物：rarity 為 普通 / 稀有 / 傳說；drop 可為山 id 陣列或 'any'；多為照片、卡片、紀念章、拓印，不取走自然物
@@ -279,6 +312,15 @@ SX.TREASURES = [
   { id:'t_old_triangle', name:'百年三角點的回憶', rarity:'傳說', desc:'一張老照片，記錄了很久以前測量的人們站在山頂的樣子。', drop:['qixing','taiping','xueshan'] },
   { id:'t_summit_dawn', name:'晨光山頂照片', rarity:'傳說', desc:'在天還沒亮前登頂，等到第一道光照亮山稜線。', drop:['yushan','alishan','xueshan'] },
   { id:'t_forest_bell', name:'林間風鈴卡', rarity:'傳說', desc:'一張畫著風鈴的卡片，風吹過時好像能聽到叮噹聲。', drop:['matcha','taiping','alishan'] },
+  // 季節限定寶物：只在 season 的期間、該季節的山上掉落（drop 'any' 代表季節的每一座山）
+  { id:'t_snow_crystal_stamp', name:'雪季冰晶章', rarity:'傳說', season:'snow', desc:'只有下雪的季節才蓋得到的章，章印是一片六角形的雪花。', drop:'any' },
+  { id:'t_sakura_bookmark', name:'阿里山櫻花書籤', rarity:'稀有', season:'sakura', desc:'印著阿里山櫻花和小火車的書籤，夾在書裡就像把春天帶回家。', drop:['alishan'] },
+  { id:'t_sakura_photo', name:'櫻花雨照片', rarity:'稀有', season:'sakura', desc:'花瓣像雨一樣落下的那一瞬間，剛好被你拍了下來。', drop:'any' },
+  { id:'t_rhodo_pressed', name:'玉山杜鵑押花', rarity:'稀有', season:'rhodo', desc:'山屋管理員用掉在地上的落花做成的押花卡，只送給花季來訪的山友。', drop:'any' },
+  { id:'t_firefly_jar', name:'螢火蟲光點瓶', rarity:'傳說', season:'firefly', desc:'把螢火蟲之夜的照片裝進小瓶子裡，關燈後好像還在一閃一閃。', drop:'any' },
+  { id:'t_cloudfall_photo', name:'夏日雲瀑照片', rarity:'稀有', season:'summer', desc:'午後雷陣雨過後，雲像瀑布一樣從山稜線流下來。', drop:'any' },
+  { id:'t_maple_postcard', name:'楓紅明信片', rarity:'稀有', season:'maple', desc:'秋天的山坡一半是紅葉、一半是銀白芒草，寄給想念的人剛剛好。', drop:'any' },
+  { id:'t_cloudsea_card', name:'冬日雲海明信片', rarity:'稀有', season:'cloudsea', desc:'冷冷的清晨，腳下是一整片安靜的雲海，遠方的山像小島。', drop:'any' },
 ];
 
 // 隱藏任務 / 成就：cond.type 為 climbs | mountain | time | wx | items | notes | cairns | rests | nofast | gps

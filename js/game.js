@@ -140,6 +140,11 @@
     return { kind, time };
   }
   let wx = calcWx();
+  // ───────── 季節限定（真實日期，台灣時間；資料在 SX.SEASONS）─────────
+  let testDate = null;   // 只給測試掛鉤 SXG.date() 用
+  const seasonNow = (date = testDate || new Date()) => SX.seasonsAt(date);
+  const seasonOk = (sid, mid) => { const s = seasonNow().find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(wx.time)); };
+  const seasonEnd = s => `${+s.to.slice(0, 2)}/${+s.to.slice(3)}`;
   const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
   function cycleWx(){
     const i = WX_CYCLE.findIndex(w => w.kind === wx.kind && w.time === wx.time);
@@ -215,10 +220,12 @@
     const w = wxOverride || calcWx(id), nPh = SV.photos.filter(x => x.id === id).length, nUp = SV.userPhotos.filter(x => x.mountainId === id).length;
     const pet = SX.PETS.find(x => x.id === SV.pet) || PET_NONE;
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
+    const seas = seasonNow().filter(s => s.mountains.includes(id));
     const card = $('#routeCard');
     card.innerHTML = `<button class="rc-x" id="rcX">✕</button>
       <div class="ic-h"><b>${m.name}</b><span class="ic-alt">${m.area}・${m.alt.toLocaleString('en-US')} m</span><span class="stars">${stars}</span></div>
       <div class="ic-wx paper"><canvas id="rcWx"></canvas><span>現在山上：${wxText(w) || '晴'}${done ? `　已登頂 ${done} 次` : ''}</span></div>
+      ${seas.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${seas.map(s => `<span class="chip" style="background:#ffd9e4;font-size:12px;white-space:nowrap">季節限定：${s.name}${s.time ? '・' + s.time.map(t => TIME_NAMES[t]).join('、') : ''}（到 ${seasonEnd(s)}）</span>`).join('')}</div>` : ''}
       <div class="ic-meta">
         <div class="paper"><small>路程</small><b>${(m.dist/1000).toFixed(1)} km</b></div>
         <div class="paper"><small>山友實際時間</small><b>${fmtMin(m.recMin)}</b></div>
@@ -461,7 +468,7 @@
     return `<svg viewBox="0 0 60 60"><g transform="rotate(5 30 30)"><rect x="8" y="14" width="44" height="33" rx="3" fill="#fff7e2" ${o} stroke-width="2.5"/><rect x="8" y="14" width="44" height="9" fill="${col}" ${o} stroke-width="2"/><path d="M14 30h20M14 36h26M14 41h14" stroke="${INK}" stroke-width="1.5" stroke-linecap="round" opacity=".55"/><path d="M43 29l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="${col}" ${o} stroke-width="1.2"/></g></svg>`;
   }
   function rollTreasure(mid){
-    const pool = SX.TREASURES.filter(x => x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(mid)));
+    const pool = SX.TREASURES.filter(x => (x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(mid))) && (!x.season || seasonOk(x.season, mid)));
     let sum = 0; pool.forEach(x => { sum += RAR_W[x.rarity] || 30; });
     let r = Math.random() * sum;
     for (const x of pool) { r -= RAR_W[x.rarity] || 30; if (r <= 0) return x; }
@@ -479,7 +486,7 @@
     if (mode === 'show') {
       A.sparkle(); if (tr.rarity === '傳說') { confetti(30); A.chime(); }
       modal(`<div class="encounter${tr.rarity !== '普通' ? ' rare' : ''}"><div class="ec-pic" style="animation:pop .5s cubic-bezier(.34,1.8,.5,1)">${trSvg(tr)}</div>
-        <h3>${tr.name}</h3><p><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span></p><p>${tr.desc}</p></div>
+        <h3>${tr.name}</h3><p><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span>${tr.season ? ` <span class="chip" style="background:#ffd9e4">季節限定・${SX.SEASON[tr.season].name}</span>` : ''}</p><p>${tr.desc}</p></div>
         <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="trOk">收進背包</button></div>`);
       $('#trOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };
     } else if (mode === 'toast') toast(`得到「${tr.name}」`);
@@ -505,7 +512,7 @@
   function pickEncounter(){
     const f = st.dist / M.dist, k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return e.id !== lastEnc && (!w.mountains || w.mountains.includes(M.id)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return e.id !== lastEnc && (!e.season || seasonOk(e.season, M.id)) && (!w.mountains || w.mountains.includes(M.id)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     let sum = 0; pool.forEach(e => { sum += e.rare ? 0.3 : 1; });
@@ -813,7 +820,7 @@
   }
   let rewarding = false;
   function giveReward(rare){
-    const pool = rare ? SX.TREASURES.filter(x => x.rarity !== '普通') : null;
+    const pool = rare ? SX.TREASURES.filter(x => x.rarity !== '普通' && !x.season) : null;   // 季節限定只能在當季的山上找到
     const tr = pool && pool.length ? pool[Math.floor(Math.random() * pool.length)] : rollTreasure(M ? M.id : 'any');
     rewarding = true; gainTreasure(tr, 'show'); rewarding = false;
   }
@@ -1232,6 +1239,8 @@
     treasure:id => { const tr = id ? SX.TREASURES.find(x => x.id === id) : rollTreasure(M ? M.id : 'xiangshan'); gainTreasure(tr, 'show'); return tr && tr.id; },
     rest:() => { if (st && !st.sleep) { st.stopAt = st.dist + 1; st.restType = 'bench'; } },
     stones:() => { if (st && M) stoneGame(); },
+    date:s => { testDate = s ? new Date(s + 'T12:00:00+08:00') : null; return seasonNow().map(x => x.id); },   // 假裝今天是某一天（台灣時間），不帶參數就回到真實日期
+    roll:mid => rollTreasure(mid).id,
     wx:(kind, time) => { wxOverride = kind ? { kind, time:time || 'day' } : null; wx = wxOverride || calcWx(); moodNow(); return wx; },
     get st(){ return st; }, get M(){ return M; }, get SV(){ return SV; } };
 })();
