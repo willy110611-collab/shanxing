@@ -30,9 +30,10 @@
         <button class="cbtn sm" data-go="bag">背包</button>
         <button class="cbtn sm" data-go="album">相簿</button>
         <button class="cbtn sm" data-go="settings">設定</button>
+        <button class="cbtn sm qBtn" data-go="help" aria-label="新手教學">?</button>
       </div>
     </header>
-    <div class="mapHint">點山上的木牌看介紹，拖曳可以移動地圖</div>
+    <div class="mapHint">點木牌看介紹，拖曳移動地圖</div>
     <div id="mapWrap"></div>
     <div id="routeCard" class="sheet infoCard"></div>
   </section>
@@ -43,7 +44,7 @@
     <div class="hud" id="hudRoot"></div>
     <div id="bubble" class="bubble"></div>
     <button id="propTag" class="tag" style="display:none"></button>
-    <div id="tapHint" class="tapHint">長按畫面可以走快一點</div>
+    <div id="tapHint" class="tapHint">長按畫面走快一點</div>
     <div id="gpsTag" class="gpsTag"></div>
     <button id="hudTog" class="hudTog" aria-label="收起畫面資訊"></button>
     <nav class="dock">
@@ -51,6 +52,7 @@
       <button class="dbtn" data-go="bag"><i class="i-bag"></i>背包</button>
       <button class="dbtn" data-go="album"><i class="i-photo"></i>相簿</button>
       <button class="dbtn" data-go="settings"><i class="i-gear"></i>設定</button>
+      <button class="dbtn" data-go="help"><i class="i-help">?</i>教學</button>
     </nav>
     <div id="restSheet">
       <h4 id="rsTitle">要休息一下嗎？</h4>
@@ -102,7 +104,7 @@
 
   <div id="modal" class="modal"><div class="mCard" id="mCard"></div></div>
   <div id="toast" class="toast"></div>
-  <div id="rotate" class="rotate"><div>把手機轉成直的玩比較舒服喔</div></div>
+  <div id="rotate" class="rotate"><div>手機轉成直的，玩起來比較舒服</div></div>
   <input type="file" id="upFile" accept="image/*" hidden>
 </div>
 

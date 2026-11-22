@@ -96,7 +96,7 @@
     moodNow();
   }
   document.addEventListener('click', e => {
-    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else go(g.dataset.go); }
+    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else go(g.dataset.go); }
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
 
@@ -230,9 +230,9 @@
   const gradeNeed = m => SX.gradeNeed(m.id);   // 遊戲裡還沒有官方要求那一級的山時，data.js 會往下找一級
   const gradeOpen = m => { const n = gradeNeed(m); return !n || SX.MOUNTAINS.some(x => SV.done[x.id] && gradeRank(x.id) >= SX.GRADE_ORDER.indexOf(n)); };
   const unlocked = m => SV.unlockAll || (diffOpen(m) && gradeOpen(m));
-  const lockText = m => { if (!diffOpen(m)) return `先登頂任何一座難度 ${leadOf(m).diff - 1} 顆星以上的山，這裡就會開放。`;
-    const g = SX.gradeOf(m.id), n = gradeNeed(m), off = SX.GRADES[g].need;
-    return `這是官方分級 ${g} 級的百岳，要先登頂過任何一座 ${n} 級以上的百岳才能申請。` + (off !== n ? `（真實世界要 ${off} 級以上；遊戲裡還沒有 ${off} 級的山，先用 ${n} 級）` : ''); };
+  const lockText = m => { if (!diffOpen(m)) return `登頂任一座 ${leadOf(m).diff - 1} 顆星以上的山，就能挑戰這裡。`;
+    const g = SX.gradeOf(m.id), n = gradeNeed(m);
+    return `官方分級 ${g} 級：爬過任一座 ${n} 級以上的百岳，就能挑戰。`; };
   // 入山管制（雪季 C+ 要三人以上組隊）：規則只在 SX.permitNeed；卡片和 startClimb 都只問這裡
   // 只在「從登山口出發」時檢查：已經在路上的那座（onTrail）接著走不擋，季節結束或隊友離開都不會把人困在山上
   // 擋住時回 { reason, minParty, have }，可以出發回 null。寵物不算人數
@@ -249,7 +249,7 @@
   function fitText(m){
     const r = recommendNext(); if (r && r.id === m.id) return '下一座就爬這裡吧！難度剛好，時間也不長';
     const top = Math.max(2, ...SX.MOUNTAINS.filter(x => SV.done[x.id]).map(x => x.diff));
-    return m.diff <= top ? '適合現在的你' : '有點挑戰，記得量力而為、多休息';
+    return m.diff <= top ? '適合現在的你' : '有點挑戰，量力而為、多休息';
   }
   // 地圖旗子（SX.PINS）：山群一根旗子，狀態由山群裡的山合起來——有一座登頂就戴皇冠、全部都鎖住才算鎖、正在爬其中一座就算這根
   function renderMap(){
@@ -317,17 +317,17 @@
       ${ok ? `<div class="rc-feat"><em>建議：</em>${fitText(m)}</div>` : ''}
       <div class="rc-feat"><em>紀錄：</em>${m.recNote}</div>
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
-      <div class="rc-feat"><em>終點：</em>${m.end}</div>${m.temple ? `<div class="rc-feat"><em>路上：</em>會經過${m.temple}（登頂後可以去擲筊、求籤）</div>` : ''}
+      <div class="rc-feat"><em>終點：</em>${m.end}</div>${m.temple ? `<div class="rc-feat"><em>路上：</em>會經過${m.temple}（登頂後能去擲筊、求籤）</div>` : ''}
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
-      ${permit ? `<div class="rc-feat"><em>入山管制：</em>${permit.reason}（目前 ${permit.have} 人）。到山友大廳邀好友一起爬這座山，對方接受後就會加入隊伍；寵物不算人數。</div>` : ''}
-      ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。想改爬${m.name}，要先從${trN}下山（${trN}的進度會歸零）。</div>
+      ${permit ? `<div class="rc-feat"><em>入山管制：</em>${permit.reason}（目前 ${permit.have} 人）。到山友大廳邀好友一起爬，對方接受就會入隊；寵物不算人數。</div>` : ''}
+      ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。想改爬${m.name}，要先下山（${trN}的進度會歸零）。</div>
         ${permit ? permitBtns(`<button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button>`) : `<div class="rc-btns"><button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button></div>
         <div class="rc-btns"><button class="cbtn go" id="rcSwitch">下山，改爬${m.name}</button></div>`}`
       : ok ? (permit ? permitBtns(`<button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}`)
         : `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
         <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`)
-      : `<div class="rc-feat"><em>還沒開放：</em>${lockText(m)}</div>
-        <div class="rc-btns"><button class="cbtn go" disabled>尚未解鎖</button></div>`}`;
+      : `<div class="rc-feat"><em>還不能爬：</em>${lockText(m)}</div>
+        <div class="rc-btns"><button class="cbtn go" disabled>還沒解鎖</button></div>`}`;
     card.classList.add('on'); card.scrollTop = 0;
     wxIcon($('#rcWx'), w.kind, w.time);
     if (!g) $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
@@ -335,7 +335,7 @@
     // 下山要按兩次（第一次換成確認字樣），避免誤按
     const dn = $('#rcDown'); if (dn) dn.onclick = e => { e.stopPropagation(); A.pop(); if (!dn.dataset.arm) { dn.dataset.arm = 1; dn.textContent = '再按一次確定下山（進度歸零）'; return; } goDown(id); hideRoute();
       // 下山插圖卡（scene_descend，還沒畫之前只有文字）
-      modal(`${SX.art.img('scene_descend', '', 'artImg summitArt')}<h3>下山了</h3><p class="summitBig">今天先走到這裡。山一直都在，下次從登山口再出發。</p><p class="summitBig">路上收集的寶物和照片，都好好收在背包和相簿裡。</p><div class="mBtns"><button class="cbtn go" id="dnOk">好</button></div>`);
+      modal(`${SX.art.img('scene_descend', '', 'artImg summitArt')}<h3>下山了</h3><p class="summitBig">今天先走到這裡。山一直都在，下次從登山口再出發。</p><p class="summitBig">路上的寶物和照片，都收在背包和相簿裡。</p><div class="mBtns"><button class="cbtn go" id="dnOk">好</button></div>`);
       $('#dnOk').onclick = () => { closeModal(); showRoute(id); }; };
     // 這張卡片的大綠鈕（cbtn go）只會出發去這張卡片的山（id）；回到另一座山用小按鈕、寫清楚山名（check 會檢查）
     if (permit) $('#rcInv').onclick = e => { e.stopPropagation(); A.pop(); hideRoute(); if (SX.social && SX.social.openInvite) SX.social.openInvite(id); };
@@ -382,10 +382,10 @@
       <div class="mBtns"><button class="cbtn go" id="petOk">決定了</button></div>`);
     $$('#mCard .pet').forEach(b => b.onclick = () => {
       const p = list.find(x => x.id === b.dataset.pet); A.pop();
-      if (!hasPet(p)) { $('#petMsg').textContent = `${p.name}還沒來：${p.unlockText || '之後才會遇到'}`; return; }
+      if (!hasPet(p)) { $('#petMsg').textContent = `${p.name}還沒來：${p.unlockText || '還在山裡等你'}`; return; }
       SV.pet = p.id || null; save();
       $$('#mCard .pet').forEach(x => x.classList.toggle('on', x === b));
-      $('#petMsg').textContent = p.desc + (p.id && p.id !== 'shiba' ? '（牠在步道上的樣子還在畫，先陪你在心裡走）' : '');
+      $('#petMsg').textContent = p.desc;
     });
     $('#petOk').onclick = () => { A.pop(); closeModal(); if (backId && screen === 'map') showRoute(backId); };
   }
@@ -395,7 +395,7 @@
   let lineT = 8, coldT = 0, lastEnc = null;
   function startClimb(id, force){
     const m = SX.M[id]; if (!m) return;
-    if (!force && !unlocked(m)) { toast('這座山還沒開放'); return; }
+    if (!force && !unlocked(m)) { toast('這座山還不能爬'); return; }
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
@@ -420,9 +420,22 @@
     SV.intro = today();
     if (SV.stats.walked > 0) return;
     modal(`<h3>開始登山囉</h3>
-      <ul class="introL"><li>放著不管，角色會自己走</li><li>關掉遊戲，也會繼續走</li><li>長按畫面，走快一點</li></ul>
+      <ul class="introL">${tutIntro().map(x => `<li>${x.t}</li>`).join('')}</ul>
       <div class="mBtns"><button class="cbtn go" id="inOk">好，出發！</button></div>`);
     $('#inOk').onclick = () => { A.pop(); closeModal(); };
+  }
+  // 新手教學（地圖頂列、登山畫面下方的「?」）：內容在 data.js 的 SX.TUTORIAL，一頁一個主題，左右翻頁
+  const tutIntro = () => SX.TUTORIAL.flatMap(p => p.items).filter(x => x.intro);
+  function openHelp(page = 0){
+    const P = SX.TUTORIAL, pg = P[page], last = page >= P.length - 1;
+    modal(`<button class="cbtn sm mBack" id="tuX">← 返回</button><h3>新手教學・${pg.title}</h3>
+      <ul class="awayL tutL">${pg.items.map(x => `<li>${awIco(x.icon)}<span><b>${x.h}</b>${x.t}</span></li>`).join('')}</ul>
+      <div class="tutDots">${P.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="mBtns">${page ? '<button class="cbtn" id="tuPrev">‹ 上一頁</button>' : ''}<button class="cbtn go" id="tuNext">${last ? '開始登山吧' : '下一頁 ›'}</button></div>`);
+    stagger($('#mCard'), '.tutL li');
+    $('#tuX').onclick = () => { A.pop(); closeModal(); };
+    if (page) $('#tuPrev').onclick = () => { A.pop(); openHelp(page - 1); };
+    $('#tuNext').onclick = () => { A.pop(); if (last) closeModal(); else openHelp(page + 1); };
   }
   const wxHere = () => calcWx(M ? M.id : null, 0, st && M ? st.dist / M.dist : 1);   // 登山客現在所在位置的天氣（雪線以下不會下雪）
   function buildMarks(){
@@ -477,7 +490,7 @@
       if (gained > 1 && total >= AWAY_DIARY) {
         noteAway(p, m, before, total, now, naps, rests, sg);   // 寫進離開時的日記，回到這座山的登山畫面就會打開
         if (!(screen === 'climb' && M === m)) notice(`你不在的時候，自己走了 ${Math.round(gained).toLocaleString('en-US')} 公尺，回山上看看日記吧`, 3200);
-      } else if (gained > 1) notice((p.dist >= m.dist - 2.5 ? '你不在的時候，已經走到山頂前面了' : `你不在的時候，自己走了 ${Math.round(gained)} 公尺`) + (sg.names.length ? `，到了「${sg.names[sg.names.length - 1]}」` : ''), 3200);   // 字在這裡就決定好（不要等到跳出來時才看進度）
+      } else if (gained > 1) notice((p.dist >= m.dist - 2.5 ? '你不在的時候，已經走到山頂前了' : `你不在的時候，自己走了 ${Math.round(gained)} 公尺`) + (sg.names.length ? `，到了「${sg.names[sg.names.length - 1]}」` : ''), 3200);   // 字在這裡就決定好（不要等到跳出來時才看進度）
       checkQuests();
     }
     save();
@@ -518,7 +531,7 @@
   // 奇遇的第一句：句號可能落在「」引號裡面，切開後要把引號補回來
   const firstSentence = s => { const x = s.split('。')[0], open = (x.match(/「/g) || []).length - (x.match(/」/g) || []).length; return x + '」'.repeat(Math.max(0, open)); };
   // 打瞌睡的說法跟著山走：郊山有涼亭、當天來回的高山找塊避風的大石頭、要過夜的大山才鑽睡袋
-  const napText = m => m.alt < 1500 ? '在涼亭打了個盹' : m.recMin <= 360 ? '找塊避風的大石頭靠著打了個盹' : '還窩進睡袋睡了一下';
+  const napText = m => m.alt < 1500 ? '在涼亭打了個盹' : m.recMin <= 360 ? '找塊避風的大石頭靠著打了個盹' : '窩進睡袋睡了一下';
   function awayLines(a){
     const m = M, L = [], km = x => (x / 1000).toFixed(1);
     const up = Math.round(altAt(m, a.to / m.dist) - altAt(m, a.from / m.dist)), summit = a.to >= m.dist - 2.5;
@@ -533,8 +546,8 @@
     if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ HUD.wxArt(w.kind, w.time), `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
     (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${firstSentence(e.text)}。` ]); });
     const sn = (a.segs || []).length, si = a.segItems || [];
-    if (sn) L.push([ 'summit_marker', `完成了 ${sn} 個小目標：${a.segs.slice(-3).join('、')}${sn > 3 ? ' 等' : ''}${si.length ? `，還順手撿到「${si.join('」「')}」` : ''}。` ]);
-    if (summit) L.push([ 'emo_cheer', '已經走到山頂前面了，就等你一起踏上山頂！' ]);
+    if (sn) L.push([ 'summit_marker', `完成 ${sn} 個小目標：${a.segs.slice(-3).join('、')}${sn > 3 ? ' 等' : ''}${si.length ? `，順手撿到「${si.join('」「')}」` : ''}。` ]);
+    if (summit) L.push([ 'emo_cheer', '已經走到山頂前，就等你一起登頂！' ]);
     // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲，再省小目標（登頂那行一定留著）
     for (const id of ['note_post', 'face_happy', 'summit_marker']) { const i = L.map(x => x[0]).lastIndexOf(id); if (L.length > 6 && i >= 0) L.splice(i, 1); }
     return L;
@@ -915,7 +928,7 @@
   // 山友照片依「離登山口幾公尺」歸到下一個 500 公尺點：0–500 的照片在 500 那一站看，最後一段在山頂看
   const bandOf = m => Math.ceil(Math.max(1, m) / 500) * 500;
   function wallHtml(list){
-    if (!list.length) return '<p class="summitBig">這一段還沒有山友照片，休息時可以上傳一張。</p>';
+    if (!list.length) return '<p class="summitBig">這一段還沒有山友照片，休息時上傳一張吧。</p>';
     return '<div class="grid">' + list.map((p, i) => `<div class="pol" style="margin:4px 0 12px;transform:rotate(${(i % 3 - 1) * 1.5}deg)"><img src="${p.img}"><p>${p.by}・${Math.round(p.alt).toLocaleString('en-US')} m</p></div>`).join('') + '</div>';
   }
   // 清掉以前存到的全黑照片（舊版在畫面還沒畫出來時拍照，會存成整張黑的）；開遊戲時檢查一次
@@ -1084,7 +1097,7 @@
   function bagHint(x){
     const s = x.season && SX.SEASON[x.season], ms = x.peaks || (x.drop === 'any' ? null : x.drop);
     if (x.rarity === '普通') { const ns = ms && ms.map(id => SX.GROUP[id] ? SX.GROUP[id].name : SX.M[id] ? SX.M[id].name : id);
-      return ns ? `可能在${ns.slice(0, 3).join('、')}${ns.length > 3 ? '這些山' : ''}撿到` : '哪一座山都撿得到，多走走就會遇到'; }
+      return ns ? `可能在${ns.slice(0, 3).join('、')}${ns.length > 3 ? '這些山' : ''}撿到` : '哪座山都撿得到，多走走就會遇到'; }
     const areas = ms ? [...new Set(ms.map(id => (SX.M[id] || {}).area).filter(Boolean))] : [];
     return `？ ${x.rarity === '傳說' ? '傳說中的寶物' : '稀有的寶物'}・${s ? `季節限定：${s.name}` : areas.length ? `聽說在${areas.slice(0, 2).join('、')}一帶的山上` : '聽說藏在某座山上'}`;
   }
@@ -1095,7 +1108,7 @@
       <div class="grp" style="margin-top:0">寶物 ${have} / ${SX.TREASURES.length}</div>
       <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''} ${RAR_CLS[x.rarity] || ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>`
         : `<button class="slot empty" data-hint="${x.id}" aria-label="還沒找到的寶物">${x.rarity === '普通' ? `<span class="sil">${trSvg(x)}</span>` : '<i>？</i>'}</button>`).join('')}</div>
-      <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點一件寶物看它的故事；點淡淡的影子，看哪裡找得到。' : '步道上會閃閃發亮的地方，點一下看看。'}</p>
+      <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點寶物看故事；點淡淡的影子，看哪裡找得到。' : '步道上閃閃發亮的地方，點一下看看。'}</p>
       <div class="grp">隱藏任務 ${Object.keys(SV.quests).length} / ${SX.QUESTS.length}</div>
       <ul class="quest">${SX.QUESTS.map(q => SV.quests[q.id] ? `<li class="done"><span>${q.name}<small>${q.desc}</small></span></li>` : `<li class="hid"><span>？？？<small>${q.hint}</small></span></li>`).join('')}</ul>`);
     $$('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop); });
@@ -1160,17 +1173,17 @@
   // 每一種都要 3～10 分鐘做得完（離開時自己走的路也算進走路）；need：要有帳號（acct）或正在一起爬（party）才排得到
   const DAILY_POOL = [
     { id:'walk',  big:true, name:'走 400 公尺', goal:400, unit:'m' },
-    { id:'seg',   big:true, name:'完成一個「這次的小目標」', goal:1 },
+    { id:'seg',   big:true, name:'完成一個小目標', goal:1 },
     { id:'walk3', big:true, kind:'walk', name:'走 800 公尺', goal:800, unit:'m' },
     { id:'walk2', big:true, kind:'walk', name:'走 1,200 公尺', goal:1200, unit:'m' },
     { id:'rest',  grp:0, name:'在長椅或觀景台休息一次', goal:1 },
     { id:'cairn', grp:0, name:'疊一座許願石堆', goal:1 },
     { id:'treasure', grp:0, name:'撿到一件寶物', goal:1 },
-    { id:'look',  grp:0, name:'在背包裡看一件寶物的故事', goal:1 },
+    { id:'look',  grp:0, name:'在背包看一件寶物的故事', goal:1 },
     { id:'cheer', grp:0, need:'party', name:'幫一起爬的好友加油', goal:1 },
     { id:'note',  grp:1, name:'讀一張樹洞便條', goal:1 },
     { id:'photo', grp:1, name:'拍一張風景照', goal:1 },
-    { id:'enc',   grp:1, name:'在路上遇到一次奇遇', goal:1 },
+    { id:'enc',   grp:1, name:'路上遇到一次奇遇', goal:1 },
     { id:'chat',  grp:1, need:'acct', name:'在山友大廳打聲招呼', goal:1 },
     { id:'summit', name:'登頂一座山', goal:1 },   // 不排進每日（一趟常常超過 10 分鐘），舊存檔當天抽到的還要認得
   ];
@@ -1248,17 +1261,17 @@
     const D = dailyState(), s = D.streak, wk = ((s - 1) % 7) + 1;
     const g3 = !SV.gifts.streak3 && s <= 3;   // 新手禮物：第一次連續上山 3 天，簽到送稀有寶物
     const signKind = wk === 7 ? 'rare' : g3 && s === 3 ? 'streak3' : 'common';
-    const tip = wk === 7 ? '今天是第 7 天，簽到可以拿稀有寶物！' : signKind === 'streak3' ? '連續 3 天了！今天簽到送一件稀有寶物' : g3 ? `再 ${3 - s} 天，簽到送一件稀有寶物` : `再 ${7 - wk} 天可以拿稀有寶物`;
+    const tip = wk === 7 ? '第 7 天了，簽到拿稀有寶物！' : signKind === 'streak3' ? '連續 3 天了！今天簽到送一件稀有寶物' : g3 ? `再 ${3 - s} 天，簽到送一件稀有寶物` : `再 ${7 - wk} 天拿稀有寶物`;
     const nClaim = (D.streakGot ? 0 : 1) + D.tasks.filter(t => t.done && !t.got).length;   // 可以領的件數（一鍵領取用）
     modal(`<h3>每日任務</h3>
       <div class="streakBox"><b>連續上山 ${s} 天</b><div class="streakDots">${[1,2,3,4,5,6,7].map(i => `<i class="${i <= wk ? 'on' : ''}${i === 7 || (i === 3 && g3) ? ' big' : ''}"></i>`).join('')}</div>
-        <small>${D.streakGot && signKind !== 'common' ? '今天的禮物已經領過了' : tip}</small>
+        <small>${D.streakGot && signKind !== 'common' ? '今天的禮物領過了' : tip}</small>
         <button class="cbtn ${D.streakGot ? '' : 'go'} sm" id="dyIn" ${D.streakGot ? 'disabled' : ''}>${D.streakGot ? '今天簽到過了' : '簽到'}</button></div>
       ${D.tasks.map((tk, i) => { const def = DAILY_POOL.find(x => x.id === tk.id) || { name:tk.id, goal:1 }; const f = Math.min(1, tk.n / def.goal);
         return `<div class="dyTask${tk.done ? ' done' : ''}"><div><b>${def.name}</b><div class="dyBar"><i style="width:${f * 100}%"></i></div>
           <small>${def.unit ? `${Math.floor(tk.n).toLocaleString('en-US')} / ${def.goal.toLocaleString('en-US')} m` : `${tk.n} / ${def.goal}`}</small></div>
           <button class="cbtn sm ${tk.done && !tk.got ? 'go' : ''}" data-dy="${i}" ${tk.done && !tk.got ? '' : 'disabled'}>${tk.got ? '已領取' : tk.done ? '領取' : '進行中'}</button></div>`; }).join('')}
-      <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務。完成後領取，會拿到一件寶物。</p>
+      <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務，完成就能領一件寶物。</p>
       <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">← 返回</button></div>`);
     // 領完都回到每日畫面
     $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; claimRewards([signKind]); };
@@ -1503,8 +1516,8 @@
   }
   const BWA_TXT = {
     holy:'<b style="color:#c13f2e">聖筊</b>：一平一凸，代表「好喔，可以」。',
-    laugh:'<b style="color:#c9853d">笑筊</b>：兩個平面朝上，神明在笑，<br>可能是答案你心裡早就知道了，或問題再想清楚一點。',
-    yin:'<b style="color:#6a5040">陰筊</b>：兩個凸面朝上，代表「不太適合」，<br>換個方式或換個時間再問看看。'
+    laugh:'<b style="color:#c9853d">笑筊</b>：兩個平面朝上，神明在笑，<br>答案也許你心裡早就知道，或把問題想清楚再問。',
+    yin:'<b style="color:#6a5040">陰筊</b>：兩個凸面朝上，代表「不太適合」，<br>換個方式或時間再問問看。'
   };
   $('#bBwa').onclick = () => busyWrap(done => {
     if (lotState && lotState.need) { confirmLot(done); return; }
@@ -1519,14 +1532,14 @@
   });
   $('#bLot').onclick = () => busyWrap(done => {
     A.unlock();
-    if (lotState && lotState.need) { $('#tMsg').innerHTML = `已經抽到第 ${lotState.no + 1} 支了，<br>請先擲筊問問看是不是這支。`; done(); return; }
+    if (lotState && lotState.need) { $('#tMsg').innerHTML = `已經抽到第 ${lotState.no + 1} 支，<br>先擲筊問問是不是這支。`; done(); return; }
     $('#tMsg').textContent = '搖啊搖…';
     const tube = $('#tubeInner'); tube.classList.remove('shake'); void tube.offsetWidth; tube.classList.add('shake'); A.rattle();
     setTimeout(() => {
       const no = Math.floor(Math.random() * SX.FORTUNES.length);
       lotState = { no, need:true, tries:(lotState ? lotState.tries : 0) };
       $('#tubeInner').insertAdjacentHTML('beforeend', `<g id="stick"><rect x="-2.5" y="-60" width="5" height="40" rx="2" fill="#f2d28d" stroke="#8a5a2a" stroke-width="1.2"/><text x="0" y="-66" text-anchor="middle" font-size="11" fill="#a8362a">${no + 1}</text></g>`);
-      $('#tMsg').innerHTML = `掉出一支籤：<b>${SX.FORTUNES[no].no}</b><br>按「擲筊」問問看是不是這支。`;
+      $('#tMsg').innerHTML = `掉出一支籤：<b>${SX.FORTUNES[no].no}</b><br>按「擲筊」問問是不是這支。`;
       tube.classList.remove('shake'); done();
     }, 1300);
   });
@@ -1568,7 +1581,7 @@
     const id = 'xiangshan', date = SV.stamps[id] || new Date().toLocaleDateString('zh-TW');
     SV.stamps[id] = date; save();
     modal(`<h3>集印帳</h3><div style="width:190px;margin:0 auto 14px;animation:pop .4s cubic-bezier(.34,1.8,.5,1)">${stampSvg(id, date)}</div>
-      <p class="summitBig">蓋好了！集印帳裡可以看到。</p><div class="mBtns"><button class="cbtn go" id="sOk">好</button></div>`);
+      <p class="summitBig">蓋好了！到集印帳看看。</p><div class="mBtns"><button class="cbtn go" id="sOk">好</button></div>`);
     $('#sOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };   // 蓋到章：集印帳徽章馬上算
     done();
   });
@@ -1582,7 +1595,7 @@
     if (albumTab === 'enc') return renderEncLog(body);
     if (albumTab === 'baiyue') return renderBaiyue(body);
     if (albumTab === 'photos') {
-      if (!SV.photos.length) { body.innerHTML = '<div class="empty">還沒有照片。<br>每走 500 公尺會自動拍一張拍立得，<br>在長椅和觀景台也可以自己拍。</div>'; return; }
+      if (!SV.photos.length) { body.innerHTML = '<div class="empty">還沒有照片。<br>每走 500 公尺自動拍一張拍立得，<br>在長椅和觀景台也能自己拍。</div>'; return; }
       let html = '';
       SX.MOUNTAINS.forEach(m => { const ps = SV.photos.filter(p => p.id === m.id); if (!ps.length) return;
         html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol" style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${p.cap}</p></div>`).join('') + '</div>'; });
@@ -1594,7 +1607,7 @@
         <div><label>拍照地點的海拔（公尺）</label><input type="number" id="upAlt" inputmode="numeric"></div>
         <div><span class="alt500" id="upBand"></span></div>
         <button class="cbtn go" id="upGo">選一張照片上傳</button>
-        <p>照片會依海拔歸到下一個 500 公尺點，走到那裡的山友才看得到，步道不會被照片塞滿。現在先存在這支手機裡。</p></div>`;
+        <p>照片依海拔歸到下一個 500 公尺點，走到那裡的山友才看得到，步道不會被照片塞滿。</p></div>`;
       SX.MOUNTAINS.forEach(m => { const ps = SV.userPhotos.filter(p => p.mountainId === m.id).sort((a, b) => a.m - b.m); if (!ps.length) return;
         html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol" data-up="${p.id}" style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${Math.round(p.alt).toLocaleString('en-US')} m・${bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m'}照片牆</p></div>`).join('') + '</div>'; });
       if (!SV.userPhotos.length) html += '<div class="empty" style="padding:30px 20px">還沒有上傳過照片。</div>';
@@ -1619,12 +1632,12 @@
   const byPlay = r => SX.MOUNTAINS.find(m => m.by === r);   // 百岳排名 → 遊戲裡的山（連結只寫在山身上的 by）
   function renderBaiyue(body){
     const isDone = r => { const m = byPlay(r); return !!(m && SV.done[m.id]); };
-    const n = SX.BAIYUE.filter(p => isDone(p.rank)).length, open = SX.BAIYUE.filter(p => byPlay(p.rank)).length;
-    body.innerHTML = `<div class="colHead">百岳 <b>${n}</b>／${SX.BAIYUE.length}・遊戲裡能爬 ${open} 座</div>` + SX.BAIYUE_GROUPS.map(g => {
+    const n = SX.BAIYUE.filter(p => isDone(p.rank)).length;
+    body.innerHTML = `<div class="colHead">百岳 <b>${n}</b>／${SX.BAIYUE.length}</div>` + SX.BAIYUE_GROUPS.map(g => {
       const rs = g.peaks.map(p => SX.BYNAME[p[0]]);
       return `<div class="grp byG">${g.name}<small>${rs.filter(p => isDone(p.rank)).length}／${rs.length}</small></div><div class="byGrid">` + rs.map(p => {
         const s = isDone(p.rank) ? 'done' : byPlay(p.rank) ? 'open' : 'soon';
-        return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>尚未開放</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;
+        return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>敬請期待</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;
       }).join('') + '</div>';
     }).join('');
     stagger(body, '.byG');
@@ -1632,12 +1645,12 @@
   }
   function openBaiyue(rank){
     const p = SX.BY[rank], m = byPlay(rank), G = SX.GRADES[p.grade];
-    const state = !m ? '尚未開放，之後的更新會加進遊戲' : SV.done[m.id] ? `已登頂 ${SV.done[m.id]} 次` : unlocked(m) ? '遊戲裡可以爬，還沒登頂' : '遊戲裡有這座山，還沒解鎖';
+    const state = !m ? '這座山還在路上，敬請期待' : SV.done[m.id] ? `已登頂 ${SV.done[m.id]} 次` : unlocked(m) ? '可以出發，還沒登頂' : '還沒解鎖';
     modal(`<h3>${p.name}</h3><div class="byInfo paper">
         <div><span>百岳排名</span><b>第 ${p.rank} 名</b></div>
         <div><span>海拔</span><b>${p.alt.toLocaleString('en-US')} m</b></div>
         <div><span>官方分級</span><b>${gradeChip(p.grade)}</b></div>
-        <p>${p.grade} 級：${G.text}。${G.need ? `要先登頂過 ${G.need} 級以上的百岳才能申請。` : '不用先有登山經驗。'}</p>
+        <p>${p.grade} 級：${G.text}。${G.need ? `要先登頂 ${G.need} 級以上的百岳才能申請。` : '不用先有百岳經驗。'}</p>
         <div><span>山群</span><b>${p.group}</b></div>
         <div><span>狀態</span><b>${state}</b></div></div>
       <div class="mBtns" style="margin-top:12px">${m ? '<button class="cbtn" id="byMap">到地圖看看</button>' : ''}<button class="cbtn go" id="byOk">好</button></div>`);
@@ -1720,7 +1733,7 @@
   }
   function renderBadges(body){
     const earned = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0), all = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0);
-    body.innerHTML = `<div class="colHead">徽章 <b>${earned}</b> / ${all} 枚・點一下看每個等級</div>` + SX.BADGES.map(b => {
+    body.innerHTML = `<div class="colHead">徽章 <b>${earned}</b> / ${all} 枚・點徽章看等級</div>` + SX.BADGES.map(b => {
       const L = badgeLevels(b), n = badgeGot(b), t = n - 1, nx = n < L.length ? n : -1;
       const v = badgeValue(b), show = x => Math.floor(x).toLocaleString('en-US');
       const goal = L[nx >= 0 ? nx : t].goal, f = Math.min(1, v / goal);
@@ -1783,11 +1796,11 @@
       <div class="setRow"><h4>音效<button class="tgl ${s.sound ? 'on' : ''}" id="sSound"></button></h4>
         <input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.vol}"><p>腳步聲、鳥叫、雨聲和廟裡的鐘聲。</p></div>
       <div class="setRow"><h4>人在山上，定位加速<button class="tgl ${s.gps ? 'on' : ''}" id="sGps"></button></h4>
-        <p>開啟後會用手機定位。你人真的在這座山附近（大約 3 公里內）的時候，真的走一公尺，遊戲裡就多走三公尺。不在山上就沒有作用。只有遊戲畫面開著的時候才會計算，比較耗電。</p></div>
+        <p>開啟後用手機定位：人在這座山附近（約 3 公里內）時，真的走一公尺，步道上就多走三公尺。不在山上沒有作用；只在畫面開著時計算，比較耗電。</p></div>
       <div class="setRow"><h4>通知<button class="tgl ${SX.social && SX.social.pushOn ? 'on' : ''}" id="sPush"></button></h4>
-        <p>山友邀你一起爬、對方接受邀請、還有關掉遊戲後登山客快走到山頂時，手機會跳通知。iPhone 要先「加入主畫面」，從主畫面打開才收得到。</p></div>
+        <p>山友邀你一起爬、對方接受邀請，或關掉遊戲後快到山頂時，手機會跳通知。iPhone 要先「加入主畫面」，從主畫面打開才收得到。</p></div>
       <div class="setRow"><h4 id="tipsH">操作小抄</h4>
-        <p>放著不管，角色會照山友實際紀錄的速度慢慢走，關掉遊戲也會繼續。長按畫面（或按住 W／↑）可以走快一點，但比較累。點長椅或觀景台可以休息、拍照、疊石頭。</p></div>
+        <p>${tutIntro().map(x => x.t).join('')}</p><button class="cbtn sm" data-go="help">看新手教學</button></div>
       ${s.dev || devPeek ? `<div class="setRow"><h4>開發者選項</h4>
         ${s.dev ? `<p>已解鎖</p><div class="devBtns">
           <button class="cbtn sm" id="dFast">${s.devOn && s.fast ? '關閉' : '開啟'}快轉 ×20</button>
@@ -1869,7 +1882,7 @@
     if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
     SV.set.gps = false; save(); $('#gpsTag').classList.remove('on');
     if (screen === 'settings') renderSettings();
-    toast('沒有拿到定位權限，定位加速先關掉了。想用的話，到手機設定允許這個網站使用位置，再回來打開', 5200);
+    toast('沒有定位權限，定位加速先關掉了。想用的話，到手機設定允許這個網站使用位置，再回來打開', 5200);
   }
 
   // ───────── 啟動 ─────────

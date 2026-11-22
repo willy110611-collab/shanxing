@@ -31,7 +31,7 @@
     catch(e){ throw new Error('連不上伺服器，檢查一下網路'); }
     const d = await r.json().catch(() => ({}));
     if (r.status === 401 && acct) { throw new Error('登入失效，請到「我的帳號」用復原碼重新登入'); }
-    if (!r.ok) throw new Error(d.error || ('伺服器錯誤 ' + r.status));
+    if (!r.ok) throw new Error(d.error || ('連線出了點狀況（' + r.status + '），晚點再試'));
     return d;
   }
   async function register(name){
@@ -72,10 +72,10 @@
     if (PZ()) PZ().unmount();
     body.classList.remove('plazaMode');
     body.innerHTML = `<div class="mCard lbWelcome"><h3>第一次來到山友大廳</h3>
-      <p class="summitBig">取一個暱稱，其他山友會看到這個名字。不急的話，也可以先不要。</p>
+      <p class="summitBig">取個暱稱，其他山友會看到這個名字。不急的話，可以先不要。</p>
       <input id="nmIn" class="txtIn" maxlength="12" placeholder="暱稱（最多 12 個字）">
       <div class="mBtns"><button class="cbtn" id="nmNo">先不要</button><button class="cbtn go" id="nmOk">進入大廳</button></div>
-      <p class="tiny">已經有帳號（換新手機）？在這裡貼上復原碼：</p>
+      <p class="tiny">已經有帳號（換新手機）？貼上復原碼：</p>
       <form class="pw" id="rsF0"><input id="rsIn0" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>`;
     $('#nmNo').onclick = () => { if (A().pop) A().pop(); if (G().go) G().go('map'); };
     $('#nmOk').onclick = async () => {
@@ -88,7 +88,7 @@
   }
   function showRecovery(first, then){
     const mc = $('#mCard'); mc.innerHTML = `<h3>${first ? '帳號建好了！' : '我的復原碼'}</h3>
-      <p class="summitBig">這是你的<b>復原碼</b>，換手機或清掉瀏覽器資料時，要用它找回帳號。<br>請截圖或抄下來，不要給別人。</p>
+      <p class="summitBig">這是你的<b>復原碼</b>，換手機或清掉瀏覽器資料時，用它找回帳號。<br>請截圖或抄下來，不要給別人。</p>
       <div class="codeBox" id="rcBox">${esc(acct.token)}</div>
       <div class="mBtns"><button class="cbtn" id="rcCopy">複製</button><button class="cbtn go" id="rcOk">我存好了</button></div>`;
     $('#modal').classList.add('on');
@@ -176,7 +176,7 @@
     mc.innerHTML = `<h3>${esc(p.name)}</h3>
       ${fr ? `<p class="summitBig">你們是好友。要邀對方一起爬哪座山？</p><select id="pcMt" class="txtIn">${opts}</select>
         <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcInv">邀請一起爬</button></div>`
-      : `<p class="summitBig">加為好友之後，就能邀請對方一起爬山。</p>
+      : `<p class="summitBig">加好友後，就能邀對方一起爬山。</p>
         <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcAdd">加好友</button></div>`}`;
     $('#pcX').onclick = () => $('#modal').classList.remove('on');
     if ($('#pcAdd')) $('#pcAdd').onclick = async () => {
@@ -190,9 +190,9 @@
     const body = $('#lobbyBody'); if (!body) return;
     const inc = invites.filter(v => v.guest === acct.id && v.status === 'pending');
     const opts = mtOpts();
-    body.innerHTML = `${invMt ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁邊按「邀請」（山已經幫你選好了）。對方接受後就會加入你的隊伍。</p></div>` : ''}
+    body.innerHTML = `${invMt ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁按「邀請」（山已經選好了），對方接受就會加入你的隊伍。</p></div>` : ''}
       <div class="setRow"><h4>我的好友碼 <span class="codeTag">${esc(acct.code)}</span></h4>
-        <p>把好友碼給朋友，對方輸入後就會互相成為好友。</p>
+        <p>把好友碼給朋友，對方輸入後就成為好友。</p>
         <form class="pw" id="addF"><input id="fcIn" maxlength="8" placeholder="輸入朋友的好友碼" autocapitalize="characters"><button class="cbtn sm">加好友</button></form></div>
       ${inc.length ? `<div class="setRow"><h4>收到的邀請</h4>${inc.map(v => `<div class="frRow"><span><b>${esc(v.host_name)}</b> 邀你一起爬 <b>${esc(mName(v.mountain))}</b></span>
         <span><button class="cbtn go sm" data-acc="${v.id}">一起去</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
@@ -259,7 +259,7 @@
       <div class="setRow"><h4>暱稱</h4><form class="pw" id="nmF"><input id="nmIn2" maxlength="12" value="${esc(acct.name)}"><button class="cbtn sm">改名</button></form></div>
       <div class="setRow"><h4>復原碼</h4><p>換手機時用來找回帳號，不要給別人。</p><button class="cbtn sm" id="showRc">顯示復原碼</button></div>
       <div class="setRow"><h4>換手機：用復原碼登入</h4><form class="pw" id="rsF"><input id="rsIn" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>
-      <div class="setRow"><h4>雲端存檔</h4><p>有帳號時，進度每 3 分鐘自動備份到雲端（照片不備份）。換手機登入後，可以把進度載回來。</p>
+      <div class="setRow"><h4>雲端存檔</h4><p>進度每 3 分鐘自動備份到雲端（照片不備份），換手機登入後就能載回來。</p>
         <div class="mBtns" style="justify-content:flex-start"><button class="cbtn sm" id="cdUp">立刻備份</button><button class="cbtn sm" id="cdDown">從雲端載入</button></div></div>
       <div class="setRow"><h4>我上傳的照片</h4><div id="myPh"><p>讀取中…</p></div></div>`;
     $('#nmF').onsubmit = async e => { e.preventDefault(); const v = $('#nmIn2').value.trim(); if (!v) return;
@@ -272,7 +272,7 @@
     api('/photos?mine=1').then(d => {
       const L = d.photos || [], st = { pending: '審核中', ok: '已公開', hidden: '未通過' };
       $('#myPh').innerHTML = L.length ? '<div class="grid">' + L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}?t=${encodeURIComponent(acct.token)}" loading="lazy"><p>${esc(mName(p.mountain))}・${p.alt} m・${st[p.status] || p.status}</p></div>`).join('') + '</div>'
-        : '<p>還沒有上傳過。休息時按「上傳這裡的照片」，審核通過後其他山友走到同一段就看得到。</p>';
+        : '<p>還沒有上傳過。休息時按「上傳照片」，審核通過後，走到同一段的山友就看得到。</p>';
     }).catch(e => { const el = $('#myPh'); if (el) el.innerHTML = `<p>${esc(e.message)}</p>`; });
   }
 
@@ -339,20 +339,20 @@
   async function offerCloudLoad(){
     try {
       const d = await api('/save'); if (!d.data) { toast('雲端沒有存檔，從現在開始會自動備份'); return; }
-      if (confirm(`雲端有 ${new Date(d.updated).toLocaleString('zh-TW')} 的存檔，要載入嗎？\n（這支手機目前的進度會被取代，照片不會跟著搬過來）`)) SX.game.applySave(d.data);
+      if (confirm(`雲端有 ${new Date(d.updated).toLocaleString('zh-TW')} 的存檔，要載入嗎？\n（會取代這支手機的進度，照片不會搬過來）`)) SX.game.applySave(d.data);
     } catch(e){ toast(e.message, 3000); }
   }
   setInterval(() => { if (acct && !$('#scrLobby.on')) api('/invites').then(i => { invites = i.invites || []; checkParty(); updateBadge(); }).catch(() => {}); }, 45000);
 
   // ───────── 共享照片：上傳、500 m 照片牆、檢舉 ─────────
   function uploadPhoto(canvas, rec){
-    if (!acct) { toast('照片先存在手機裡；到山友大廳建帳號後，上傳的照片才會分享給其他山友', 3600); return; }
+    if (!acct) { toast('照片存在手機裡；到山友大廳建帳號，上傳的照片才會分享給山友', 3600); return; }
     canvas.toBlob(async blob => {
       if (!blob) return;
       try {
         const q = `?mountain=${encodeURIComponent(rec.mountainId)}&m=${rec.m}&alt=${rec.alt}`;
         await api('/photos' + q, { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
-        toast('照片送出了，審核通過後其他山友走到這一段就看得到', 3600);
+        toast('照片送出了，審核通過後，走到這一段的山友就看得到', 3600);
       } catch(e){ toast('分享沒成功：' + e.message, 3600); }
     }, 'image/jpeg', 0.75);
   }
@@ -419,7 +419,7 @@
     const asked = on ? askPermission() : null;
     // 用 getRegistration（馬上回答），不用 serviceWorker.ready（背景程式沒裝好時會永遠等下去）
     const reg = await navigator.serviceWorker.getRegistration();
-    if (!reg) throw new Error('遊戲還在準備背景程式，關掉重開一次再試');
+    if (!reg) throw new Error('遊戲還在準備，關掉重開再試一次');
     let sub = await reg.pushManager.getSubscription();
     if (!on) {
       if (sub) { await api('/push/sub', { method: 'DELETE', json: { endpoint: sub.endpoint } }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
