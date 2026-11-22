@@ -480,8 +480,15 @@ function pinGeom(c, m){
     x0:left, x1:left + bw + 4, y0:-PIN_ART_H, y1:py + ph / 2 + 2 };
 }
 // 畫路標美術圖：腳底在原點；木牌那幾列切段，名字長時只拉寬純木牌的部分（木樁、小旗不變形）
-function drawPinArt(c, g){
-  const f = g.f, k = g.k, img = g.art.img, ty = PIN_SLICE.top * f.h, x0 = -PIN_FOOT * f.w * k;
+// 褪色版路標圖：只在第一次用到時套一次濾鏡存起來（每格對每支路標套 ctx.filter 在手機上非常慢）
+const grayPins = new WeakMap();
+function grayPinImg(img){
+  let g = grayPins.get(img);
+  if (!g){ g = mk(img.width, img.height); const x = g.getContext('2d'); x.filter = LOCK_GRAY; x.drawImage(img, 0, 0); grayPins.set(img, g); }
+  return g;
+}
+function drawPinArt(c, g, gray){
+  const f = g.f, k = g.k, img = gray ? grayPinImg(g.art.img) : g.art.img, ty = PIN_SLICE.top * f.h, x0 = -PIN_FOOT * f.w * k;
   c.drawImage(img, f.x, f.y, f.w, ty, x0, -PIN_ART_H, f.w * k, ty * k);
   const xs = [0].concat(PIN_SLICE.xs.map(v => v * f.w), [f.w]);
   let dx = g.left;
@@ -532,8 +539,7 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
     c.strokeStyle = INK; c.lineWidth = 4.6; c.stroke(); c.strokeStyle = '#9a6a3f'; c.lineWidth = 2.6; c.stroke(); }
   c.lineWidth = 1; c.strokeStyle = INK; c.lineJoin = 'round';
   if (G.art){
-    if (locked) c.filter = LOCK_GRAY;   // 還沒解鎖：旗子、木牌褪色
-    drawPinArt(c, G); c.filter = 'none';
+    drawPinArt(c, G, locked);   // 還沒解鎖：旗子、木牌褪色
     c.save(); c.translate(G.cx, py); c.rotate(G.tilt);
     c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-G.need / 2 + 8.4, 0, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke();
     c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, .6);
