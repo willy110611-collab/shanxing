@@ -30,7 +30,8 @@ const S = {
   T:null, dirty:true, running:false, raf:0, last:0, t:0,
   cb:null, bgCb:null, hits:[], pos:{}, hover:null, sel:null, anim:{}, tw:{},
   sprites:null, shadowSp:null, rays:null, tb1:null, tb2:null,
-  ripples:[], puffs:[], drift:[], paths:[], ro:null, lastTap:{t:0,x:0,y:0}
+  ripples:[], puffs:[], drift:[], paths:[], ro:null, lastTap:{t:0,x:0,y:0},
+  bx:{x0:0, x1:WW, y0:0, y1:WH}      // 相機可以看的範圍（有立體地圖美術圖時＝圖的範圍）
 };
 
 // ───────── 小工具：手繪圓角、雲朵精靈 ─────────
@@ -127,7 +128,18 @@ function drawRock(L, x, y, s, sd){
   L.lineWidth = .4; L.strokeStyle = INK; L.stroke();
 }
 
+// 立體地圖美術圖（map_taiwan）：圖高撐滿世界高度、置中；山的位置用 tools/mapfit.js 算好的投影（manifest 的 fit）換算
+const MAP_ART = 'map_taiwan';
+const ART_PADT = 90;      // 圖上方再多一條海（把圖頂端鏡射接上去），北部的山才不會卡在頂部按鈕底下
+function artMap(){ const e = SX.art && SX.art.get(MAP_ART); return e && e.fit ? e : null; }
+function buildArtTerrain(D, e){
+  const bh = WH, bw = WH * e.w / e.h, bx0 = (WW - bw) / 2, F = e.fit, p = F.p;
+  S.bx = { x0:bx0, x1:bx0 + bw, y0:-ART_PADT, y1:bh };
+  const P = (lon, lat) => { const u = lon - F.lon, v = lat - F.lat, z = p[6] * u + p[7] * v + 1; return [bx0 + (p[0] * u + p[1] * v + p[2]) / z * bw, (p[3] * u + p[4] * v + p[5]) / z * bh]; };
+  return { art:e, P, hAt:() => 0, poly:D.coast.map(q => P(q[0], q[1])), runs:[], rect:[bx0, 0, bw, bh] };
+}
 function buildTerrain(D){
+  S.bx = { x0:0, x1:WW, y0:0, y1:WH };
   const P = makeProj(D.coast), T = { P };
   const poly = densePoly(D.coast.map(p => P(p[0], p[1])));
   const ridge = D.ridge.map(p => P(p[0], p[1]));
@@ -309,19 +321,21 @@ function buildScene(){
 function ensure(){
   if (!S.cv || !S.dirty || !S.data.coast.length) return;
   if (!S.sprites) makeSprites();
-  S.T = buildTerrain(S.data); buildScene();
+  const e = artMap(); S.T = e ? buildArtTerrain(S.data, e) : buildTerrain(S.data); buildScene();
 }
 
 // ───────── 相機 ─────────
 function clampCam(o){
   const s = S.base * o.z, hw = S.vw / (2 * s), hh = S.vh / (2 * s);
   o.z = clamp(o.z, 1, 3.4);
-  o.x = WW <= 2 * hw ? WW / 2 : clamp(o.x, hw, WW - hw); o.y = WH <= 2 * hh ? WH / 2 : clamp(o.y, hh, WH - hh);
+  const B = S.bx, bw = B.x1 - B.x0, bh = B.y1 - B.y0;
+  o.x = bw <= 2 * hw ? (B.x0 + B.x1) / 2 : clamp(o.x, B.x0 + hw, B.x1 - hw); o.y = bh <= 2 * hh ? (B.y0 + B.y1) / 2 : clamp(o.y, B.y0 + hh, B.y1 - hh);
 }
 function homeView(){
   const T = S.T; let z = 1.3, cx = 280, cy = 412;
   if (T){ let a = 1e9, b = -1e9, c = 1e9, d = -1e9; T.poly.forEach(p => { a = Math.min(a,p[0]); b = Math.max(b,p[0]); c = Math.min(c,p[1]); d = Math.max(d,p[1]); });
-    cx = (a + b) / 2; cy = (c + d) / 2 - LIFT * .3 + SLAB * .5; z = Math.min(S.vw * .94 / ((b - a + 16) * S.base), S.vh * .92 / ((d - c + LIFT + 24) * S.base)); }
+    const lift = T.art ? 0 : LIFT;   // 美術地圖：山已經畫在圖上，不用預留抬升高度
+    cx = (a + b) / 2; cy = (c + d) / 2 - lift * .3 + (T.art ? -ART_PADT * .45 : SLAB * .5); z = Math.min(S.vw * .94 / ((b - a + 16) * S.base), S.vh * .92 / ((d - c + lift + 24) * S.base)); }
   return { x:cx, y:cy, z:clamp(z, 1, 2.2) };
 }
 function reset(snap){
@@ -531,10 +545,13 @@ function render(t){
   if (!S.T){ return; }
   const ps = clamp(.72 + .22 * cam.z, .85, 1.5) * (vw < 500 ? 1.05 : 1);
   c.setTransform(dpr * s, 0, 0, dpr * s, dpr * (vw / 2 - cam.x * s), dpr * (vh / 2 - cam.y * s));
-  drawRipples(c, t);
-  drawPuffs(c, t);
-  const T = S.T; c.drawImage(T.layer, T.lox, T.loy, T.lw, T.lh);
-  drawFoam(c, t);
+  const T = S.T;
+  if (T.art){   // 美術圖已經有海浪和雲
+    const f = T.art.frames[0], r = T.rect, sh = f.h * ART_PADT / r[3];
+    c.drawImage(T.art.img, f.x, f.y, f.w, f.h, r[0], r[1], r[2], r[3]);
+    c.save(); c.scale(1, -1); c.drawImage(T.art.img, f.x, f.y, f.w, sh, r[0], 0, r[2], ART_PADT); c.restore();
+  }
+  else { drawRipples(c, t); drawPuffs(c, t); c.drawImage(T.layer, T.lox, T.loy, T.lw, T.lh); drawFoam(c, t); }
   drawDrift(c, t);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   S.hits = [];
@@ -568,7 +585,7 @@ function resize(){
   if (w === S.vw && h === S.vh && dpr === S.dpr) return;
   S.vw = w; S.vh = h; S.dpr = dpr; S.cv.width = Math.round(w * dpr); S.cv.height = Math.round(h * dpr);
   S.cv.style.width = w + 'px'; S.cv.style.height = h + 'px';
-  S.base = Math.max(w / WW, h / WH); makeRays();
+  S.base = Math.max(w / (S.bx.x1 - S.bx.x0), h / (S.bx.y1 - S.bx.y0)); makeRays();
   ensure();
   if (!S.camInit){ reset(true); S.camInit = true; } else { clampCam(S.tgt); clampCam(S.cam); }
 }
@@ -633,6 +650,9 @@ function bindInput(cv){
   cv.addEventListener('click', e => e.stopPropagation());   // 避免觸發 #mapWrap 的舊點擊處理
   cv.addEventListener('contextmenu', e => e.preventDefault());
 }
+
+// 美術圖晚一點才載完：換成立體地圖，重新算山的位置與相機範圍
+if (SX.art) SX.art.onLoad(() => { if (!artMap() || (S.T && S.T.art)) return; S.dirty = true; ensure(); if (S.vw){ S.base = Math.max(S.vw / (S.bx.x1 - S.bx.x0), S.vh / (S.bx.y1 - S.bx.y0)); reset(true); } });
 
 // ───────── 公開 API ─────────
 SX.worldmap = {

@@ -28,8 +28,9 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
   # 尺寸上限以手機為準（畫面 375 寬 × 2 倍像素），再大只是多下載
   if ($name -match $opaque) {
     $out = Join-Path $here "$name.jpg"
-    $max = if ($name -like 'ground_*') { 768 } else { 1600 }
-    ffmpeg -v error -y -i $_.FullName -vf "scale='min($max,iw)':-2" -q:v 4 $out
+    # 長邊不超過 $max（直式的地圖以高度算）
+    $max = if ($name -like 'ground_*') { 768 } elseif ($name -like 'map_*') { 2048 } else { 1600 }
+    ffmpeg -v error -y -i $_.FullName -vf "scale='min(iw,$max)':'min(ih,$max)':force_original_aspect_ratio=decrease" -q:v 4 $out
   } else {
     # 透明圖存 WebP（同畫質比 png 小十倍左右）
     $out = Join-Path $here "$name.webp"
@@ -48,3 +49,7 @@ $items = Get-ChildItem $here -File | Where-Object { $_.Extension -match '^\.(png
 $json = '[' + (($items) -join ",`n ") + ']'
 [IO.File]::WriteAllText((Join-Path $here 'manifest.json'), $json + "`n", (New-Object System.Text.UTF8Encoding $false))
 Write-Host "清單已更新：$(@($items).Count) 張"
+# 立體地圖：跟真實海岸線對齊，結果寫進 manifest 的 fit（山的位置靠這個換算）
+$node = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $node) { $node = 'C:\Program Files\nodejs\node.exe' }
+$fitTool = Join-Path $here '..\tools\mapfit.js'
+if ((Test-Path $fitTool) -and (Get-ChildItem $here -File -Filter 'map_*')) { & $node $fitTool }

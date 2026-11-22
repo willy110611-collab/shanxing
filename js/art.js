@@ -96,7 +96,7 @@ function load(){
     return Promise.all(list.map(it => new Promise(res => {
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
       const u = 'art/' + file + '?v=' + it.v;      // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
-      img.onload = () => { try { lib[id] = prep({ id, file }, img); urls[id] = u; } catch (e) {} res(); };
+      img.onload = () => { try { lib[id] = prep({ id, file }, img); lib[id].fit = it.fit || null; urls[id] = u; } catch (e) {} res(); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
       img.onerror = () => res();
       img.src = u;
     }))).then(() => { loaded = true; listeners.forEach(fn => { try { fn(); } catch (e) {} }); });
