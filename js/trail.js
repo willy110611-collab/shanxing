@@ -242,7 +242,7 @@ function buildTex(){
   TEX.bank = tr === 'wood' ? null : mirTex('trail_bank', BANK_M, [0.14, 0.32, 0.87, 0.68], true, false, 512);   // 路肩土坎切面：泥土、石頭、樹根（木棧道沒有土坎）
 }
 // 土坎切面貼圖：圖寬代表沿路 BANK_M 公尺、圖高代表 BANK_H 公尺（土坎約 0.12～0.28 公尺高），BANK_J 段以內才貼（最後 6 段淡入）
-const BANK_M = 2.6, BANK_H = 0.32, BANK_J = 26;
+const BANK_M = 2.6, BANK_H = 0.32, BANK_J = 12;
 // 切面是一片斜斜往遠處延伸的四邊形：貼圖橫向沿著路往前、直向從土坎上緣往下（用這一段近端的兩個點和遠端上緣的點對齊）
 function bankFill(T, side, z0, bh, a){
   const ux = (tX2[1] - tX1[1]) / SEG, uy = (tY2[1] - tY1[1]) / SEG, vx = (tX1[0] - tX1[1]) / bh, vy = (tY1[0] - tY1[1]) / bh;
@@ -1712,8 +1712,8 @@ function drawWorld(b, t){
         if (side < 0 ? tX1[n1] > -10 : tX1[n1] < W + 10) { ctx.fillStyle = LUT[19 * FOGN + fi]; quad(tX1[n1], tY1[n1], tX1[n1] + side * 10 * s1, tY1[n1] + 16 * s1, tX2[n1] + side * 10 * s2, tY2[n1] + 16 * s2, tX2[n1], tY2[n1]); }
         // 土坎切面（第 0 格）：土色；左邊那面朝右、迎著右上來的光，右邊那面背光
         ctx.fillStyle = LUT[(21 + (side < 0 ? 1 + (lvS ? 1 : 0) : 0)) * FOGN + fi]; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]);
-        const bA = TEX.bank ? ta * farA(j, BANK_J, 6) * (1 - snowAmt) : 0, bh0 = bankH(i, side);
-        if (bA > 0.03 && tY1[0] - tY1[1] > 1.5) {   // 土坎切面貼圖；右邊那面背光再壓暗一點
+        const bA = TEX.bank ? ta * farA(j, BANK_J, 4) * (1 - snowAmt) * clamp((Math.abs(tX1[0] - tX1[1]) + tY1[0] - tY1[1] - 3) / 3, 0, 1) : 0, bh0 = bankH(i, side);   // 切面在畫面上不到幾像素時慢慢淡掉
+        if (bA > 0.03) {   // 土坎切面貼圖；右邊那面背光再壓暗一點
           bankFill(TEX.bank, side, z0, bh0, bA); quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]);
           if (side > 0) { ctx.globalAlpha = bA * 0.35; ctx.fillStyle = '#2c3560'; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]); }
           ctx.globalAlpha = fade;
