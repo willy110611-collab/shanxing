@@ -21,7 +21,8 @@
   // 資料形狀先照之後接後端的樣子放：userPhotos、cairns、bag、quests 都是可以直接同步的清單／對照表
   const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[], bagLog:{},   // bagLog：寶物 id → { first 第一次拿到的日期, mt 在哪座山, last 最近一次 }
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
-    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{} },
+    badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
+    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, bestStreak:0 },
     set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false } });
   let SV = blank();
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
@@ -35,7 +36,7 @@
       try { const ri = JSON.parse(localStorage.getItem(KEY_IMG) || 'null'); if (ri) { if (Array.isArray(ri.photos)) SV.photos = ri.photos; if (Array.isArray(ri.userPhotos)) SV.userPhotos = ri.userPhotos; imgDirty = false; } } catch(e){}
       SV.set = Object.assign(b.set, o.set); SV.stats = Object.assign(b.stats, o.stats);
       ['photos','lots','titles','pets','userPhotos'].forEach(k => { if (!Array.isArray(SV[k])) SV[k] = b[k]; });
-      ['prog','done','stamps','bag','bagLog','quests','cairns'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
+      ['prog','done','stamps','bag','bagLog','quests','cairns','badges','encSeen'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
       if (!SV.stats.magpie || typeof SV.stats.magpie !== 'object') SV.stats.magpie = {};
       if (!SV.pets.includes('shiba')) SV.pets.unshift('shiba');
       if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
@@ -620,9 +621,9 @@
       return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
-    let sum = 0; pool.forEach(e => { sum += e.rare ? 0.3 : 1; });
+    let sum = 0; pool.forEach(e => { sum += encWeight(e); });
     let r = Math.random() * sum;
-    for (const e of pool) { r -= e.rare ? 0.3 : 1; if (r <= 0) return e; }
+    for (const e of pool) { r -= encWeight(e); if (r <= 0) return e; }
     return pool[pool.length - 1];
   }
   function applyEffect(ef){
@@ -638,6 +639,7 @@
     if (!st || !M) return;
     e = e || pickEncounter(); if (!e) return;
     lastEnc = e.id; A.paper(); if (e.rare) A.sparkle();
+    noteEnc(e);
     const S = SV.stats;
     if (e.text.includes('山羌') && (wx.time === 'night' || wx.time === 'dawn')) S.deer++;
     if (e.text.includes('藍鵲')) S.magpie[M.id] = 1;
@@ -807,6 +809,7 @@
     return false;
   }
   function checkQuests(){
+    checkBadges();
     const msgs = [];
     SX.QUESTS.forEach(q => {
       if (SV.quests[q.id] || !questOk(q)) return;
@@ -960,6 +963,7 @@
     if (!M.temple) SV.stamps[M.id] = SV.stamps[M.id] || today();
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
     if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
+    if (wx.kind === 'fog') S.fogTop = (S.fogTop || 0) + 1;   // 霧中登頂（徽章用）
     daily('summit');
     const stamp = SX.TREASURES.find(x => x.id === 't_summit_stamp'); if (stamp) gainTreasure(stamp, 'quiet');
     save(); A.yay();
@@ -1213,6 +1217,8 @@
   $$('#scrAlbum .tab').forEach(b => b.onclick = () => { A.pop(); albumTab = b.dataset.tab; $$('#scrAlbum .tab').forEach(x => x.classList.toggle('on', x === b)); renderAlbum(); });
   function renderAlbum(){
     const body = $('#albumBody');
+    if (albumTab === 'badges') return renderBadges(body);
+    if (albumTab === 'enc') return renderEncLog(body);
     if (albumTab === 'photos') {
       if (!SV.photos.length) { body.innerHTML = '<div class="empty">還沒有照片。<br>每走 500 公尺會自動拍一張拍立得，<br>在長椅和觀景台也可以自己拍。</div>'; return; }
       let html = '';
@@ -1245,6 +1251,112 @@
       body.innerHTML = SV.lots.map(i => { const f = SX.FORTUNES[i]; return f ? `<div class="lotItem" data-lot="${i}"><span><b>${f.no}</b>　${f.poem[0]}</span><span>${f.rank}</span></div>` : ''; }).join(''); stagger(body, '.lotItem');
       $$('.lotItem').forEach(el => el.onclick = () => { A.pop(); const f = SX.FORTUNES[+el.dataset.lot]; modal(`${lotHtml(f)}<div class="mBtns"><button class="cbtn" id="lOk2">關閉</button></div>`); $('#lOk2').onclick = () => closeModal(); });
     }
+  }
+
+  // ───────── 徽章與奇遇圖鑑 ─────────
+  const encWeight = e => e.weight != null ? e.weight : e.rare ? 0.3 : 1;   // 抽奇遇的權重：一般 1、稀有 0.3、極稀有看 data.js 的 weight
+  const superRare = e => e.weight != null;
+  // 遇到奇遇時記進圖鑑（記錄方式只在 noteEncounterSeen 一個地方；第一次遇到才跳提示）
+  function noteEnc(e){
+    const first = !SV.encSeen[e.id];
+    noteEncounterSeen(e.id);
+    if (first) toast(e.rare ? '難得的奇遇，記進奇遇圖鑑了！' : '奇遇圖鑑多了一頁');
+  }
+  // 徽章數值：每個 stat 都要在這裡算（tools/check.js 會檢查 data.js 的 SX.BADGES 用到的 stat 這裡都有）
+  function badgeValue(b){
+    const S = SV.stats, done = Object.keys(SV.done).filter(k => SX.M[k]).map(k => SV.done[k] || 0);
+    switch (b.stat) {
+      case 'walked': return (S.walked || 0) / 1000;   // 存檔記公尺，徽章算公里
+      case 'summits': return done.reduce((a, n) => a + n, 0);
+      case 'favMountain': return Math.max(0, ...done);
+      case 'bestStreak': return Math.max(S.bestStreak || 0, (SV.daily && SV.daily.streak) || 0);
+      case 'night': return S.night || 0;
+      case 'rain': return S.rain || 0;
+      case 'fogTop': return S.fogTop || 0;
+      case 'rests': return S.rests || 0;
+      case 'cairns': return S.cairns || 0;
+      case 'treasureKinds': return SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
+      case 'encKinds': return SX.ENCOUNTERS.filter(e => SV.encSeen[e.id]).length;
+      case 'stamps': return SX.MOUNTAINS.filter(m => SV.stamps[m.id]).length;
+    }
+    return 0;
+  }
+  const BADGE_ALL = { treasureKinds:() => SX.TREASURES.length, encKinds:() => SX.ENCOUNTERS.length, stamps:() => SX.MOUNTAINS.length };   // tiers 寫 'all' 時的總數
+  const tierGoal = (b, i) => b.tiers[i] === 'all' ? BADGE_ALL[b.stat]() : b.tiers[i];
+  function checkBadges(){
+    SV.stats.bestStreak = badgeValue({ stat:'bestStreak' });
+    const got = [];
+    SX.BADGES.forEach(b => {
+      const v = badgeValue(b), cur = SV.badges[b.id] ? SV.badges[b.id].t : -1;
+      let t = -1; b.tiers.forEach((x, i) => { if (v >= tierGoal(b, i)) t = i; });
+      if (t > cur) { SV.badges[b.id] = { t, d:today() }; got.push([b, t]); }
+    });
+    if (!got.length) return;
+    save(); badgePop(got);
+  }
+  function medalHtml(b, t){
+    const tier = SX.BADGE_TIERS[t];
+    const art = SX.art.img('badge_quest', `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" fill="#d9b45a" stroke="${INK}" stroke-width="2.5"/><circle cx="30" cy="30" r="19" fill="none" stroke="${INK}" stroke-width="1.5" opacity=".45"/></svg>`);
+    return `<span class="medal ${t < 0 ? 'off' : 'tier' + t}" style="--tc:${tier ? tier.color : '#8a7d6c'}">${art}<i>${b.glyph}</i></span>`;
+  }
+  // 拿到徽章：畫面上方跳出一張小卡（不用對話框，才不會蓋掉登頂卡片），點一下或幾秒後自己收起來
+  function badgePop(got){
+    const old = $('#badgePop'); if (old) old.remove();
+    const el = document.createElement('div'); el.id = 'badgePop'; el.className = 'badgePop';
+    const top = got.slice().sort((a, b) => b[1] - a[1]), more = top.length - 3;
+    el.innerHTML = `<div class="bpHead">得到新徽章！</div>` + top.slice(0, 3).map(([b, t]) => `<div class="bpRow">${medalHtml(b, t)}<span><b>${b.name}・${SX.BADGE_TIERS[t].name}</b><small>${b.desc}</small></span></div>`).join('')
+      + (more > 0 ? `<small class="bpMore">還有 ${more} 枚，到相簿的「徽章」看看</small>` : '');
+    el.onclick = () => el.remove();
+    el.addEventListener('animationend', ev => { if (ev.animationName === 'bpOut') el.remove(); });
+    $('#app').appendChild(el);
+    confetti(top[0][1] >= 2 ? 70 : 36); A.chime();
+  }
+  function renderBadges(body){
+    const earned = SX.BADGES.reduce((a, b) => a + (SV.badges[b.id] ? SV.badges[b.id].t + 1 : 0), 0), all = SX.BADGES.reduce((a, b) => a + b.tiers.length, 0);
+    body.innerHTML = `<div class="colHead">徽章 <b>${earned}</b> / ${all} 枚・點一下看每個等級</div>` + SX.BADGES.map(b => {
+      const g = SV.badges[b.id], t = g ? g.t : -1, nx = t + 1 < b.tiers.length ? t + 1 : -1;
+      const v = badgeValue(b), show = n => Math.floor(n).toLocaleString('en-US');
+      const goal = tierGoal(b, nx >= 0 ? nx : t), f = Math.min(1, v / goal);
+      return `<button class="bdgRow${t < 0 ? ' off' : ''}" data-bdg="${b.id}">${medalHtml(b, t)}<span class="bdgTxt"><b>${b.name}${t >= 0 ? `<em style="background:${SX.BADGE_TIERS[t].color}">${SX.BADGE_TIERS[t].name}</em>` : ''}</b>
+        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small>${nx >= 0 ? `${show(v)} / ${show(goal)} ${b.unit}・下一級${SX.BADGE_TIERS[nx].name}` : `${show(v)} ${b.unit}・全部等級都拿到了`}</small></span>
+        <span class="bdgDots">${b.tiers.map((x, i) => `<i${i <= t ? ` style="background:${SX.BADGE_TIERS[i].color}"` : ''}></i>`).join('')}</span></button>`;
+    }).join('');
+    stagger(body, '.bdgRow');
+    $$('#albumBody [data-bdg]').forEach(el => el.onclick = () => { A.pop(); openBadge(SX.BADGES.find(b => b.id === el.dataset.bdg)); });
+  }
+  function openBadge(b){
+    const g = SV.badges[b.id], t = g ? g.t : -1, v = badgeValue(b);
+    modal(`<h3>${b.name}</h3><div class="bdgBig">${medalHtml(b, t)}</div><p class="summitBig" style="font-size:14px">${b.desc}：現在 ${Math.floor(v).toLocaleString('en-US')} ${b.unit}</p>
+      <ul class="quest bdgTiers">${b.tiers.map((x, i) => `<li class="${i <= t ? 'done' : 'hid'}"><span>${SX.BADGE_TIERS[i].name}　${tierGoal(b, i).toLocaleString('en-US')} ${b.unit}${x === 'all' ? '（全部）' : ''}<small>${i <= t ? (i === t && g.d ? g.d + ' 拿到' : '已拿到') : '還沒拿到'}</small></span></li>`).join('')}</ul>
+      <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="bdgOk">好</button></div>`);
+    $('#bdgOk').onclick = () => { A.pop(); closeModal(); };
+  }
+  // 沒遇過的奇遇：從出現條件寫一句提示
+  function encHint(e){
+    const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time, out = [];
+    const TN = { dawn:'清晨', day:'白天', dusk:'黃昏', night:'夜晚' }, WN = { clear:'晴天', cloud:'多雲', fog:'起霧', rain:'下雨' };
+    if (ts) out.push('只在' + ts.map(x => TN[x] || x).join('或'));
+    if (ws) out.push(ws.map(x => WN[x] || x).join('或') + '時');
+    if (w.mountains) { const ms = w.mountains.map(id => SX.M[id]).filter(Boolean);
+      out.push(ms.length > 2 && ms.every(m => m.alt >= 2000) ? '高山上' : ms.length > 3 ? `${ms[0].name}等 ${ms.length} 座山` : ms.map(m => m.name).join('、')); }
+    if (w.minFrac >= 0.85) out.push('山頂附近'); else if (w.minFrac >= 0.5) out.push('後半段的路上'); else if (w.minFrac >= 0.3) out.push('走了一段路之後'); else if (w.maxFrac != null && w.maxFrac <= 0.3) out.push('登山口附近');
+    return out.length ? out.join('・') : '哪座山都可能遇到';
+  }
+  function renderEncLog(body){
+    const L = SX.ENCOUNTERS, seen = L.filter(e => SV.encSeen[e.id]).length, rare = L.filter(e => e.rare), rs = rare.filter(e => SV.encSeen[e.id]).length;
+    body.innerHTML = `<div class="colHead">遇見 <b>${seen}</b> / ${L.length}（${Math.floor(seen / L.length * 100)}%）・稀有 <b>${rs}</b> / ${rare.length}</div><div class="encLog">` + L.map((e, i) => {
+      const r = SV.encSeen[e.id], no = 'No.' + String(i + 1).padStart(2, '0');
+      const mark = superRare(e) ? '<span class="encMk sup">極稀有</span>' : e.rare ? '<span class="encMk">稀有</span>' : '';
+      if (!r) return `<div class="encCard hid"><div class="encPic"><span>？</span></div><b>${no}　？？？${mark}</b><small>${encHint(e)}</small></div>`;
+      return `<button class="encCard${e.rare ? ' rare' : ''}" data-enc="${e.id}"><div class="encPic">${encSvg(e)}</div><b>${no}${mark}</b><small>${e.text}</small><em>遇過 ${r.n} 次</em></button>`;
+    }).join('') + '</div>';
+    stagger(body, '.encCard');
+    $$('#albumBody [data-enc]').forEach(el => el.onclick = () => {
+      A.pop(); const e = L.find(x => x.id === el.dataset.enc), r = SV.encSeen[e.id];
+      modal(`<div class="encounter${e.rare ? ' rare' : ''}"><div class="ec-pic">${encSvg(e)}</div><h3>${superRare(e) ? '極稀有的奇遇' : e.rare ? '難得的奇遇' : '路上的小插曲'}</h3><p>${e.text}</p><p style="margin-top:6px;font-size:12px">第一次遇到：${r.first}・遇過 ${r.n} 次</p></div>
+        <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="ecOk">好</button></div>`);
+      $('#ecOk').onclick = () => { A.pop(); closeModal(); };
+    });
   }
 
   // ───────── 設定 ─────────
@@ -1347,7 +1459,7 @@
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
   purgeBlackPhotos();
-  window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests,
+  window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests, checkBadges,
     tick:(n = 30) => { for (let i=0;i<n;i++) frame(0.033); },
     encounter:id => { if (!st) return null; const e = id ? SX.ENCOUNTERS.find(x => x.id === id) : null; openEncounter(e); return lastEnc; },
     treasure:id => { const tr = id ? SX.TREASURES.find(x => x.id === id) : rollTreasure(M ? M.id : 'xiangshan'); gainTreasure(tr, 'show'); return tr && tr.id; },

@@ -250,6 +250,15 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `enc_es_firefly` | 季節限定（螢火蟲季）：Thousands of fireflies glowing over a dark forest valley at night like fallen stars, the hiker with headlamp switched off |
 | `enc_es_snow` | 季節限定（雪季）：The first light snowfall of the year on a high mountain trail, tiny snowflakes landing on the hiker's glove |
 
+極稀有奇遇（玩很久才會遇到一次，畫得特別用心一點）：
+
+| 檔名 | 場景 |
+|---|---|
+| `enc_e33` | Far across a forested valley, a Formosan black bear with the white V mark on its chest walking slowly on a sunny slope, the hiker small in the foreground watching quietly from a safe distance |
+| `enc_e34` | A Brocken spectre on a high mountain ridge: the hiker's shadow cast onto a wall of mist, surrounded by a soft rainbow-colored glory ring, sun behind the hiker |
+| `enc_e35` | A cloud waterfall: a sea of clouds spilling over a mountain ridge and flowing slowly down into the valley like a white waterfall, soft golden light |
+| `enc_e36` | A meteor shower over the Milky Way above dark alpine ridges at night, many shooting stars, the hiker lying on the grass looking up |
+
 ## 放進 `07.奇遇`：登頂插圖（16:9，不用去背，抵達山頂時顯示）
 
 | 檔名 | 場景 |
