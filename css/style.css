@@ -718,3 +718,34 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .plzChatTog{position:absolute;right:0;top:-30px;padding:3px 10px;border-radius:999px;border:2px solid var(--ink);background:rgba(255,250,236,.94);color:var(--ink);font-size:12.5px;white-space:nowrap}
 .plzChat.hid .plzLog,.plzChat.hid .chatIn{display:none}
 .plzChat.hid .plzChatTog{position:static;padding:7px 14px;font-size:14px;box-shadow:0 2px 4px rgba(40,25,10,.25)}
+
+/* ───────── 看大圖（相簿、照片牆、山友照片：點一張放大，左右滑換張，往下拉或點旁邊關掉）───────── */
+.pv{position:absolute;inset:0;z-index:25;display:none}
+.pv.on{display:block}
+.pvBg{position:absolute;inset:0;background:rgba(40,26,14,.86)}
+.pvStage{position:absolute;left:0;right:0;top:calc(62px + env(safe-area-inset-top));bottom:calc(112px + env(safe-area-inset-bottom));touch-action:none}
+.pvTrack{position:absolute;inset:0}
+.pvSlide{position:absolute;top:0;bottom:0;width:100%;display:flex;align-items:center;justify-content:center;padding:0 14px}
+.pvSlide.prev{left:-100%}
+.pvSlide.cur{left:0}
+.pvSlide.next{left:100%}
+.pvSlide img{display:block;max-width:100%;max-height:100%;background:#fffdf6;padding:8px;border:2px solid var(--ink);border-radius:3px;box-shadow:0 4px 0 rgba(58,42,32,.5),0 10px 18px rgba(0,0,0,.35);-webkit-user-drag:none;user-select:none;pointer-events:none}
+.pvTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 12px 0;pointer-events:none}
+.pvTop>*{pointer-events:auto}
+.pvTop .cbtn{white-space:nowrap}
+.pvIdx{font-size:14px;padding:3px 12px}
+.pvFoot{position:absolute;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;padding:10px 12px;box-shadow:0 3px 0 var(--ink)}
+.pvCap{flex:1;min-width:0}
+.pvCap b{display:block;font-weight:normal;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvCap small{display:block;font-size:12.5px;color:#6a5040;line-height:1.45}
+.pvFoot .cbtn{flex:none;white-space:nowrap}
+.pvLike{flex:none;width:46px;height:46px;border-radius:50%;border:2px solid var(--ink);background:#fffdf6;box-shadow:0 2px 0 var(--ink);display:grid;place-items:center;padding:0;cursor:pointer}
+.pvLike svg{width:26px;height:26px;display:block}
+.pvLike path{fill:#fffdf6}
+.pvLike.on path{fill:#ff7b93}
+.pol img{cursor:zoom-in}
+/* 我喜歡的照片：格子右上角一顆小愛心；拍立得分頁可以只看喜歡的 */
+.pol.liked::after{content:"";position:absolute;right:4px;top:4px;width:22px;height:22px;z-index:2;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21C5 15.5 2 12.5 2 8.5 2 5.4 4.4 3 7.4 3c1.9 0 3.6 1 4.6 2.5C13 4 14.7 3 16.6 3 19.6 3 22 5.4 22 8.5c0 4-3 7-10 12.5z' fill='%23ff7b93' stroke='%233a2a20' stroke-width='1.6'/%3E%3C/svg%3E")}
+.likeBar{display:flex;justify-content:flex-end;margin:2px 0 6px}
+.likeBar .chip{white-space:nowrap;font-size:14px;padding:4px 12px}
+.likeBar .chip.on{background:#ffd9e0}

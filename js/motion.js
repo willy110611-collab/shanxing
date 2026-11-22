@@ -274,5 +274,66 @@
     if (!calm()) run(btn, [{ transform:'scale(.9,1.06)' }, { transform:'none' }], { duration:380, easing:SPRING });
   }
 
-  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, toggle };
+  // ───── 看大圖：照片從格子飛到大圖、關掉時飛回自己的格子（FLIP，只用位移和縮放）─────
+  // boxT：把 el 現在的方框（n）搬到 r 的位置和大小
+  const boxT = (n, r) => `translate(${r.left - n.left}px,${r.top - n.top}px) scale(${r.width / n.width},${r.height / n.height})`;
+  const viewUi = pv => pv.querySelectorAll('.pvTop,.pvFoot');
+  // 打開：背景淡入、大圖從格子的位置飛過來、上下的木牌和說明晚一點浮上來；減少動態時整個淡入
+  function viewOpen(pv, img, from){
+    const n = img && img.getBoundingClientRect();
+    if (calm() || !from || !from.width || !n || !n.width) return run(pv, [{ opacity:0 }, { opacity:1 }], { duration:180 });
+    run(pv.querySelector('.pvBg'), [{ opacity:0 }, { opacity:1 }], { duration:300 });
+    viewUi(pv).forEach(el => run(el, [{ opacity:0, transform:'translateY(10px)' }, { opacity:1, transform:'none' }], { duration:240, delay:160, fill:'backwards' }));
+    return run(img, [{ transformOrigin:'0 0', transform:boxT(n, from) }, { transformOrigin:'0 0', transform:'none' }], { duration:360 });
+  }
+  // 關掉：大圖從現在的位置（可能被手指往下拖了一段）飛回格子；格子不在畫面上就淡出。播完停在最後一格，等呼叫的人收起來再 settle
+  function viewClose(pv, img, to){
+    const n = img && img.getBoundingClientRect(), fade = { duration:calm() ? 160 : 260, fill:'forwards' };
+    if (calm() || !to || !to.width || !n || !n.width) return run(pv, [{ opacity:1 }, { opacity:0 }], fade);
+    run(pv.querySelector('.pvBg'), [{ opacity:getComputedStyle(pv.querySelector('.pvBg')).opacity }, { opacity:0 }], fade);
+    viewUi(pv).forEach(el => run(el, [{ opacity:1 }, { opacity:0 }], { duration:160, fill:'forwards' }));
+    return run(img, [{ transformOrigin:'0 0', transform:'none' }, { transformOrigin:'0 0', transform:boxT(n, to) }], { duration:320, fill:'forwards' });
+  }
+  // 收掉留在畫面上的最後一格（視窗已經藏起來以後才叫，才不會閃一下）
+  function settle(root){ if (root && root.getAnimations) root.getAnimations({ subtree:true }).forEach(a => a.cancel()); }
+  // 看大圖的手勢：左右滑，整排照片跟著手指、放開對齊到上一張／下一張；往下拖，照片跟著往下、背景變淡，拖夠了就關掉；點一下交給 h.tap
+  // h：{ has(dir) 那一邊還有沒有照片, go(dir) 換頁（對齊動畫播完才叫）, close(), tap(e), bg 背景 }
+  function pager(stage, track, h){
+    let p = null, snap = false;   // snap：放開後正在對齊，這時候再按下去不算（等對齊完）
+    const setX = x => { track.style.transform = x ? `translateX(${x}px)` : ''; };
+    const setY = y => { stage.style.transform = y ? `translateY(${y}px)` : ''; h.bg.style.opacity = y ? Math.max(0.25, 1 - y / 360) : ''; };
+    stage.addEventListener('pointerdown', e => { if (e.button || p || snap) return; p = { x:e.clientX, y:e.clientY, t:performance.now(), id:e.pointerId, ax:null, dx:0, dy:0, vx:0, vy:0, lt:performance.now() }; });
+    stage.addEventListener('pointermove', e => {
+      if (!p || e.pointerId !== p.id) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y, now = performance.now(), dt = Math.max(1, now - p.lt);
+      p.vx = (dx - p.dx) / dt; p.vy = (dy - p.dy) / dt; p.dx = dx; p.dy = dy; p.lt = now;
+      if (!p.ax && Math.hypot(dx, dy) > 8) { p.ax = Math.abs(dx) > Math.abs(dy) ? 'x' : dy > 0 ? 'y' : 'n'; try { stage.setPointerCapture(e.pointerId); } catch(err){} }
+      if (p.ax === 'x') setX(h.has(dx < 0 ? 1 : -1) ? dx : dx * 0.3);   // 第一張、最後一張再拉：拉不太動
+      else if (p.ax === 'y') setY(Math.max(0, dy));
+    });
+    const end = e => {
+      if (!p || e.pointerId !== p.id) return;
+      const q = p; p = null;
+      if (!q.ax) { if (e.type === 'pointerup') h.tap(e); return; }
+      const W = stage.clientWidth || 1, cancel = e.type === 'pointercancel';
+      if (q.ax === 'x') {
+        const dir = cancel ? 0 : (q.dx < -W * 0.22 || q.vx < -0.45) && h.has(1) ? 1 : (q.dx > W * 0.22 || q.vx > 0.45) && h.has(-1) ? -1 : 0;
+        const x0 = h.has(q.dx < 0 ? 1 : -1) ? q.dx : q.dx * 0.3;
+        if (calm()) { setX(0); if (dir) h.go(dir); return; }
+        snap = true;
+        run(track, [{ transform:`translateX(${x0}px)` }, { transform:`translateX(${-dir * W}px)` }], { duration:dir ? 260 : 320, easing:dir ? EASE : SPRING, fill:'forwards' })
+          .then(a => { snap = false; setX(0); if (dir) h.go(dir); if (a) a.cancel(); });
+      } else if (q.ax === 'y') {
+        if (!cancel && (q.dy > 110 || (q.vy > 0.6 && q.dy > 30))) { h.close(); return; }
+        const y0 = Math.max(0, q.dy); setY(0);
+        if (!calm() && y0) { run(stage, [{ transform:`translateY(${y0}px)` }, { transform:'none' }], { duration:340, easing:SPRING }); run(h.bg, [{ opacity:Math.max(0.25, 1 - y0 / 360) }, { opacity:1 }], { duration:240 }); }
+      }
+    };
+    stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+    return { reset:() => { p = null; snap = false; setX(0); setY(0); } };
+  }
+  // 換到另一張以後（減少動態時沒有滑動），新的那張淡入
+  function viewSwap(el){ return calm() ? run(el, [{ opacity:0 }, { opacity:1 }], { duration:160 }) : Promise.resolve(null); }
+
+  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, toggle, viewOpen, viewClose, viewSwap, settle, pager };
 })();
