@@ -10,6 +10,7 @@ const TAU = Math.PI * 2, INK = '#3a2a20', FONT = "'Huninn','PingFang TC','Micros
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SPEED = 0.2;           // 每秒走多少廣場寬
 const SAY_MS = 5000;         // 頭上冒字停留多久
+const PLAZA_ART_TOP = 0.47;   // plaza_bg 美術圖：石板地上緣（山門腳下）在畫面高度的比例；換圖要重量
 // 打招呼動作：k 是連線用的代號，ms 是動作長度（坐下會一直坐到下次走動）
 P.EMO = [
   { k:'wave',  label:'揮手', icon:'👋', ms:2200 },
@@ -135,7 +136,7 @@ P.mount = function(el, o){
   last = performance.now(); raf = requestAnimationFrame(loop);
 };
 P.unmount = function(){ cancelAnimationFrame(raf); raf = 0; if (ro) ro.disconnect(); ro = null; if (cv) cv.remove(); cv = ctx = host = null; };
-P.redraw = function(){ if (cv) buildBG(); };
+P.redraw = function(){ if (cv) { W = 0; resize(); } };   // 美術圖晚到：地面範圍也要跟著圖重算
 if (SX.art) SX.art.onLoad(() => P.redraw());
 
 function resize(){
@@ -144,7 +145,9 @@ function resize(){
   if (w === W && h === H && d === DPR && BG) return;
   W = w; H = h; DPR = d; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   // 地面可走範圍的最下緣停在聊天框上方，角色才不會走到聊天框後面看不到
-  gT = Math.round(H * 0.27); gB = H - Math.max(120, H * 0.2); bu = Math.min(W / 375, H / 640) * 0.46;
+  // 有 plaza_bg 美術圖時，石板地從畫面一半左右（山門）開始；程式畫的版本從四分之一開始
+  const art = SX.art && SX.art.get('plaza_bg');
+  gT = Math.round(H * (art ? PLAZA_ART_TOP : 0.27)); gB = H - Math.max(120, H * 0.2); bu = Math.min(W / 375, H / 640) * (art ? 0.52 : 0.46);
   buildBG();
 }
 function onTap(e){
