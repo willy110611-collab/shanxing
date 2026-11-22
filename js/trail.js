@@ -2595,8 +2595,8 @@ function drawLights(t){
     ctx.drawImage(GLOW, W / 2 + f.x * sc - r, HOR + (CAMH - f.y) * sc - r, r * 2, r * 2);
   }
   if (isNight && curS && !curS.sleep) {       // 頭燈：從背後看不到燈本身，只畫照到前方地上的光
-    const r = W * 0.36;
-    ctx.save(); ctx.translate(hero.sx, hero.sy - H * 0.15); ctx.scale(1, 0.6); ctx.globalAlpha = 0.42; ctx.drawImage(GLOW, -r, -r, r * 2, r * 2); ctx.restore();
+    const r = W * 0.36, ry = r * 0.6;   // 光圈中心放在帽子前方的路上：下緣剛好到帽頂，登山客身上不會被照亮
+    ctx.save(); ctx.translate(hero.sx, hero.top - ry * 0.75); ctx.scale(1, 0.6); ctx.globalAlpha = 0.42; ctx.drawImage(GLOW, -r, -r, r * 2, r * 2); ctx.restore();
   }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
