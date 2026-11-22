@@ -57,7 +57,7 @@ function prep(name, img){
 }
 function clampN(v, a, b){ return b < a ? a : Math.max(a, Math.min(b, v)); }
 
-A.get = function(id){ return lib[id] || null; };
+A.get = function(id){ const e = lib[id]; return e && !e.lazy ? e : null; };   // 用到才下載的插圖不能畫在畫布上
 // 給 HTML 用的圖片網址（背包、寵物選擇等）；沒有這張圖回 null
 // 去背圖用「裁掉透明邊、清過洋紅殘邊」的版本（第一次用到才產生），不然格子裡的圖會很小、還帶粉紅邊
 const urls = {}, trimmed = {};
@@ -93,7 +93,9 @@ A.crop = function(id, i){
 function load(){
   fetch('art/manifest.json', { cache:'no-cache' }).then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
     if (!Array.isArray(list) || !list.length) { loaded = true; return; }
-    return Promise.all(list.map(it => new Promise(res => {
+    // lazy：只在卡片上顯示的大插圖（奇遇、登頂），開遊戲時不下載，<img> 顯示時瀏覽器才去拿
+    list.filter(it => it.lazy).forEach(it => { const id = it.file.replace(/\.[a-z]+$/i, ''); lib[id] = { img:null, w:0, h:0, frames:[], opaque:true, lazy:true }; urls[id] = 'art/' + it.file + '?v=' + it.v; });
+    return Promise.all(list.filter(it => !it.lazy).map(it => new Promise(res => {
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
       const u = 'art/' + file + '?v=' + it.v;      // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
       img.onload = () => { try { lib[id] = prep({ id, file }, img); lib[id].fit = it.fit || null; urls[id] = u; } catch (e) {} res(); };   // fit：立體地圖的對齊結果（tools/mapfit.js）

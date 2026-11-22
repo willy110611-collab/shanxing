@@ -374,7 +374,7 @@
       pushOn = false; store(KEY_PUSH, false); return false;
     }
     if (await Notification.requestPermission() !== 'granted') throw new Error('沒有允許通知；要收的話，到手機設定裡打開這個網站的通知');
-    const { key } = await api('/push/key'); if (!key) throw new Error('通知服務還沒準備好，晚點再試');
+    const key = await api('/push/key').then(d => d.key).catch(() => null); if (!key) throw new Error('通知服務還沒準備好，晚點再試');
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(key) });
     await api('/push/sub', { json: { endpoint: sub.endpoint } });
     pushOn = true; store(KEY_PUSH, true); return true;

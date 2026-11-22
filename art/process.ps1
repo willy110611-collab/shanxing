@@ -8,7 +8,14 @@
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $raw = Join-Path $here 'raw'
-$opaque = '^(sky_|ground_|map_|enc_|plaza_)'
+# 不去背的整張圖：天空、路面、奇遇／登頂插圖、廣場背景、頁面背景、區域立體地圖（map_ 加上 data.js SX.REGIONS 的代號；map_pin 這類是去背小圖）
+$regBlock = [regex]::Match([IO.File]::ReadAllText((Join-Path $here '..\js\data.js')), '(?s)SX\.REGIONS\s*=\s*\[(.*?)\];').Groups[1].Value
+$regions = [regex]::Matches($regBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline') | ForEach-Object { $_.Groups[1].Value }
+$mtBlock = [regex]::Match([IO.File]::ReadAllText((Join-Path $here '..\js\data.js')), '(?s)SX\.MOUNTAINS\s*=\s*\[(.*?)\];').Groups[1].Value
+$mts = [regex]::Matches($mtBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline') | ForEach-Object { $_.Groups[1].Value }
+$opaque = '^(sky_|ground_|enc_|plaza_|ui_page$|summit_(' + ($mts -join '|') + ')$|map_(' + ($regions -join '|') + ')$)'
+# 只在網頁上顯示、不畫在畫布上的大插圖：不在開遊戲時下載，跳出卡片時才載（manifest 標 lazy）
+$lazy = '^(enc_|summit_(' + ($mts -join '|') + ')$)'
 
 # 合法的名字只有一個來源：docs\GEMINI繪圖清單.md 裡用反引號標起來的英文名
 $doc = [IO.File]::ReadAllText((Join-Path $here '..\docs\GEMINI繪圖清單.md'))
@@ -44,7 +51,7 @@ if ($skipped.Count) { Write-Host "`n認不出名字、沒有處理（檔名裡�
 
 # 產生清單：檔名 + 修改時間（圖換新時網址會跟著變，手機才不會卡舊圖）
 $items = Get-ChildItem $here -File | Where-Object { $_.Extension -match '^\.(png|jpg|webp)$' } | Sort-Object Name | ForEach-Object {
-  '{"file":"' + $_.Name + '","v":' + [int64]($_.LastWriteTimeUtc - [datetime]'1970-01-01').TotalSeconds + '}'
+  '{"file":"' + $_.Name + '","v":' + [int64]($_.LastWriteTimeUtc - [datetime]'1970-01-01').TotalSeconds + ($(if ($_.BaseName -match $lazy) { ',"lazy":1' } else { '' })) + '}'
 }
 $json = '[' + (($items) -join ",`n ") + ']'
 [IO.File]::WriteAllText((Join-Path $here 'manifest.json'), $json + "`n", (New-Object System.Text.UTF8Encoding $false))

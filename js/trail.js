@@ -370,7 +370,7 @@ function buildElev(m){
     elev[i + 1] = elev[i] + sl * SEG;
     // 階梯只出現在石階型步道，或土路／碎石路上偶爾一小段很陡的地方；其餘都是原始土坡
     const patch = vn(i * 0.06, 11) > 0.62;
-    stepF[i] = ((tr === 'stairs' && sl > 0.05) || (tr === 'wood' && sl > 0.16) || (sl > 0.3 && patch)) ? 1 : 0;
+    stepF[i] = ((tr === 'stairs' && sl > 0.05) || (tr === 'wood' && sl > 0.1) || (sl > 0.12 && patch) || sl > 0.2) ? 1 : 0;
   }
 }
 function buildProps(){
@@ -1097,15 +1097,28 @@ function drawWorld(b, t){
       // 步道
       const w1 = RW * s1, w2 = RW * s2, e1 = w1 * 1.07 + 0.6, e2 = w2 * 1.07 + 0.6, rk = 2 + (i & 1), stp = sAt(i) === 1 && j < 70;
       if (stp) {
-        const yt = HOR - (pW[j] - camY) * s2;          // 踏面是平的，遠端接一塊立面
-        ctx.fillStyle = LUT[(15 + (lvL ? 1 : 0)) * FOGN + fi]; ctx.fillRect(x2 - w2 * 1.04, y2, w2 * 2.08, yt - y2 + 0.7);
-        ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, yt, x2 - e2, yt);
-        ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt);
-        const ST = snowAmt > 0.5 ? RT : (TEX.steps || RT);   // 階梯段：有木頭階梯貼圖就用（雪天照舊用雪地）
-        if (ST && ta > 0.03) { texFill(ST, x1 - w1, s1, yb, yt, z0, ta); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, yt, x2 - w2, yt); ctx.globalAlpha = fade; }
-        if (j < 44) {
-          ctx.globalAlpha = 1 - j / 46; ctx.strokeStyle = INK; ctx.lineWidth = clamp(s2 * 0.022, 0.5, 2.2);
-          ctx.beginPath(); ctx.moveTo(x2 - w2 * 1.04, y2); ctx.lineTo(x2 + w2 * 1.04, y2); ctx.moveTo(x2 - w2 * 1.04, yt); ctx.lineTo(x2 + w2 * 1.04, yt); ctx.stroke(); ctx.globalAlpha = fade;
+        // 一段路切成好幾階（每階約 20 公分高），由遠到近畫：上一階的立面 → 這一階的踏面
+        const rise = pW[j + 1] - pW[j], n = clamp(Math.ceil(rise / 0.2), 1, 4);
+        const ST = snowAmt > 0.5 ? RT : (TH.trail === 'scree' || TH.trail === 'stairs' ? RT : (TEX.steps || RT));   // 石階、碎石用路面貼圖；土路、木棧道用木頭階梯
+        const at = f => { const dz = pZ[j] + f * (pZ[j + 1] - pZ[j]), s = F / dz; return [W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * s, s]; };
+        for (let q = n - 1; q >= 0; q--) {
+          const fa = q / n, fb = (q + 1) / n, h0 = pW[j] + rise * fa, h1 = pW[j] + rise * fb;
+          const A = at(fa), B = at(fb), xa = A[0], sa = A[1], xb = B[0], sb = B[1];
+          const ya = (q === 0 ? yb : HOR - (h0 - camY) * sa), yt = HOR - (h0 - camY) * sb, yr = HOR - (h1 - camY) * sb;
+          const wa = RW * sa, wb = RW * sb;
+          // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊
+          ctx.fillStyle = LUT[(15 + (lvL ? 1 : 0)) * FOGN + fi]; quad(xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7);
+          ctx.fillStyle = 'rgba(30,22,30,0.22)'; quad(xb - wb * 1.04, yt - (yt - yr) * 0.35, xb + wb * 1.04, yt - (yt - yr) * 0.35, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7);
+          // 踏面
+          ctx.fillStyle = LUT[13 * FOGN + fi]; quad(xa - wa * 1.07 - 0.6, ya, xa + wa * 1.07 + 0.6, ya, xb + wb * 1.07 + 0.6, yt, xb - wb * 1.07 - 0.6, yt);
+          ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt);
+          if (ST && ta > 0.03) { texFill(ST, xa - wa, sa, ya, yt, z0 + fa * SEG, ta); quad(xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt); ctx.globalAlpha = fade; }
+          if (j < 50) {
+            const a = 1 - j / 52;
+            ctx.globalAlpha = fade * a * 0.5; ctx.fillStyle = '#fff3d6'; ctx.fillRect(xa - wa, ya - Math.max(0.8, sa * 0.025), wa * 2, Math.max(0.8, sa * 0.025));   // 踏面前緣受光
+            ctx.globalAlpha = fade * a; ctx.strokeStyle = INK; ctx.lineWidth = clamp(sb * 0.02, 0.5, 2.2);
+            ctx.beginPath(); ctx.moveTo(xb - wb * 1.04, yr); ctx.lineTo(xb + wb * 1.04, yr); ctx.moveTo(xb - wb * 1.04, yt); ctx.lineTo(xb + wb * 1.04, yt); ctx.stroke(); ctx.globalAlpha = fade;
+          }
         }
       } else {
         ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2, x2 - e2, y2);
