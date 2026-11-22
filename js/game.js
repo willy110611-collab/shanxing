@@ -1822,16 +1822,29 @@
   if (SV.set.gps) setGps(true);
   // 開場讀取畫面：美術圖全部載完才收起來（玩家不會看到程式畫的備用圖）
   // 讀取進度：進度條和上面跑的小柴犬用同一個百分比
-  const ldSet = p => { const f = $('#ldFill'), g = $('#ldDog'); if (f) f.style.width = p + '%'; if (g) g.style.left = p + '%'; };
+  // 讀取畫面：小柴犬一定從左跑到右。顯示的進度 = 真正的進度和「跑了多久」取比較小的那個：
+  // 圖都在手機裡（一下就讀完）也要跑滿 LD_MIN_MS 才收起；網路慢就照真正的進度慢慢跑。收起畫面等牠跑到最右邊
+  const LD_MIN_MS = 1800;
+  const ld = { real:0, shown:-1, t0:performance.now(), want:false };
+  const ldSet = p => { ld.real = Math.max(ld.real, p); };
+  function ldTick(now){
+    if (entered) return;
+    const p = Math.min(ld.real, (now - ld.t0) / LD_MIN_MS * 100);
+    if (p !== ld.shown) { ld.shown = p; const f = $('#ldFill'), d = $('#ldDog'); if (f) f.style.width = p + '%'; if (d) d.style.left = p + '%'; }
+    if (ld.want && p >= 100) enterNow(); else requestAnimationFrame(ldTick);
+  }
+  requestAnimationFrame(ldTick);
   SX.art.onProgress((d, t) => { if (t) ldSet(Math.round(d / t * 100)); });
   // 美術圖和兩套手寫字型都到了才收起讀取畫面（畫布上的字和木牌會用到字型；字型載入失敗也會往下走）
   const fontsReady = document.fonts && document.fonts.load ? Promise.all(['16px Iansui', '16px "LXGW WenKai TC"'].map(f => document.fonts.load(f, '山行').catch(() => {}))) : Promise.resolve();
   // 收起後去哪裡（開場只在這裡決定一次）：正在爬山的人直接回到步道（離開時走的路在進登山畫面時補算、打開日記），其他人先到山友大廳
   // 美術圖還沒到齊就進去（玩家按「先進去看看」）也沒關係：沒到的圖先用程式畫，圖到了各畫面會自己換上
   let entered = false;
-  function enterGame(){
+  // 讀取好了（或玩家按「先進去看看」）：等小柴犬跑到最右邊才真的進去（ldTick 會呼叫 enterNow）
+  function enterGame(){ ldSet(100); ld.want = true; }
+  function enterNow(){
     if (entered) return; entered = true; clearTimeout(slowLoadT);
-    const L = $('#loading'); if (L) { ldSet(100); L.classList.add('done'); }
+    const L = $('#loading'); if (L) { const f = $('#ldFill'), d = $('#ldDog'); if (f) f.style.width = '100%'; if (d) d.style.left = '100%'; L.classList.add('done'); }
     const tr = onTrail(); if (tr) startClimb(tr, true); else go('lobby');
     pumpNotice();
   }

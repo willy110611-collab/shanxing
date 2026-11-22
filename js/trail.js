@@ -67,7 +67,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, up:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -141,6 +141,7 @@ const GAIT = {
   bendIn:0.034, bendOut:0.02,           // 轉身走路圖只在真的彎道（中彎、大彎；路上每隔幾十公尺就有的小彎不算）：腳下往前 8 公尺的平均彎度超過 bendIn 換上、低於 bendOut 才算彎完（直線上的小擺動不會換）
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
+  upFull:0.35, upStride:0.75, upPace:0.8,   // 上坡（不是階梯）：坡度到 35% 算最陡，最陡時步子只剩 0.75、前進速度只剩 0.8（一步一步踩上去，腳不在地上滑）
   stairCad:1.35,                        // 階梯上一步踩一階：踏面很短（很陡）時步頻最多是平路的這麼多倍，再快就放慢前進（腳不會原地狂踩、在階梯上滑）
   tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
   hold:1.5,                             // 換了一種走路圖以後，至少用這麼多秒才能再換（不會一閃一閃）
@@ -1454,8 +1455,11 @@ function updHero(s, t, dt, dist, sp){
   const si = Math.floor(dist / SEG), rise = sAt(si) === 1 ? eAt(si + 1) - eAt(si) : 0, nSt = rise > 0 ? stepsOf(rise) : 0;
   const sm = stairSteps(nSt), stepL = nSt ? SEG / (nSt * sm) : 0, dd = dist - hero.pd;
   hero.stepL = stepL;
+  // 上坡多陡（0～1）：看腳下往前三段的平均坡度，階梯段不算（階梯有自己的節奏）；慢慢變
+  const gr = nSt ? 0 : (eAt(si + 3) - eAt(si)) / (3 * SEG);
+  hero.up += (clamp(gr / GAIT.upFull, 0, 1) - hero.up) * Math.min(1, dt * 2);
   if (Math.abs(dd) < 3 && hero.pd >= 0) {
-    let inc = dd / (nSt ? 2 * stepL : STRIDE * GAIT.stride[gait.lvl]) * TAU;
+    let inc = dd / (nSt ? 2 * stepL : STRIDE * GAIT.stride[gait.lvl] * (1 - (1 - GAIT.upStride) * hero.up)) * TAU;
     if (nSt && dd > 0) {
       // 這一步走到哪（0～1）→ 相位該在哪；差多少在接下來半步內慢慢補上（只往前補，腳不會倒著走），從一般走路圖換過來步伐接得上
       const u = (dist / SEG - si) * nSt * sm, e = u - Math.floor(u);
@@ -1472,7 +1476,7 @@ function updHero(s, t, dt, dist, sp){
   // 鋼杯：單擺
   hero.mgv += (-hero.mga * 60 - hero.mgv * 3 + Math.cos(hero.ph) * 14 * hero.mv + Math.sin(t * 1.3) * 0.6) * dt;
   hero.mga = clamp(hero.mga + hero.mgv * dt, -0.9, 0.9);
-  hero.lean += ((s.boost && mv ? 1 : mv ? 0.45 + 0.4 * hero.stair : 0) - hero.lean) * Math.min(1, dt * 5);
+  hero.lean += ((s.boost && mv ? 1 : mv ? 0.45 + 0.4 * Math.max(hero.stair, hero.up) : 0) - hero.lean) * Math.min(1, dt * 5);
   // 轉彎：看腳下到前方幾公尺的彎度，身體慢慢往彎的內側傾、腳往內側偏一點；直線上回到正好 0；系統設定減少動態就不傾
   let kc = 0; for (let q = 0; q < TURN_LOOK; q++) kc += cAt(si + q); kc /= TURN_LOOK;
   const tg = RMOT && RMOT.matches ? 0 : clamp(kc / TURN_FULL, -1, 1) * Math.max(mv, 0.4);
@@ -1509,7 +1513,8 @@ function updGait(s, dt, dist){
   }
   // 前進速度：做動作時停下來，累了慢慢走；長按快走照原本的速度。慢慢變，不會一下子停住
   const cad = hero.stepL ? Math.min(1, G.stairCad * hero.stepL / (STRIDE / 2)) : 1;   // 很陡的階梯（踏面短）放慢，一步還是踩一階
-  const tg = gait.act ? 0 : (s.boost ? 1 : G.pace[lvl]) * cad;
+  const up = 1 - (1 - G.upPace) * hero.up;   // 上坡越陡走越慢
+  const tg = gait.act ? 0 : (s.boost ? 1 : G.pace[lvl]) * cad * up;
   gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
   if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
   gaitMode(dt, dist, stam);
@@ -1529,6 +1534,8 @@ function gaitMode(dt, dist, stam){
   if (want !== gait.mode && (gait.modeT >= G.hold || (want === 'stairs' && gait.mode === 'turn'))) { gait.mode = want; gait.modeT = 0; gait.modeF = kc < 0; }
 }
 S.pace = function(){ return gait.pace; };
+// 測試用：這座山整條路因為上坡變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
+S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const gr = sAt(i) === 1 ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1); a += 1; b += 1 / (1 - (1 - GAIT.upPace) * u); } return Math.round((b / a - 1) * 1000) / 10; };
 S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv, ph:hero.ph, stepL:hero.stepL }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
 // 現在要用哪一張走路圖、要不要鏡射（寫在 gait.sid、gait.sf；每格都會跑，不產生新的陣列、字串）
 const RAIN_OF = { hiker_stairs16:'hiker_rain_stairs16', hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
@@ -2848,10 +2855,9 @@ function drawLights(t){
     ctx.globalAlpha = (0.45 + 0.45 * Math.sin(t * 2 + f.ph)) * (isNight ? 1 : 0.75);
     ctx.drawImage(GLOW, W / 2 + f.x * sc - r, HOR + (CAMH - f.y) * sc - r, r * 2, r * 2);
   }
-  if (isNight && curS && !curS.sleep) {       // 頭燈光束
-    const r = W * 0.36;
-    ctx.save(); ctx.translate(hero.sx, hero.sy - H * 0.15); ctx.scale(1, 0.6); ctx.globalAlpha = 0.42; ctx.drawImage(GLOW, -r, -r, r * 2, r * 2); ctx.restore();
-    ctx.globalAlpha = 0.9; ctx.drawImage(GLOW, hero.sx - 9 * U, hero.top + 6 * U, 18 * U, 18 * U);
+  if (isNight && curS && !curS.sleep) {       // 頭燈：從背後看不到燈本身，只畫照到前方地上的光
+    const r = W * 0.36, ry = r * 0.6;   // 光圈中心放在帽子前方的路上：下緣剛好到帽頂，登山客身上不會被照亮
+    ctx.save(); ctx.translate(hero.sx, hero.top - ry * 0.75); ctx.scale(1, 0.6); ctx.globalAlpha = 0.42; ctx.drawImage(GLOW, -r, -r, r * 2, r * 2); ctx.restore();
   }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
