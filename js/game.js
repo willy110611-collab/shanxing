@@ -25,6 +25,7 @@
     intro:null,  // 第一次出發的玩法小卡看過的日子（只出現一次）
     badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期, s:入門級日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
     gifts:{},   // 新手禮物送過了沒：{ 代號: 日期 }（代號見 FIRST_GIFTS）
+    likes:{},   // 看大圖時按了「我喜歡」的照片：{ 照片代號: 時間 }（自己的記號：不會告訴拍照的人、別人看不到；有帳號時只跟著自己的雲端存檔備份）
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, snowTop:0, bestStreak:0, walkSec:0 },   // walkSec：真的在走的秒數（個人紀錄用）
     set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false, clean:false } });
   let SV = blank();
@@ -918,9 +919,17 @@
   // ───────── 拍立得與山友照片牆 ─────────
   // 山友照片依「離登山口幾公尺」歸到下一個 500 公尺點：0–500 的照片在 500 那一站看，最後一段在山頂看
   const bandOf = m => Math.ceil(Math.max(1, m) / 500) * 500;
+  // 看大圖用的說明（data-pv-t 標題、data-pv-s 日期・距離・海拔）和「我喜歡」的代號（data-like，記在 SV.likes，只存在這支手機的存檔裡）
+  const attr = s => String(s == null ? '' : s).replace(/[&"<>]/g, c => ({ '&':'&amp;', '"':'&quot;', '<':'&lt;', '>':'&gt;' }[c]));
+  const pvAttrs = (t, s, like, extra) => ` data-pv-t="${attr(t)}" data-pv-s="${attr(s)}" data-like="${attr(like)}"${extra || ''}`;
+  const kmOf = m => (Math.max(0, m || 0) / 1000).toFixed(1) + ' km';
+  // 自己拍的拍立得沒有編號：用山、位置、日期和圖檔長度組一個（同一張照片永遠一樣）
+  const photoKey = p => `p:${p.id}:${p.m}:${p.date}:${p.img ? p.img.length : 0}`;
+  const photoAttrs = p => pvAttrs(p.cap, [p.date, /km/.test(p.cap || '') ? '' : '離登山口 ' + kmOf(p.m), p.alt != null ? `海拔 ${Math.round(p.alt).toLocaleString('en-US')} m` : '', p.wx].filter(Boolean).join('・'), photoKey(p));
+  const upAttrs = p => { const m = SX.M[p.mountainId]; return pvAttrs(`${m ? m.name : ''}・${m && bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m '}照片牆`, [p.by && p.by !== '我' ? p.by : '', p.date, '離登山口 ' + kmOf(p.m), `海拔 ${Math.round(p.alt).toLocaleString('en-US')} m`].filter(Boolean).join('・'), 'u:' + p.id, p.by === '我' ? ` data-up="${attr(p.id)}"` : ''); };
   function wallHtml(list){
     if (!list.length) return '<p class="summitBig">這一段還沒有山友照片，休息時上傳一張吧。</p>';
-    return '<div class="grid">' + list.map((p, i) => `<div class="pol" style="margin:4px 0 12px;transform:rotate(${(i % 3 - 1) * 1.5}deg)"><img src="${p.img}"><p>${p.by}・${Math.round(p.alt).toLocaleString('en-US')} m</p></div>`).join('') + '</div>';
+    return '<div class="grid">' + list.map((p, i) => `<div class="pol${SV.likes['u:' + p.id] ? ' liked' : ''}"${upAttrs(p)} style="margin:4px 0 12px;transform:rotate(${(i % 3 - 1) * 1.5}deg)"><img src="${p.img}"><p>${p.by}・${Math.round(p.alt).toLocaleString('en-US')} m</p></div>`).join('') + '</div>';
   }
   // 清掉以前存到的全黑照片（舊版在畫面還沒畫出來時拍照，會存成整張黑的）；開遊戲時檢查一次
   function purgeBlackPhotos(){
@@ -942,7 +951,7 @@
     A.shutter();
     const wall = mark ? SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) === mark) : null;
     modal(`<h3>${mark ? `走了 ${(mark/1000).toFixed(1)} 公里，拍一張！` : '喀嚓！'}</h3>
-      ${img ? `<div class="pol"><img src="${img}"><p>${cap}・${wt}</p></div>` : ''}
+      ${img ? `<div class="pol"${photoAttrs(SV.photos[SV.photos.length - 1])}><img src="${img}"><p>${cap}・${wt}</p></div>` : ''}
       ${wall ? `<h3>山友照片牆・${mark - 500}–${mark} m</h3>${wallHtml(wall)}` : ''}
       <div class="mBtns"><button class="cbtn go" id="pOk">${img ? '收進相簿' : '繼續走'}</button></div>`);
     $('#pOk').onclick = () => { A.pop(); closeModal(); if (mark) say(pick(SX.LINES.walk)); };
@@ -1339,7 +1348,7 @@
       const nx = recommendNext(), nxt = nx && nx.id !== M.id ? nx : null;   // 登頂後推薦下一座
       modal(`${SX.art.img(groupArt('summit_', M.id), '', 'artImg summitArt')}<h3>抵達終點！</h3>
         <div class="summitBig"><b>${M.name} ${M.alt.toLocaleString('en-US')} m</b>${M.end}</div>
-        ${img ? `<div class="pol"><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
+        ${img ? `<div class="pol"${photoAttrs(SV.photos[SV.photos.length - 1])}><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
         ${gift ? `<div class="giftRow ${RAR_CLS[gift.rarity] || ''}" style="${RAR_BG[gift.rarity] || ''}">${trSvg(gift)}<span><small>第一次登頂的禮物</small><b>${gift.name}</b><span class="chip" style="background:${RAR_COL[gift.rarity]}">${gift.rarity}</span></span></div>` : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
@@ -1437,7 +1446,7 @@
       <text x="50" y="25" text-anchor="middle" font-size="8.5" fill="#c8402f">${(date || '').replace(/\//g,'.')}</text></g></svg>`;
   }
   // ───────── 相簿 ─────────
-  let albumTab = 'photos';
+  let albumTab = 'photos', likeOnly = false;   // likeOnly：拍立得分頁只看「我喜歡的照片」
   $$('#scrAlbum .tab').forEach(b => b.onclick = () => { A.pop(); albumTab = b.dataset.tab; $$('#scrAlbum .tab').forEach(x => x.classList.toggle('on', x === b)); renderAlbum(); });
   function renderAlbum(){
     const body = $('#albumBody');
@@ -1446,10 +1455,13 @@
     if (albumTab === 'baiyue') return renderBaiyue(body);
     if (albumTab === 'photos') {
       if (!SV.photos.length) { body.innerHTML = '<div class="empty">還沒有照片。<br>每走 500 公尺自動拍一張拍立得，<br>在長椅和觀景台也能自己拍。</div>'; return; }
-      let html = '';
-      SX.MOUNTAINS.forEach(m => { const ps = SV.photos.filter(p => p.id === m.id); if (!ps.length) return;
-        html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol" style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${p.cap}</p></div>`).join('') + '</div>'; });
+      const nLike = SV.photos.filter(p => SV.likes[photoKey(p)]).length;
+      if (!nLike) likeOnly = false;
+      let html = nLike ? `<div class="likeBar"><button class="chip${likeOnly ? ' on' : ''}" id="likeOnly">♥ 我喜歡的照片（${nLike}）</button></div>` : '';
+      SX.MOUNTAINS.forEach(m => { const ps = SV.photos.filter(p => p.id === m.id && (!likeOnly || SV.likes[photoKey(p)])); if (!ps.length) return;
+        html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol${SV.likes[photoKey(p)] ? ' liked' : ''}"${photoAttrs(p)} style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${p.cap}</p></div>`).join('') + '</div>'; });
       body.innerHTML = html; MO.stagger(body, '.pol');
+      if ($('#likeOnly')) $('#likeOnly').onclick = () => { A.pop(); likeOnly = !likeOnly; renderAlbum(); };
     } else if (albumTab === 'wall') {
       const cur = SV.cur && SX.M[SV.cur] ? SV.cur : SX.MOUNTAINS[0].id;
       let html = `<div class="setRow paper photoForm"><h4>上傳山上的照片</h4>
@@ -1459,7 +1471,7 @@
         <button class="cbtn go" id="upGo">選一張照片上傳</button>
         <p>照片依海拔歸到下一個 500 公尺點，走到那裡的山友才看得到，步道不會被照片塞滿。</p></div>`;
       SX.MOUNTAINS.forEach(m => { const ps = SV.userPhotos.filter(p => p.mountainId === m.id).sort((a, b) => a.m - b.m); if (!ps.length) return;
-        html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol" data-up="${p.id}" style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${Math.round(p.alt).toLocaleString('en-US')} m・${bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m'}照片牆</p></div>`).join('') + '</div>'; });
+        html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol${SV.likes['u:' + p.id] ? ' liked' : ''}"${upAttrs(p)} style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${Math.round(p.alt).toLocaleString('en-US')} m・${bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m'}照片牆</p></div>`).join('') + '</div>'; });
       if (!SV.userPhotos.length) html += '<div class="empty" style="padding:30px 20px">還沒有上傳過照片。</div>';
       body.innerHTML = html;
       const selM = $('#upM'), inAlt = $('#upAlt');
@@ -1468,11 +1480,84 @@
       const reset = () => { const m = SX.M[selM.value]; inAlt.min = m.startAlt; inAlt.max = m.alt; inAlt.value = Math.round(st && M === m && !st.fin ? altAt(m, st.dist / m.dist) : (m.startAlt + m.alt) / 2); upd(); };
       selM.onchange = reset; inAlt.oninput = upd; reset();
       $('#upGo').onclick = e => { A.pop(); pickUpload(selM.value, mOf(), e.currentTarget); };
-      $$('#albumBody [data-up]').forEach(el => el.onclick = () => { if (confirm('要把這張照片從照片牆拿下來嗎？')) { SV.userPhotos = SV.userPhotos.filter(p => p.id !== el.dataset.up); imgDirty = true; save(); renderAlbum(); } });
     } else {
       body.innerHTML = '<div class="stamps">' + SX.MOUNTAINS.map(m => `<div class="stampSlot">${SV.stamps[m.id] ? stampSvg(m.id, SV.stamps[m.id]) : m.name}</div>`).join('') + '</div>'; MO.stagger(body, '.stampSlot');
     }
   }
+
+  // ───────── 看大圖：相簿、照片牆、登山時的拍立得和山友照片，點一張就放大 ─────────
+  // 同一個格子區（.grid）裡的照片可以左右滑；說明和「我喜歡」的代號寫在格子的 data-pv-t、data-pv-s、data-like（沒寫就用格子下面那行字）
+  // 動態（飛進飛出、跟著手指滑、往下拉關掉）都在 js/motion.js：viewOpen、viewClose、pager
+  const HEART = `<svg viewBox="0 0 24 24"><path d="M12 21C5 15.5 2 12.5 2 8.5 2 5.4 4.4 3 7.4 3c1.9 0 3.6 1 4.6 2.5C13 4 14.7 3 16.6 3 19.6 3 22 5.4 22 8.5c0 4-3 7-10 12.5z" stroke="${INK}" stroke-width="1.6"/></svg>`;
+  const pv = document.createElement('div'); pv.id = 'pv'; pv.className = 'pv'; pv.setAttribute('aria-hidden', 'true');
+  pv.innerHTML = `<div class="pvBg"></div><div class="pvStage"><div class="pvTrack"></div></div>
+    <header class="pvTop"><button class="cbtn sm" id="pvBack">← 返回</button><span class="chip pvIdx" id="pvIdx"></span></header>
+    <div class="pvFoot paper"><div class="pvCap"><b id="pvT"></b><small id="pvS"></small></div><button class="cbtn sm" id="pvDel">拿下來</button><button class="pvLike" id="pvLike" aria-label="我喜歡">${HEART}</button></div>`;
+  $('#app').insertBefore(pv, $('#toast'));
+  const pvTrack = pv.querySelector('.pvTrack'), pvStage = pv.querySelector('.pvStage'), PV = { list:[], i:0, open:false, busy:false, hid:null };
+  const pvText = el => el ? [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim() : '';
+  const pvItem = cell => { const d = cell.dataset, img = cell.querySelector('img'); return { cell, src:img.currentSrc || img.src, t:d.pvT || pvText(cell.querySelector('p')), s:d.pvS || '', like:d.like || '', up:d.up || '' }; };
+  // 大圖打開時，格子裡原本那張先藏起來（看起來就是同一張照片飛出去）；換張、關掉時換回來
+  function pvHide(cell){ if (PV.hid) PV.hid.style.visibility = ''; PV.hid = cell && cell.isConnected ? cell : null; if (PV.hid) PV.hid.style.visibility = 'hidden'; }
+  function pvShow(){
+    const L = PV.list, i = PV.i, it = L[i];
+    pvTrack.textContent = '';
+    [-1, 0, 1].forEach(k => { const o = L[i + k]; if (!o) return;
+      const s = document.createElement('div'), im = new Image(); s.className = 'pvSlide ' + (k < 0 ? 'prev' : k ? 'next' : 'cur'); im.alt = ''; im.src = o.src; s.appendChild(im); pvTrack.appendChild(s); });
+    $('#pvIdx').textContent = `${i + 1} / ${L.length}`; $('#pvIdx').style.visibility = L.length > 1 ? '' : 'hidden';
+    $('#pvT').textContent = it.t; $('#pvS').textContent = it.s; $('#pvS').style.display = it.s ? '' : 'none';
+    const lk = $('#pvLike'), on = !!(it.like && SV.likes[it.like]);
+    lk.style.display = it.like ? '' : 'none'; lk.classList.toggle('on', on); lk.setAttribute('aria-pressed', String(on));
+    $('#pvDel').style.display = it.up && screen === 'album' ? '' : 'none';
+    pvHide(it.cell);
+  }
+  function pvOpen(img){
+    const cell = img.closest('.pol'), grid = cell.closest('.grid');
+    const cells = grid ? [...grid.querySelectorAll('.pol')].filter(c => c.querySelector('img') && c.offsetParent !== null) : [cell];
+    PV.list = cells.map(pvItem); PV.i = Math.max(0, cells.indexOf(cell)); PV.open = true; PV.busy = false;
+    const from = cell.getBoundingClientRect();
+    pvShow(); A.pop();
+    pv.style.visibility = 'hidden'; pv.classList.add('on'); pv.setAttribute('aria-hidden', 'false');
+    const big = pvTrack.querySelector('.cur img');
+    // 等大圖解碼好、量得到最後的大小，才從格子飛出來
+    Promise.resolve(big.decode ? big.decode() : null).catch(() => {}).then(() => { if (!PV.open) return; pv.style.visibility = ''; MO.viewOpen(pv, big, from); });
+  }
+  function pvClose(after){
+    if (!PV.open || PV.busy) return; PV.busy = true;
+    const it = PV.list[PV.i], c = it && it.cell, big = pvTrack.querySelector('.cur img');
+    let to = null;
+    if (c && c.isConnected && c.offsetParent !== null && typeof after !== 'function') { c.scrollIntoView({ block:'nearest' }); to = c.getBoundingClientRect(); }   // 滑到別張了：底下的相簿先捲到那張，照片飛回它自己的格子
+    A.pop();
+    MO.viewClose(pv, big, to).then(() => {
+      pv.classList.remove('on'); pv.setAttribute('aria-hidden', 'true'); MO.settle(pv); pvPager.reset(); pvHide(null);
+      PV.open = PV.busy = false; PV.list = [];
+      if (typeof after === 'function') after();
+    });
+  }
+  function pvGo(d){ if (!PV.list[PV.i + d]) return; PV.i += d; pvShow(); MO.viewSwap(pvTrack.querySelector('.cur')); }
+  const pvPager = MO.pager(pvStage, pvTrack, {
+    bg:pv.querySelector('.pvBg'), has:d => !!PV.list[PV.i + d], go:pvGo, close:() => pvClose(),
+    tap:e => { const im = pvTrack.querySelector('.cur img'), r = im && im.getBoundingClientRect(); if (!r || e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) pvClose(); }   // 點照片旁邊的空白：關掉
+  });
+  pv.querySelector('.pvBg').onclick = () => pvClose();
+  $('#pvBack').onclick = () => pvClose();
+  $('#pvLike').onclick = e => {
+    const it = PV.list[PV.i]; if (!it || !it.like) return;
+    const b = e.currentTarget, on = !SV.likes[it.like];
+    if (on) SV.likes[it.like] = Date.now(); else delete SV.likes[it.like];
+    const ks = Object.keys(SV.likes); if (ks.length > 300) ks.sort((a, b2) => SV.likes[a] - SV.likes[b2]).slice(0, ks.length - 300).forEach(k => delete SV.likes[k]);   // 最多記 300 張
+    save();
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); if (it.cell) it.cell.classList.toggle('liked', on);
+    if (on) { const r = b.getBoundingClientRect(); MO.like(r.left + r.width / 2, r.top + r.height / 2); MO.pop(b.querySelector('svg')); }
+    A.pop();
+  };
+  $('#pvDel').onclick = () => {
+    const it = PV.list[PV.i]; if (!it || !it.up || !confirm('要把這張照片從照片牆拿下來嗎？')) return;
+    SV.userPhotos = SV.userPhotos.filter(p => p.id !== it.up); delete SV.likes['u:' + it.up]; imgDirty = true; save();
+    pvClose(() => { if (screen === 'album') renderAlbum(); });
+  };
+  document.addEventListener('click', e => { const im = e.target.closest('.pol img'); if (im && !PV.open && !im.closest('.skel')) pvOpen(im); });
+  document.addEventListener('keydown', e => { if (!PV.open) return; if (e.key === 'Escape') pvClose(); else if (e.key === 'ArrowLeft') pvGo(-1); else if (e.key === 'ArrowRight') pvGo(1); });
 
   // ───────── 百岳帳（相簿分頁）：100 座百岳照 23 個山群排，登頂過的蓋章、遊戲裡還沒有的變淡 ─────────
   const byPlay = r => SX.MOUNTAINS.find(m => m.by === r);   // 百岳排名 → 遊戲裡的山（連結只寫在山身上的 by）

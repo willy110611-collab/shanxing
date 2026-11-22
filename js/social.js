@@ -7,7 +7,8 @@
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch(e){ return d; } };
-  const store = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+  const store = (k, v) => { if (FAKE && k === KEY) return;   // 假帳號不存進手機
+    try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
   const A = () => SX.audio || {};
   const MO = SX.motion;   // 介面動態效果（js/motion.js）：吐司、搖晃、骨架、下拉更新
   const toast = (msg, ms = 2400) => MO.toast(msg, ms);
@@ -19,7 +20,10 @@
   const mName = id => (SX.M[id] && SX.M[id].name) || id || '';
   const km = m => (Math.max(0, m || 0) / 1000).toFixed(2) + ' km';
 
-  let acct = load(KEY, null);          // { id, token, name, code }
+  // 開發測試用：網址加 ?fakenet=1（或 localStorage 的 sx_fakenet 設成 '1'）就完全不連伺服器，
+  // 用一個假帳號和假的好友、邀請、照片（晚 0.8 秒才回來，看得到骨架畫面和下拉更新；加 &fakems=8000 等更久）。玩家看不到入口；進入方式寫在管理手冊
+  const FAKE = /[?&]fakenet=1\b/.test(location.search) || (() => { try { return localStorage.getItem('sx_fakenet') === '1'; } catch(e){ return false; } })();
+  let acct = FAKE ? { id: 'dev', token: 'dev', name: '測試山友', code: 'TEST0001' } : load(KEY, null);          // { id, token, name, code }（假帳號不存進手機）
   // 一起爬的隊伍：{ id:隊伍房間（同一隊最早的那張邀請）, ids:這隊所有邀請, mountain, host:邀請人, mates:[{id,name}]（不含自己）}
   // 舊存檔只有 with（一位隊友）：換成 mates，host 等下次讀到邀請再補
   let party = load(KEY_PARTY, null);
@@ -27,7 +31,29 @@
   let invMt = null;   // 從山的卡片按「邀請山友」來的：好友分頁的山先選好這座
 
   // ───────── API ─────────
+  // 假伺服器（只有 FAKE 時用）：每次拿好友清單，大家本週的公里數都會變一點，看得出下拉更新有重新拿
+  let fakeN = 0;
+  const FAKE_MS = +(location.search.match(/[?&]fakems=(\d+)/) || [])[1] || 800;   // 網址加 &fakems=8000：假伺服器要等 8 秒才回，慢慢看骨架畫面
+  const FAKE_PICS = ['scene_descend', 'summit_alishan', 'summit_hehuan', 'summit_jiaming'];
+  async function fakeApi(path, opt){
+    await new Promise(r => setTimeout(r, FAKE_MS));   // 假裝網路要等一下（只有開發測試會走到這裡）
+    const q = new URLSearchParams(path.split('?')[1] || ''), p = path.split('?')[0];
+    if (p === '/friends' && !opt.body) { fakeN++; return { friends: [
+      { id: 'f1', name: '阿山', online: true, mountain: 'xiangshan', dist: 820 + fakeN * 40, week: 5200 + fakeN * 130 },
+      { id: 'f2', name: '小溪', online: false, week: 1200 + fakeN * 20 },
+      { id: 'f3', name: '雲雀', online: true, week: 9800 + fakeN * 60 }] }; }
+    if (p === '/friends') return { friend: { name: '新朋友' } };
+    if (p === '/invites') return { invites: [] };
+    if (p === '/me') return opt.body ? { week: 3400 + fakeN * 50, name: acct.name } : acct;
+    if (p === '/photos' && !opt.body) fakeN++;   // 照片也是：每拿一次，海拔、審核狀態變一點
+    if (p === '/photos' && q.get('mine')) return { photos: [{ id: 'd1', mountain: 'xiangshan', alt: 183, status: 'ok' }, { id: 'd2', mountain: 'qixing', alt: 1020, status: fakeN % 2 ? 'ok' : 'pending' }] };
+    if (p === '/photos' && !opt.body) return { photos: [{ id: 'd3', by: '阿山', alt: 160 + fakeN, status: 'ok', owner: 'f1' }, { id: 'd4', by: '雲雀', alt: 230, status: 'ok', owner: 'f3' }].slice(0, 1 + (fakeN % 2)) };
+    return {};
+  }
+  // 山友分享的照片網址（假伺服器用遊戲裡的插圖代替）
+  const photoUrl = (id, mine) => FAKE ? SX.art.url(FAKE_PICS[id.charCodeAt(1) % FAKE_PICS.length]) : `${API}/photo/${id}${mine ? `?t=${encodeURIComponent(acct.token)}` : ''}`;
   async function api(path, opt = {}){
+    if (FAKE) { if (opt.json !== undefined) opt.body = JSON.stringify(opt.json); return fakeApi(path, opt); }
     const h = Object.assign({}, opt.headers || {});
     if (acct && acct.token) h.Authorization = 'Bearer ' + acct.token;
     if (opt.json !== undefined) { h['Content-Type'] = 'application/json'; opt.body = JSON.stringify(opt.json); }
@@ -52,6 +78,7 @@
 
   // ───────── 即時房間（WebSocket，自動重連）─────────
   function room(name, on){
+    if (FAKE) { Promise.resolve().then(() => on({ type: 'hello', history: [], people: [], plaza: 1 })); return { send(){}, close(){}, open: true }; }   // 假伺服器：一個空的廣場
     let ws = null, alive = true, tries = 0, ping = null;
     const R = { send: d => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(d)); }, close: () => { alive = false; clearInterval(ping); if (ws) try { ws.close(); } catch(e){} }, get open(){ return !!ws && ws.readyState === 1; } };
     const connect = () => {
@@ -278,12 +305,20 @@
       try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); badCode($('#rsF'), $('#rsIn')); } };
     $('#cdUp').onclick = () => { lastSaved = ''; cloudSave(false); toast('備份好了'); };
     $('#cdDown').onclick = () => offerCloudLoad();
-    api('/photos?mine=1').then(d => {
-      const L = d.photos || [], st = { pending: '審核中', ok: '已公開', hidden: '未通過' };
-      $('#myPh').innerHTML = L.length ? '<div class="grid">' + L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}?t=${encodeURIComponent(acct.token)}" loading="lazy"><p>${esc(mName(p.mountain))}・${p.alt} m・${st[p.status] || p.status}</p></div>`).join('') + '</div>'
+    myPhotos();
+  }
+  // 「我上傳的照片」：跟伺服器拿（帳號分頁往下拉也會重新拿）
+  function myPhotos(){
+    const el0 = $('#myPh'); if (!el0) return Promise.resolve();
+    el0.innerHTML = MO.skeletonGrid(2);
+    return api('/photos?mine=1').then(d => {
+      const L = d.photos || [], st = { pending: '審核中', ok: '已公開', hidden: '未通過' }, el = $('#myPh'); if (!el) return;
+      el.innerHTML = L.length ? '<div class="grid">' + L.map(p => `<div class="pol${likedOf('s:' + p.id)}" data-pv-t="${esc(mName(p.mountain))}" data-pv-s="${esc(`我上傳的・海拔 ${p.alt} m・${st[p.status] || p.status}`)}" data-like="s:${esc(p.id)}"><img src="${photoUrl(p.id, true)}" loading="lazy"><p>${esc(mName(p.mountain))}・${p.alt} m・${st[p.status] || p.status}</p></div>`).join('') + '</div>'
         : '<p>還沒有上傳過。休息時按「上傳照片」，審核通過後，走到同一段的山友就看得到。</p>';
     }).catch(e => { const el = $('#myPh'); if (el) el.innerHTML = `<p>${esc(e.message)}</p>`; });
   }
+  // 看大圖按過「我喜歡」的照片，格子右上角有小愛心（記號存在遊戲存檔 SV.likes）
+  const likedOf = k => { const S = window.SXG && SXG.SV; return S && S.likes && S.likes[k] ? ' liked' : ''; };
 
   // ───────── 一起爬：登山畫面上的隊友面板 ─────────
   let pRoom = null, mates = {}, stateT = 0;   // mates：隊友 id → 最新進度
@@ -338,7 +373,7 @@
   // ───────── 雲端存檔：有帳號就每 3 分鐘、離開畫面時備份一次（不含照片圖檔）─────────
   let lastSaved = '';
   function cloudSave(keep){
-    if (!acct || !SX.game) return;
+    if (!acct || !SX.game || FAKE) return;
     const txt = SX.game.getSave(); if (txt === lastSaved || txt.length > 390 * 1024) return;
     lastSaved = txt;
     fetch(API + '/save', { method: 'POST', headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: txt, keepalive: !!keep && txt.length < 60000 }).catch(() => { lastSaved = ''; });
@@ -365,20 +400,21 @@
       } catch(e){ toast('分享沒成功：' + e.message, 3600); }
     }, 'image/jpeg', 0.75);
   }
+  // 拍照視窗裡「其他山友在這一段拍的」：跟伺服器拿；整塊放在 .svWall 裡（沒有照片時是空的），視窗往下拉會重新拿
   async function fillWall(mountainId, mark, root){
     if (!acct || !root) return;
-    const sk = document.createElement('div'); sk.innerHTML = MO.skeletonGrid(2);
-    const at = root.querySelector('.mBtns'); at ? root.insertBefore(sk, at) : root.appendChild(sk);
+    let box = root.querySelector('.svWall');
+    if (!box) { box = document.createElement('div'); box.className = 'svWall'; const at = root.querySelector('.mBtns'); at ? root.insertBefore(box, at) : root.appendChild(box); }
+    box.dataset.mt = mountainId; box.dataset.mark = mark;
+    box.innerHTML = MO.skeletonGrid(2);
     try {
       const d = await api(`/photos?mountain=${encodeURIComponent(mountainId)}&band=${Math.max(0, mark / 500 - 1)}`);
       const L = (d.photos || []).filter(p => p.status === 'ok' && p.owner !== acct.id);
-      sk.remove();
-      if (!L.length || !root.isConnected) return;
-      const box = document.createElement('div');
-      box.innerHTML = `<h3>其他山友在這一段拍的</h3><div class="grid">${L.map(p => `<div class="pol"><img src="${API}/photo/${p.id}" loading="lazy"><p>${esc(p.by || '山友')}・${p.alt} m <button class="repBtn" data-rep="${p.id}">檢舉</button></p></div>`).join('')}</div>`;
-      const btns = root.querySelector('.mBtns'); btns ? root.insertBefore(box, btns) : root.appendChild(box);
+      if (!box.isConnected) return;
+      const mt = SX.M[mountainId], where = mt && mark >= mt.dist ? '山頂' : `${mark - 500}–${mark} m`;
+      box.innerHTML = L.length ? `<h3>其他山友在這一段拍的</h3><div class="grid">${L.map(p => `<div class="pol${likedOf('s:' + p.id)}" data-pv-t="${esc(`${mName(mountainId)}・${where}`)}" data-pv-s="${esc(`${p.by || '山友'}・海拔 ${p.alt} m`)}" data-like="s:${esc(p.id)}"><img src="${photoUrl(p.id)}" loading="lazy"><p>${esc(p.by || '山友')}・${p.alt} m <button class="repBtn" data-rep="${p.id}">檢舉</button></p></div>`).join('')}</div>` : '';
       box.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { if (!confirm('這張照片不恰當，要檢舉嗎？')) return; try { await api(`/photos/${b.dataset.rep}/report`, { method: 'POST' }); b.textContent = '已檢舉'; b.disabled = true; } catch(e){ toast(e.message); } });
-    } catch(e){ sk.remove(); }
+    } catch(e){ if (box.isConnected) box.innerHTML = ''; }
   }
 
   // ───────── 照片審核（開發者選項裡）─────────
@@ -446,13 +482,15 @@
     pushOn = true; store(KEY_PUSH, true); return true;
   }
   function sendEta(leaving){
-    if (!acct || !pushOn) return;
+    if (!acct || !pushOn || FAKE) return;
     const e = leaving && SX.game && SX.game.summitEta ? SX.game.summitEta() : null;
     fetch(API + '/eta', { method: 'POST', keepalive: true, headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: JSON.stringify(e || { at: null }) }).catch(() => {});
   }
   document.addEventListener('visibilitychange', () => sendEta(document.hidden));
 
-  { const lb = $('#lobbyBody'); if (lb) MO.pull(lb, () => !!acct && tab === 'friends', refresh); }
+  // 下拉更新：好友分頁（好友、邀請）、帳號分頁（我上傳的照片）、拍照視窗裡的山友照片牆，都是跟伺服器拿的
+  { const lb = $('#lobbyBody'); if (lb) MO.pull(lb, () => !!acct && (tab === 'friends' || tab === 'me'), () => tab === 'me' ? myPhotos() : refresh()); }
+  { const mc = $('#mCard'); if (mc) MO.pull(mc, () => !!acct && !!mc.querySelector('.svWall') && $('#modal').classList.contains('on'), () => { const w = mc.querySelector('.svWall'); return w && fillWall(w.dataset.mt, +w.dataset.mark, mc); }); }
   SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite };
   if (acct) { refresh(); }
 })();
