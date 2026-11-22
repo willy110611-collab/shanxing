@@ -23,10 +23,13 @@
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
     born:null,   // 開始登山的日子（個人紀錄用）
     intro:null,  // 第一次出發的玩法小卡看過的日子（只出現一次）
-    badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
+    badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期, s:入門級日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
+    gifts:{},   // 新手禮物送過了沒：{ 代號: 日期 }（代號見 FIRST_GIFTS）
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, snowTop:0, bestStreak:0, walkSec:0 },   // walkSec：真的在走的秒數（個人紀錄用）
     set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false, clean:false } });
   let SV = blank();
+  // 新手禮物：第一次登頂（summit）、第一次領每日獎勵（daily）、第一次連續上山 3 天簽到（streak3），各保證一件還沒有的寶物，值是稀有度
+  const FIRST_GIFTS = { summit:'稀有', daily:'普通', streak3:'稀有' };
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
   let imgDirty = false;
   try {
@@ -39,6 +42,8 @@
       SV.set = Object.assign(b.set, o.set); SV.stats = Object.assign(b.stats, o.stats);
       ['photos','lots','titles','pets','userPhotos'].forEach(k => { if (!Array.isArray(SV[k])) SV[k] = b[k]; });
       ['prog','done','stamps','bag','bagLog','quests','cairns','badges','encSeen'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
+      // 新手禮物出來前就玩過的存檔（有寶物或登頂過）：當作都送過了，不會突然多拿稀有寶物
+      if (!o.gifts || typeof o.gifts !== 'object') SV.gifts = Object.keys(SV.bag).length || Object.keys(SV.done).length ? Object.fromEntries(Object.keys(FIRST_GIFTS).map(k => [k, '舊存檔'])) : {};
       if (!SV.stats.magpie || typeof SV.stats.magpie !== 'object') SV.stats.magpie = {};
       if (!SV.pets.includes('shiba')) SV.pets.unshift('shiba');
       if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
@@ -64,7 +69,7 @@
   }
   A.on = SV.set.sound; A.vol = SV.set.vol;
 
-  const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null });
+  const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null, seg:null });   // seg：這次的小目標 { m 在哪, name }
   const P = id => { const p = SV.prog[id] || (SV.prog[id] = newProg()), d = newProg(); for (const k in d) if (p[k] === undefined) p[k] = d[k]; if (!p.got || typeof p.got !== 'object') p.got = {}; ['dist','stam','temp','ms','last','encT'].forEach(k => { if (typeof p[k] !== 'number' || !isFinite(p[k])) p[k] = d[k]; }); return p; };
   // 一次只能爬一座山（跟真實一樣）：onTrail＝正在爬、還沒登頂的那座；舊存檔裡同時爬到一半的別座山只留目前這座
   const onTrail = () => { const id = SV.cur, m = id && SX.M[id], q = m && SV.prog[id]; return q && q.dist > 0 && q.dist < m.dist && !q.fin ? id : null; };
@@ -387,6 +392,7 @@
     M = m; SV.cur = id; st = P(id);
     if (!cont) Object.assign(st, newProg());
     arrived = false; paused = false; ptrHold = false; keyHold = false; t = 0;
+    segDoneT = 0; segEl.classList.remove('done');   // 小目標：新的一趟沒有；離開一分鐘以上回來，catchUp 會清掉重新定
     $('#routeCard').classList.remove('on'); $('#modal').classList.remove('on');
     wx = wxOverride || wxHere();
     SC.setMountain(M); SC.setCairns(SV.cairns[id] || []);
@@ -425,7 +431,7 @@
   function simulate(p, m, dt, boost, offline, dry){
     if (p.sleep) { p.stam = Math.min(100, p.stam + NAP * dt); p.temp = Math.min(100, p.temp + 2 * dt); if (p.stam >= 60 && p.temp >= 50) p.sleep = false; return 0; }
     if (p.rest) { p.stam = Math.min(100, p.stam + REST * dt); p.temp = Math.min(100, p.temp + 4 * dt); if (offline && p.stam >= 100 && p.temp >= 95) p.rest = false; return 0; }
-    const dev = SV.set.devOn && SV.set.fast ? 20 : 1;
+    const dev = devX();
     let v = baseSpeed(m) * dev; if (p.temp < 25) v *= 0.7; if (boost) v *= BOOST;
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
@@ -457,11 +463,11 @@
     while (sec > 0 && p.dist < m.dist - 2) { const dt = Math.min(5, sec), z = p.sleep, r = p.rest; sec -= dt; simulate(p, m, dt, false, true); if (!z && p.sleep) naps++; if (!r && p.rest) rests++; }
     if (total >= 60) {
       SV.stats.away = Math.max(SV.stats.away || 0, total / 60);
-      const gained = p.dist - before;
+      const gained = p.dist - before, sg = segsAway(p, m, before);   // 離開時自己走到的小目標
       if (gained > 1 && total >= AWAY_DIARY) {
-        noteAway(p, m, before, total, now, naps, rests);   // 寫進離開時的日記，回到這座山的登山畫面就會打開
+        noteAway(p, m, before, total, now, naps, rests, sg);   // 寫進離開時的日記，回到這座山的登山畫面就會打開
         if (!(screen === 'climb' && M === m)) notice(`你不在的時候，自己走了 ${Math.round(gained).toLocaleString('en-US')} 公尺，回山上看看日記吧`, 3200);
-      } else if (gained > 1) notice(p.dist >= m.dist - 2.5 ? '你不在的時候，已經走到山頂前面了' : `你不在的時候，自己走了 ${Math.round(gained)} 公尺`, 3200);   // 字在這裡就決定好（不要等到跳出來時才看進度）
+      } else if (gained > 1) notice((p.dist >= m.dist - 2.5 ? '你不在的時候，已經走到山頂前面了' : `你不在的時候，自己走了 ${Math.round(gained)} 公尺`) + (sg.names.length ? `，到了「${sg.names[sg.names.length - 1]}」` : ''), 3200);   // 字在這裡就決定好（不要等到跳出來時才看進度）
       checkQuests();
     }
     save();
@@ -472,11 +478,12 @@
   const AWAY_PARCEL = 5;       // 一次包裹最多幾件（保護長期節奏）
   const AWAY_SHOTS = 3;        // 離線經過的 500 公尺點，最多補拍幾張
   // 奇遇圖鑑也用這個：記下看過哪個奇遇、第幾次、第一次是哪天
-  function noteEncounterSeen(id){ const s = SV.encSeen || (SV.encSeen = {}), o = s[id] || {}; s[id] = { n:(o.n || 0) + 1, first:o.first || today() }; }
+  function noteEncounterSeen(id){ const s = SV.encSeen || (SV.encSeen = {}), o = s[id] || {}; s[id] = { n:(o.n || 0) + 1, first:o.first || today() }; daily('enc'); }
   // catchUp 補走完：把這段記下來（存在進度裡，關掉再開也不會不見）；連續幾次回來還沒看，就併成同一篇
-  function noteAway(p, m, from, sec, now, naps, rests){
+  function noteAway(p, m, from, sec, now, naps, rests, sg){
     const a = p.away || (p.away = { from, to:from, sec:0, t0:now - sec * 1000, naps:0, rests:0, marks:[], shot:[], parcel:[], enc:null, v:0 });
     a.to = p.dist; a.sec += sec; a.t1 = now; a.naps += naps; a.rests += rests; a.v++;
+    a.segs = (a.segs || []).concat(sg.names); a.segItems = (a.segItems || []).concat(sg.items);   // 小目標：走到哪幾個、撿到什麼
     for (let k = Math.floor(from / 500) * 500 + 500; k <= p.dist && k < m.dist; k += 500) if (!a.marks.includes(k)) a.marks.push(k);
     if (a.marks.length) p.ms = Math.max(p.ms || 0, a.marks[a.marks.length - 1]);   // 回來時不要再跳一次「走了 X 公里，拍一張」
   }
@@ -515,16 +522,18 @@
     const sh = (seq.length > 3 ? [seq[0], seq[seq.length >> 1], seq[seq.length - 1]] : seq).filter((x, i, l) => !i || l[i - 1].s !== x.s);   // 變很多次：只寫開頭、中間、現在
     if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ HUD.wxArt(w.kind, w.time), `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
     (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${firstSentence(e.text)}。` ]); });
+    const sn = (a.segs || []).length, si = a.segItems || [];
+    if (sn) L.push([ 'summit_marker', `完成了 ${sn} 個小目標：${a.segs.slice(-3).join('、')}${sn > 3 ? ' 等' : ''}${si.length ? `，還順手撿到「${si.join('」「')}」` : ''}。` ]);
     if (summit) L.push([ 'emo_cheer', '已經走到山頂前面了，就等你一起踏上山頂！' ]);
-    // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲（登頂那行一定留著）
-    for (const id of ['note_post', 'face_happy']) { const i = L.map(x => x[0]).lastIndexOf(id); if (L.length > 6 && i >= 0) L.splice(i, 1); }
+    // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲，再省小目標（登頂那行一定留著）
+    for (const id of ['note_post', 'face_happy', 'summit_marker']) { const i = L.map(x => x[0]).lastIndexOf(id); if (L.length > 6 && i >= 0) L.splice(i, 1); }
     return L;
   }
   let awayShown = null;   // 打開日記那一刻的內容（v 版本、走到哪、多久），收起時拿來判斷有沒有又併進新的一段
   function showAway(){
     const a = st.away; if (!a) return;
     composeAway(a);
-    awayShown = { v:a.v, to:a.to, t1:a.t1, sec:a.sec, naps:a.naps, rests:a.rests }; A.paper();
+    awayShown = { v:a.v, to:a.to, t1:a.t1, sec:a.sec, naps:a.naps, rests:a.rests, segN:(a.segs || []).length, itemN:(a.segItems || []).length }; A.paper();
     const left = a.parcel.filter(k => !st.got['t' + k]), h = Math.floor(a.sec / 3600), mi = Math.round(a.sec % 3600 / 60);
     const pics = a.pics ? SV.photos.filter(p => p.id === M.id && a.shot.includes(p.m)).slice(-3) : [];
     modal(`<h3>你不在的時候</h3><div class="awayD">
@@ -548,9 +557,77 @@
   function endAway(){
     const a = st.away, s = awayShown; awayShown = null;
     if (a && s && a.v !== s.v) {   // 看日記時又補走了一段：看過的部分拿掉，只留新的那段，等一下再寫一篇
-      Object.assign(a, { from:s.to, t0:s.t1, sec:a.sec - s.sec, naps:a.naps - s.naps, rests:a.rests - s.rests, marks:a.marks.filter(k => k > s.to), shot:[], parcel:a.parcel.filter(k => !st.got['t' + k]), enc:null, pics:0, v:1 });
+      Object.assign(a, { from:s.to, t0:s.t1, sec:a.sec - s.sec, naps:a.naps - s.naps, rests:a.rests - s.rests, marks:a.marks.filter(k => k > s.to), shot:[], parcel:a.parcel.filter(k => !st.got['t' + k]), enc:null, pics:0, v:1, segs:(a.segs || []).slice(s.segN), segItems:(a.segItems || []).slice(s.itemN) });
     } else if (a) st.away = null;
     closeModal(); save(); checkQuests();
+  }
+
+  // ───────── 這次的小目標 ─────────
+  // 一趟山常常要一個小時以上：每次開始爬或回到山上，從路上的地標（waypoints）、每 500 公尺拍照點、長椅和觀景台裡，
+  // 挑最先走到、照平常速度大約 3～10 分鐘的那一個當「這次的小目標」，畫面下方小小一行顯示
+  // 走到了：拍一張那裡的明信片收進相簿、打個勾、有機會撿到一件一般寶物、說一句話，再定下一個；離開時自己走到的寫進日記
+  const SEG_MIN = 180, SEG_MAX = 600;   // 秒：比 3 分鐘近的跳過；最先走到的超過 10 分鐘，就在路上另外放一個大約 8 分鐘的點
+  const SEG_LUCK = 0.3;                 // 走到小目標時順手撿到一件一般寶物的機會（只有一般寶物，稀有度不變）
+  const SEG_AWAY = 3;                   // 離開時自己走到的小目標，最多給幾次寶物機會
+  const devX = () => SV.set.devOn && SV.set.fast ? 20 : 1;   // 開發者快速模式的步速倍率
+  const segEl = document.createElement('div'); segEl.className = 'segGoal'; $('#scrClimb').appendChild(segEl);
+  let segDoneT = 0;   // 打勾停留的秒數（在 frame 裡倒數），倒數完才定下一個
+  function segStops(m, from){
+    const out = [];
+    m.waypoints.forEach(w => { if (w.m > from) out.push({ m:w.m, name:w.name }); });
+    for (let k = Math.floor(from / 500) * 500 + 500; k < m.dist; k += 500) if (!out.some(x => x.m === k)) out.push({ m:k, name:`${(k / 1000).toFixed(1)} 公里路標` });
+    if (m === M) SC.props(from, m.dist).forEach(o => { const k = Math.round(o.m); if ((o.type === 'bench' || o.type === 'view') && !out.some(x => Math.abs(x.m - k) < 30)) out.push({ m:k, name:o.type === 'view' ? '觀景台' : '路邊的長椅' }); });
+    return out.sort((a, b) => a.m - b.m);
+  }
+  const segMin = () => Math.max(1, Math.round((st.seg.m - st.dist) / (baseSpeed(M) * devX()) / 60));
+  function setSeg(){
+    const v = baseSpeed(M) * devX(), eta = x => (x.m - st.dist) / v, L = segStops(M, st.dist + 2);
+    let g = L.find(x => eta(x) >= SEG_MIN);
+    if (!g || eta(g) > SEG_MAX) {
+      const k = Math.round((st.dist + v * 480) / 10) * 10;
+      g = L.filter(x => eta(x) < SEG_MIN).pop() || (k < M.dist ? { m:k, name:`${(k / 1000).toFixed(1)} 公里處` } : L[L.length - 1]);
+    }
+    if (!g) return;
+    st.seg = { m:g.m, name:g.name };
+    toast(`這次的小目標：${g.name}（約 ${segMin()} 分鐘）`, 3200);
+  }
+  const segRoll = mid => Math.random() < SEG_LUCK ? rollTreasure(mid, x => x.rarity === '普通' && !AUTO_GIVEN.has(x.id)) : null;   // 不給登頂紀念章這種本來就會拿到的
+  function reachSeg(){
+    const g = st.seg; st.seg = null;
+    if (g.m >= M.dist) return;   // 小目標就是山頂：登頂卡片就是獎勵
+    daily('seg');
+    const got = [];
+    if (g.m % 500) { takePhoto(g.m, true, g.name); got.push('明信片收進相簿'); }   // 500 公尺點本來就會拍一張
+    const tr = segRoll(M.id); if (tr) { gainTreasure(tr, 'quiet'); got.push(`撿到「${tr.name}」`); }
+    toast(`✓ 到了${g.name}${got.length ? '・' + got.join('・') : ''}`, 3400);
+    say(pick(SX.LINES.seg)); A.chime();
+    segEl.textContent = `✓ 到了：${g.name}`; segEl.classList.add('on', 'done'); segDoneT = 3;
+    save();
+  }
+  // 每一格：走到就給獎勵；打勾停一下，再定下一個（有對話框時先等）
+  function segFrame(dt){
+    if (segDoneT > 0) { segDoneT -= dt; if (segDoneT <= 0) segEl.classList.remove('done'); return; }
+    if (paused || arrived || st.fin || st.away) return;   // 離開時的日記還沒看：先看日記
+    if (st.seg && st.dist >= st.seg.m - 1.5) return reachSeg();
+    if (!st.seg) setSeg();
+  }
+  function segTick(){   // 跟 HUD 一起更新（0.2 秒一次）
+    if (segDoneT > 0) return;
+    const on = !!(st.seg && !arrived && !st.fin);
+    segEl.classList.toggle('on', on);
+    const tx = on ? `下一站：${st.seg.name}（約 ${segMin()} 分鐘）` : '';
+    if (segEl.textContent !== tx) segEl.textContent = tx;
+  }
+  // 離開時自己走到的小目標：原本定好的那一個，加上路上經過的地標；寶物機會照給（最多 SEG_AWAY 次），回來時寫進日記，不跳一堆提示
+  function segsAway(p, m, from){
+    const names = [];
+    if (p.seg && p.dist >= p.seg.m - 1.5 && p.seg.m < m.dist) names.push(p.seg.name);
+    m.waypoints.forEach(w => { if (w.m > from && w.m <= p.dist && w.m < m.dist && !names.includes(w.name)) names.push(w.name); });
+    const items = names.slice(0, SEG_AWAY).map(() => segRoll(m.id)).filter(Boolean);
+    items.forEach(tr => gainTreasure(tr, 'quiet'));
+    if (names.length) daily('seg', names.length);
+    p.seg = null;   // 回來就是新的一次，重新定小目標
+    return { names, items:items.map(tr => tr.name) };
   }
 
   const cv = $('#cv'); SC.init(cv); cv.style.webkitUserSelect = 'none'; cv.style.webkitTouchCallout = 'none';
@@ -728,12 +805,13 @@
     if (/照片|一瞥|合照|留影|相片/.test(n)) return `<svg viewBox="0 0 60 60"><g transform="rotate(-5 30 30)"><rect x="10" y="8" width="40" height="46" rx="2" fill="#fff" ${o} stroke-width="2.5"/><rect x="14" y="12" width="32" height="28" fill="${col}" opacity=".55"/><path d="M14 40l10-14 7 8 6-11 9 17z" fill="${col}" ${o} stroke-width="1.5"/><circle cx="40" cy="18" r="3.5" fill="#ffe27a" ${o} stroke-width="1.2"/></g></svg>`;
     return `<svg viewBox="0 0 60 60"><g transform="rotate(5 30 30)"><rect x="8" y="14" width="44" height="33" rx="3" fill="#fff7e2" ${o} stroke-width="2.5"/><rect x="8" y="14" width="44" height="9" fill="${col}" ${o} stroke-width="2"/><path d="M14 30h20M14 36h26M14 41h14" stroke="${INK}" stroke-width="1.5" stroke-linecap="round" opacity=".55"/><path d="M43 29l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="${col}" ${o} stroke-width="1.2"/></g></svg>`;
   }
-  function rollTreasure(mid){
-    const pool = SX.TREASURES.filter(x => (x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) && (!x.peaks || x.peaks.includes(mid)) &&(!x.season || seasonOk(x.season, mid)));
+  // mid 是 null：不限哪座山掉的；only：再多一個條件（例如只要還沒有的），挑不到就回 null
+  function rollTreasure(mid, only){
+    const pool = SX.TREASURES.filter(x => (mid == null || x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) && (!x.peaks || x.peaks.includes(mid)) &&(!x.season || seasonOk(x.season, mid)) && (!only || only(x)));
     let sum = 0; pool.forEach(x => { sum += RAR_W[x.rarity] || 30; });
     let r = Math.random() * sum;
     for (const x of pool) { r -= RAR_W[x.rarity] || 30; if (r <= 0) return x; }
-    return pool[pool.length - 1] || SX.TREASURES[0];
+    return pool[pool.length - 1] || (only ? null : SX.TREASURES[0]);
   }
   // mode: 'show' 開寶物卡、'toast' 只跳提示、'quiet' 不提示
   // after：按「收進背包」之後要做的事（例如回到每日畫面、領下一件）
@@ -986,16 +1064,29 @@
   }
 
   // ───────── 背包（寶物、稱號、任務）─────────
+  // 還沒找到的寶物：點空格的一句提示。一般寶物說清楚在哪些山；稀有、傳說只說季節或大概的地區，保留神秘感
+  function bagHint(x){
+    const s = x.season && SX.SEASON[x.season], ms = x.peaks || (x.drop === 'any' ? null : x.drop);
+    if (x.rarity === '普通') { const ns = ms && ms.map(id => SX.GROUP[id] ? SX.GROUP[id].name : SX.M[id] ? SX.M[id].name : id);
+      return ns ? `可能在${ns.slice(0, 3).join('、')}${ns.length > 3 ? '這些山' : ''}撿到` : '哪一座山都撿得到，多走走就會遇到'; }
+    const areas = ms ? [...new Set(ms.map(id => (SX.M[id] || {}).area).filter(Boolean))] : [];
+    return `？ ${x.rarity === '傳說' ? '傳說中的寶物' : '稀有的寶物'}・${s ? `季節限定：${s.name}` : areas.length ? `聽說在${areas.slice(0, 2).join('、')}一帶的山上` : '聽說藏在某座山上'}`;
+  }
   function openBag(back){   // back：從寶物放大卡回來時，捲回原本的位置
     const have = SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
     modal(`<button class="rc-x mX" id="bagOk" aria-label="關閉">✕</button><h3>背包</h3>
       ${SV.titles.length ? `<div class="grp" style="margin-top:0">稱號（點一個掛在身上）</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${SV.titles.map(x => `<button class="chip" data-title="${x}"${SV.title === x ? ' style="background:#ffe08a"' : ''}>${x}</button>`).join('')}</div>` : ''}
       <div class="grp" style="margin-top:0">寶物 ${have} / ${SX.TREASURES.length}</div>
-      <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''} ${RAR_CLS[x.rarity] || ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>` : '<div class="slot empty"></div>').join('')}</div>
-      <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點一件寶物，看看它的故事。' : '步道上會閃閃發亮的地方，點一下看看。'}</p>
+      <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''} ${RAR_CLS[x.rarity] || ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>`
+        : `<button class="slot empty" data-hint="${x.id}" aria-label="還沒找到的寶物">${x.rarity === '普通' ? `<span class="sil">${trSvg(x)}</span>` : '<i>？</i>'}</button>`).join('')}</div>
+      <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點一件寶物看它的故事；點淡淡的影子，看哪裡找得到。' : '步道上會閃閃發亮的地方，點一下看看。'}</p>
       <div class="grp">隱藏任務 ${Object.keys(SV.quests).length} / ${SX.QUESTS.length}</div>
       <ul class="quest">${SX.QUESTS.map(q => SV.quests[q.id] ? `<li class="done"><span>${q.name}<small>${q.desc}</small></span></li>` : `<li class="hid"><span>？？？<small>${q.hint}</small></span></li>`).join('')}</ul>`);
     $$('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop); });
+    $$('#mCard [data-hint]').forEach(b => b.onclick = () => {
+      A.pop(); $$('#mCard .slot.pick').forEach(k => k.classList.remove('pick')); b.classList.add('pick');
+      toast(bagHint(SX.TREASURES.find(x => x.id === b.dataset.hint)), 3000);   // 提示框浮在最上面，格子在背包下面也看得到
+    });
     $$('#mCard [data-title]').forEach(b => b.onclick = () => { A.pop(); SV.title = b.dataset.title; save(); $$('#mCard [data-title]').forEach(k => { k.style.background = k === b ? '#ffe08a' : ''; }); });
     $('#bagOk').onclick = () => { A.pop(); closeModal(); };
     if (typeof back === 'number') $('#mCard').scrollTop = back;
@@ -1007,6 +1098,7 @@
     const owned = SX.TREASURES.filter(x => SV.bag[x.id] > 0);
     let i = owned.findIndex(x => x.id === id);
     if (i < 0) return;
+    daily('look');
     const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const show = dir => {
       const tr = owned[i], log = SV.bagLog[tr.id], mt = log && log.mt && SX.M[log.mt];
@@ -1048,31 +1140,42 @@
   }
 
   // ───────── 每日任務與連續上山天數 ─────────
+  // big：主任務，每天照順序換一個；grp：小任務分 0、1 兩組，單數日、雙數日輪流用，連續兩天的小任務一定不一樣
+  // 每一種都要 3～10 分鐘做得完（離開時自己走的路也算進走路）；need：要有帳號（acct）或正在一起爬（party）才排得到
   const DAILY_POOL = [
-    { id:'walk',  name:'走 400 公尺', goal:400, unit:'m' },
-    { id:'walk2', kind:'walk', name:'走 1,200 公尺', goal:1200, unit:'m' },
-    { id:'rest',  name:'在長椅或觀景台休息一次', goal:1 },
-    { id:'note',  name:'讀一張樹洞便條', goal:1 },
-    { id:'cairn', name:'疊一座許願石堆', goal:1 },
-    { id:'photo', name:'拍一張風景照', goal:1 },
-    { id:'treasure', name:'撿到一件寶物', goal:1 },
-    { id:'chat',  name:'在山友大廳打聲招呼', goal:1 },
-    { id:'cheer', name:'幫一起爬的好友加油', goal:1 },
-    { id:'summit', name:'登頂一座山', goal:1 },
+    { id:'walk',  big:true, name:'走 400 公尺', goal:400, unit:'m' },
+    { id:'seg',   big:true, name:'完成一個「這次的小目標」', goal:1 },
+    { id:'walk3', big:true, kind:'walk', name:'走 800 公尺', goal:800, unit:'m' },
+    { id:'walk2', big:true, kind:'walk', name:'走 1,200 公尺', goal:1200, unit:'m' },
+    { id:'rest',  grp:0, name:'在長椅或觀景台休息一次', goal:1 },
+    { id:'cairn', grp:0, name:'疊一座許願石堆', goal:1 },
+    { id:'treasure', grp:0, name:'撿到一件寶物', goal:1 },
+    { id:'look',  grp:0, name:'在背包裡看一件寶物的故事', goal:1 },
+    { id:'cheer', grp:0, need:'party', name:'幫一起爬的好友加油', goal:1 },
+    { id:'note',  grp:1, name:'讀一張樹洞便條', goal:1 },
+    { id:'photo', grp:1, name:'拍一張風景照', goal:1 },
+    { id:'enc',   grp:1, name:'在路上遇到一次奇遇', goal:1 },
+    { id:'chat',  grp:1, need:'acct', name:'在山友大廳打聲招呼', goal:1 },
+    { id:'summit', name:'登頂一座山', goal:1 },   // 不排進每日（一趟常常超過 10 分鐘），舊存檔當天抽到的還要認得
   ];
-  const dayKey = (t = Date.now()) => { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  const nowMs = () => testDate ? testDate.getTime() : Date.now();   // 測試掛鉤 SXG.date 假裝的日子也會換每日任務
+  const dayKey = (t = nowMs()) => { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  const dayNo = k => { const [y, m, d] = k.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 864e5); };
+  // 這一天的任務：同一天怎麼算都一樣（用日期當種子），隔天一定換
+  function dailyPick(k){
+    const n = dayNo(k), r = C.rng(C.hash('daily' + k)), S = SX.social || {};
+    const small = DAILY_POOL.filter(x => x.grp === n % 2 && (!x.need || S[x.need])), bigs = DAILY_POOL.filter(x => x.big);
+    const pick = []; while (pick.length < 2 && pick.length < small.length) { const x = small[Math.floor(r() * small.length)]; if (!pick.includes(x)) pick.push(x); }
+    return [bigs[n % bigs.length], ...pick];
+  }
   let dailyNow = 0;
   function dailyState(){
     const t = Date.now();
     if (SV.daily && t - dailyNow < 30000) return SV.daily;   // 每 30 秒才重新檢查一次換日
-    dailyNow = t; const k = dayKey(t);
+    dailyNow = t; const k = dayKey();
     if (!SV.daily || SV.daily.day !== k) {
-      const prev = SV.daily, streak = prev && prev.day === dayKey(t - 864e5) ? (prev.streak || 0) + 1 : 1;
-      const r = C.rng(C.hash('daily' + k));
-      const others = DAILY_POOL.filter(x => !x.id.startsWith('walk') && x.id !== 'summit' && (x.id !== 'cheer' || (SX.social && SX.social.party)) && (x.id !== 'chat' || (SX.social && SX.social.acct)));
-      const pick = []; while (pick.length < 2 && pick.length < others.length) { const x = others[Math.floor(r() * others.length)]; if (!pick.includes(x)) pick.push(x); }
-      const big = r() < 0.25 ? DAILY_POOL.find(x => x.id === 'summit') : DAILY_POOL[r() < 0.5 ? 0 : 1];
-      SV.daily = { day:k, streak, streakGot:false, tasks:[big, ...pick].map(x => ({ id:x.id, n:0, done:false, got:false })) };
+      const prev = SV.daily, streak = prev && prev.day === dayKey(nowMs() - 864e5) ? (prev.streak || 0) + 1 : 1;
+      SV.daily = { day:k, streak, streakGot:false, tasks:dailyPick(k).map(x => ({ id:x.id, n:0, done:false, got:false })) };
       save(); setTimeout(updateDailyBadge, 0);
     }
     return SV.daily;
@@ -1091,40 +1194,59 @@
     const n = D.tasks.filter(t => t.done && !t.got).length + (D.streakGot ? 0 : 1);
     $$('[data-go="daily"]').forEach(b => b.dataset.badge = n ? String(n) : '');
   }
-  let rewarding = false;
-  function giveReward(rare, after){
-    const pool = rare ? SX.TREASURES.filter(x => x.rarity !== '普通' && !x.season) : null;   // 季節限定只能在當季的山上找到
-    const tr = pool && pool.length ? pool[Math.floor(Math.random() * pool.length)] : rollTreasure(M ? M.id : 'any');
-    rewarding = true; gainTreasure(tr, 'show', after); rewarding = false;
+  // 新手禮物：一輩子只送一次的保證寶物（FIRST_GIFTS 寫在存檔那邊），一定是「還沒有的」，有畫好的圖優先
+  // 只從一般掉落裡挑：不送季節限定（season）、不送只屬於某幾座山的（peaks），長期的稀有度不變
+  // 也不送遊戲本來就會給的（每次登頂的紀念章、隱藏任務的獎勵），不然之後拿到又是重複的
+  const SUMMIT_STAMP = 't_summit_stamp', AUTO_GIVEN = new Set([SUMMIT_STAMP, ...SX.QUESTS.map(q => q.reward.item).filter(Boolean)]);
+  const freshFor = rar => x => x.rarity === rar && !AUTO_GIVEN.has(x.id) && !(SV.bag[x.id] > 0);   // 這個稀有度、還沒有、不是遊戲本來就會給的
+  function giftTreasure(key, mid){
+    if (!FIRST_GIFTS[key] || SV.gifts[key]) return null;
+    SV.gifts[key] = today();
+    const fresh = x => freshFor(FIRST_GIFTS[key])(x) && !x.season && !x.peaks, drawn = x => fresh(x) && SX.art.has(x.id);
+    return (mid && rollTreasure(mid, drawn)) || rollTreasure(null, drawn) || (mid && rollTreasure(mid, fresh)) || rollTreasure(null, fresh);
   }
-  // 每日獎勵一件一件打開，最後回到每日畫面（list：每件是不是稀有）
+  // 開始登山的頭三天：每日的一般獎勵先給還沒有的一般寶物（稀有、傳說的機率不變）
+  const newbie = () => dayNo(dayKey()) - dayNo(dayKey(new Date(SV.born).getTime())) < 3;
+  let rewarding = false;
+  // kind：'rare'（連續第 7 天）、'common'，或新手禮物的代號（第一次領獎不管哪一種，都先送 daily 新手禮物）
+  function giveReward(kind, after){
+    const mid = M ? M.id : 'any';
+    let tr = giftTreasure(FIRST_GIFTS[kind] ? kind : kind === 'rare' ? null : 'daily', mid);
+    if (!tr && kind === 'rare') { const pool = SX.TREASURES.filter(x => x.rarity !== '普通' && !x.season); tr = pool[Math.floor(Math.random() * pool.length)]; }   // 季節限定只能在當季的山上找到
+    if (!tr && newbie()) tr = rollTreasure(mid, freshFor('普通')) || rollTreasure(null, freshFor('普通'));   // 這座山的挑完了，就從別座山的一般寶物挑
+    rewarding = true; gainTreasure(tr || rollTreasure(mid), 'show', after); rewarding = false;
+  }
+  // 每日獎勵一件一件打開，最後回到每日畫面（list：每件的 kind，見 giveReward）
   function claimSeq(list){
     if (!list.length) { openDaily(); return; }
-    const rare = list.shift(), next = () => claimSeq(list);
+    const kind = list.shift(), next = () => claimSeq(list);
     next.label = list.length ? `下一件（還有 ${list.length} 件）` : '收進背包';
-    giveReward(rare, next);
+    giveReward(kind, next);
   }
   function openDaily(){
     const D = dailyState(), s = D.streak, wk = ((s - 1) % 7) + 1;
+    const g3 = !SV.gifts.streak3 && s <= 3;   // 新手禮物：第一次連續上山 3 天，簽到送稀有寶物
+    const signKind = wk === 7 ? 'rare' : g3 && s === 3 ? 'streak3' : 'common';
+    const tip = wk === 7 ? '今天是第 7 天，簽到可以拿稀有寶物！' : signKind === 'streak3' ? '連續 3 天了！今天簽到送一件稀有寶物' : g3 ? `再 ${3 - s} 天，簽到送一件稀有寶物` : `再 ${7 - wk} 天可以拿稀有寶物`;
     const nClaim = (D.streakGot ? 0 : 1) + D.tasks.filter(t => t.done && !t.got).length;   // 可以領的件數（一鍵領取用）
     modal(`<h3>每日任務</h3>
-      <div class="streakBox"><b>連續上山 ${s} 天</b><div class="streakDots">${[1,2,3,4,5,6,7].map(i => `<i class="${i <= wk ? 'on' : ''}${i === 7 ? ' big' : ''}"></i>`).join('')}</div>
-        <small>${wk === 7 ? '今天是第 7 天，簽到可以拿稀有寶物！' : `再 ${7 - wk} 天可以拿稀有寶物`}</small>
+      <div class="streakBox"><b>連續上山 ${s} 天</b><div class="streakDots">${[1,2,3,4,5,6,7].map(i => `<i class="${i <= wk ? 'on' : ''}${i === 7 || (i === 3 && g3) ? ' big' : ''}"></i>`).join('')}</div>
+        <small>${D.streakGot && signKind !== 'common' ? '今天的禮物已經領過了' : tip}</small>
         <button class="cbtn ${D.streakGot ? '' : 'go'} sm" id="dyIn" ${D.streakGot ? 'disabled' : ''}>${D.streakGot ? '今天簽到過了' : '簽到'}</button></div>
       ${D.tasks.map((tk, i) => { const def = DAILY_POOL.find(x => x.id === tk.id) || { name:tk.id, goal:1 }; const f = Math.min(1, tk.n / def.goal);
         return `<div class="dyTask${tk.done ? ' done' : ''}"><div><b>${def.name}</b><div class="dyBar"><i style="width:${f * 100}%"></i></div>
           <small>${def.unit ? `${Math.floor(tk.n).toLocaleString('en-US')} / ${def.goal.toLocaleString('en-US')} m` : `${tk.n} / ${def.goal}`}</small></div>
           <button class="cbtn sm ${tk.done && !tk.got ? 'go' : ''}" data-dy="${i}" ${tk.done && !tk.got ? '' : 'disabled'}>${tk.got ? '已領取' : tk.done ? '領取' : '進行中'}</button></div>`; }).join('')}
       <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務。完成後領取，會拿到一件寶物。</p>
-      <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取（${nClaim}）</button>` : ''}<button class="cbtn" id="dyX">關閉</button></div>`);
+      <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">關閉</button></div>`);
     // 領完都回到每日畫面
-    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; save(); updateDailyBadge(); closeModal(); claimSeq([wk === 7]); };
-    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; save(); updateDailyBadge(); closeModal(); claimSeq([false]); });
+    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; save(); updateDailyBadge(); closeModal(); claimSeq([signKind]); };
+    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; save(); updateDailyBadge(); closeModal(); claimSeq(['common']); });
     // 一鍵領取：簽到＋所有完成的任務，一件一件打開
     if (nClaim) $('#dyAll').onclick = () => {
       const list = [];
-      if (!D.streakGot) { D.streakGot = true; list.push(wk === 7); }
-      D.tasks.forEach(tk => { if (tk.done && !tk.got) { tk.got = true; list.push(false); } });
+      if (!D.streakGot) { D.streakGot = true; list.push(signKind); }
+      D.tasks.forEach(tk => { if (tk.done && !tk.got) { tk.got = true; list.push('common'); } });
       save(); updateDailyBadge(); closeModal(); claimSeq(list);
     };
     $('#dyX').onclick = () => { A.pop(); closeModal(); };
@@ -1138,7 +1260,7 @@
     const tops = Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), peaks = SX.MOUNTAINS.filter(m => SV.done[m.id]);
     const high = peaks.reduce((a, m) => Math.max(a, m.alt), 0);
     const hm = sec >= 3600 ? `${Math.floor(sec / 3600)} 小時 ${Math.floor(sec % 3600 / 60)} 分` : `${Math.floor(sec / 60)} 分`;
-    const bTot = SX.BADGES.reduce((a, b) => a + b.tiers.length, 0), bGot = SX.BADGES.reduce((a, b) => a + (SV.badges[b.id] ? SV.badges[b.id].t + 1 : 0), 0);
+    const bTot = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0), bGot = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0);
     const row = (name, n, tot) => `<div class="pfRow"><span>${name}</span><div class="dyBar"><i style="width:${tot ? Math.min(100, n / tot * 100) : 0}%"></i></div><b>${n} / ${tot}</b></div>`;
     const who = (SX.social && SX.social.acct && SX.social.acct.name) || '山友';
     modal(`<button class="rc-x mX" id="pfX" aria-label="關閉">✕</button><h3>我的山行紀錄</h3>
@@ -1172,7 +1294,9 @@
     if (wx.kind === 'fog') S.fogTop = (S.fogTop || 0) + 1;   // 霧中登頂（徽章用）
     if (wx.kind === 'snow') S.snowTop = (S.snowTop || 0) + 1;   // 雪中登頂（徽章用）
     daily('summit');
-    const stamp = SX.TREASURES.find(x => x.id === 't_summit_stamp'); if (stamp) gainTreasure(stamp, 'quiet');
+    const stamp = SX.TREASURES.find(x => x.id === SUMMIT_STAMP); if (stamp) gainTreasure(stamp, 'quiet');
+    const gift = giftTreasure('summit', M.id); if (gift) gainTreasure(gift, 'quiet');   // 第一次登頂：保證一件還沒有的稀有寶物
+    st.seg = null;   // 小目標是山頂時，登頂卡片就是它的獎勵
     save(); A.yay();
     const m = M;
     setTimeout(() => {
@@ -1186,6 +1310,7 @@
         <div class="summitBig"><b>${M.name} ${M.alt.toLocaleString('en-US')} m</b>${M.end}</div>
         ${img ? `<div class="pol"><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
+        ${gift ? `<div class="giftRow ${RAR_CLS[gift.rarity] || ''}" style="${RAR_BG[gift.rarity] || ''}">${trSvg(gift)}<span><small>第一次登頂的禮物</small><b>${gift.name}</b><span class="chip" style="background:${RAR_COL[gift.rarity]}">${gift.rarity}</span></span></div>` : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
         ${M.temple ? `<p class="summitBig">下山會經過${M.temple}，要不要進去拜一下？</p>` : '<p class="summitBig">集印帳蓋上新的章了！</p>'}
         ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
@@ -1203,7 +1328,7 @@
   { const bag = $('.i-bag'); if (bag) bag.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'><path d='M10 7c0-6 10-6 10 0' fill='none' stroke='${INK}' stroke-width='2'/><rect x='6' y='6.5' width='18' height='17.5' rx='5' fill='#f0a444' stroke='${INK}' stroke-width='2'/><path d='M6 12h18' stroke='${INK}' stroke-width='1.4'/><rect x='10' y='14.5' width='10' height='6.5' rx='2' fill='#ffe1a0' stroke='${INK}' stroke-width='1.6'/></svg>`) + '")'; }
   function hudTick(){
     if (!st || !M) return;
-    const f = st.dist / M.dist, v = baseSpeed(M) * (st.temp < 25 ? 0.7 : 1) * (SV.set.devOn && SV.set.fast ? 20 : 1), left = Math.max(1, Math.round((M.dist - st.dist) / v / 60));
+    const f = st.dist / M.dist, v = baseSpeed(M) * (st.temp < 25 ? 0.7 : 1) * devX(), left = Math.max(1, Math.round((M.dist - st.dist) / v / 60));
     try {
       HUD.update({ name:M.name, stam:st.stam, temp:st.temp, alt:Math.round(altAt(M, f)), frac:f,
         distText:`${(st.dist/1000).toFixed(2)} / ${(M.dist/1000).toFixed(1)} km`,
@@ -1213,6 +1338,7 @@
     const rs = $('#restSheet'), on = !!st.rest && !arrived;
     if (on && !rs.classList.contains('on')) $('#rsTitle').textContent = st.restType === 'view' ? '觀景台到了，慢慢看' : '坐下來喝口熱茶';
     rs.classList.toggle('on', on);
+    segTick();
   }
 
   // ───────── 主迴圈 ─────────
@@ -1242,6 +1368,7 @@
       const ms = Math.floor(st.dist / 500) * 500;
       if (!paused && ms > (st.ms || 0) && ms < M.dist) { st.ms = ms; takePhoto(ms, false, null, ms); }
       if (!paused && st.dist >= M.dist) arrive();
+      segFrame(dt);
       st.last = Date.now();
     }
     const moving = d > 0;
@@ -1531,28 +1658,39 @@
   }
   const BADGE_ALL = { treasureKinds:() => SX.TREASURES.length, encKinds:() => SX.ENCOUNTERS.length, stamps:() => SX.MOUNTAINS.length, groupPeaks:b => SX.peaksOf(b.group).length };   // tiers 寫 'all' 時的總數
   const tierGoal = (b, i) => b.tiers[i] === 'all' ? BADGE_ALL[b.stat](b) : b.tiers[i];
+  // 一個徽章的每一級：有入門級（data.js 的 starter）就排最前面，後面是銅銀金白金；畫面、計數、拿徽章都用這一份
+  const badgeLevels = b => (b.starter ? [{ name:SX.BADGE_STARTER.name, color:SX.BADGE_STARTER.color, goal:b.starter, cls:'tierS' }] : [])
+    .concat(b.tiers.map((x, i) => ({ name:SX.BADGE_TIERS[i].name, color:SX.BADGE_TIERS[i].color, goal:tierGoal(b, i), all:x === 'all', cls:'tier' + i })));
+  // 拿到幾級：存檔的 t 是銅銀金白金（-1 是還沒有）、d 是那一級的日期；入門級另外記在 s（日期）。拿過銅就一定算拿過入門
+  const badgeGot = b => { const g = SV.badges[b.id]; return !g ? 0 : (g.t + 1) + (b.starter && (g.s || g.t >= 0) ? 1 : 0); };
+  const levelDate = (b, i) => { const g = SV.badges[b.id] || {}, k = b.starter ? i - 1 : i; return k < 0 ? g.s : k === g.t ? g.d : null; };
   function checkBadges(){
     SV.stats.bestStreak = badgeValue({ stat:'bestStreak' });
     const got = [];
     SX.BADGES.forEach(b => {
-      const v = badgeValue(b), cur = SV.badges[b.id] ? SV.badges[b.id].t : -1;
-      let t = -1; b.tiers.forEach((x, i) => { if (v >= tierGoal(b, i)) t = i; });
-      if (t > cur) { SV.badges[b.id] = { t, d:today() }; got.push([b, t]); }
+      const v = badgeValue(b), L = badgeLevels(b), had = badgeGot(b), off = b.starter ? 1 : 0;
+      let n = 0; L.forEach((x, i) => { if (v >= x.goal) n = i + 1; });
+      if (n <= had) return;
+      const g = SV.badges[b.id] || { t:-1 };
+      if (off && !g.s) g.s = today();
+      if (n - off - 1 > g.t) { g.t = n - off - 1; g.d = today(); }
+      SV.badges[b.id] = g; got.push([b, n - 1]);
     });
     if (!got.length) return;
     save(); badgePop(got);
   }
-  function medalHtml(b, t){
-    const tier = SX.BADGE_TIERS[t];
+  // i：第幾級（badgeLevels 的位置），-1 是還沒拿到
+  function medalHtml(b, i){
+    const lv = badgeLevels(b)[i];
     const art = SX.art.img('badge_quest', `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" fill="#d9b45a" stroke="${INK}" stroke-width="2.5"/><circle cx="30" cy="30" r="19" fill="none" stroke="${INK}" stroke-width="1.5" opacity=".45"/></svg>`);
-    return `<span class="medal ${t < 0 ? 'off' : 'tier' + t}" style="--tc:${tier ? tier.color : '#8a7d6c'}">${art}<i>${b.glyph}</i></span>`;
+    return `<span class="medal ${lv ? lv.cls : 'off'}" style="--tc:${lv ? lv.color : '#8a7d6c'}">${art}<i>${b.glyph}</i></span>`;
   }
   // 拿到徽章：畫面上方跳出一張小卡（不用對話框，才不會蓋掉登頂卡片），點一下或幾秒後自己收起來
   function badgePop(got){
     const old = $('#badgePop'); if (old) old.remove();
     const el = document.createElement('div'); el.id = 'badgePop'; el.className = 'badgePop';
     const top = got.slice().sort((a, b) => b[1] - a[1]), more = top.length - 3;
-    el.innerHTML = `<div class="bpHead">得到新徽章！</div>` + top.slice(0, 3).map(([b, t]) => `<div class="bpRow">${medalHtml(b, t)}<span><b>${b.name}・${SX.BADGE_TIERS[t].name}</b><small>${b.desc}</small></span></div>`).join('')
+    el.innerHTML = `<div class="bpHead">得到新徽章！</div>` + top.slice(0, 3).map(([b, i]) => `<div class="bpRow">${medalHtml(b, i)}<span><b>${b.name}・${badgeLevels(b)[i].name}</b><small>${b.desc}</small></span></div>`).join('')
       + (more > 0 ? `<small class="bpMore">還有 ${more} 枚，到相簿的「徽章」看看</small>` : '');
     el.onclick = () => el.remove();
     el.addEventListener('animationend', ev => { if (ev.animationName === 'bpOut') el.remove(); });
@@ -1560,22 +1698,22 @@
     confetti(top[0][1] >= 2 ? 70 : 36); A.chime();
   }
   function renderBadges(body){
-    const earned = SX.BADGES.reduce((a, b) => a + (SV.badges[b.id] ? SV.badges[b.id].t + 1 : 0), 0), all = SX.BADGES.reduce((a, b) => a + b.tiers.length, 0);
+    const earned = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0), all = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0);
     body.innerHTML = `<div class="colHead">徽章 <b>${earned}</b> / ${all} 枚・點一下看每個等級</div>` + SX.BADGES.map(b => {
-      const g = SV.badges[b.id], t = g ? g.t : -1, nx = t + 1 < b.tiers.length ? t + 1 : -1;
-      const v = badgeValue(b), show = n => Math.floor(n).toLocaleString('en-US');
-      const goal = tierGoal(b, nx >= 0 ? nx : t), f = Math.min(1, v / goal);
-      return `<button class="bdgRow${t < 0 ? ' off' : ''}" data-bdg="${b.id}">${medalHtml(b, t)}<span class="bdgTxt"><b>${b.name}${t >= 0 ? `<em style="background:${SX.BADGE_TIERS[t].color}">${SX.BADGE_TIERS[t].name}</em>` : ''}</b>
-        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small>${nx >= 0 ? `${show(v)} / ${show(goal)} ${b.unit}・下一級${SX.BADGE_TIERS[nx].name}` : `${show(v)} ${b.unit}・全部等級都拿到了`}</small></span>
-        <span class="bdgDots">${b.tiers.map((x, i) => `<i${i <= t ? ` style="background:${SX.BADGE_TIERS[i].color}"` : ''}></i>`).join('')}</span></button>`;
+      const L = badgeLevels(b), n = badgeGot(b), t = n - 1, nx = n < L.length ? n : -1;
+      const v = badgeValue(b), show = x => Math.floor(x).toLocaleString('en-US');
+      const goal = L[nx >= 0 ? nx : t].goal, f = Math.min(1, v / goal);
+      return `<button class="bdgRow${t < 0 ? ' off' : ''}" data-bdg="${b.id}">${medalHtml(b, t)}<span class="bdgTxt"><b>${b.name}${t >= 0 ? `<em style="background:${L[t].color}">${L[t].name}</em>` : ''}</b>
+        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small>${nx >= 0 ? `${show(v)} / ${show(goal)} ${b.unit}・下一級${L[nx].name}` : `${show(v)} ${b.unit}・全部等級都拿到了`}</small></span>
+        <span class="bdgDots">${L.map((x, i) => `<i${i <= t ? ` style="background:${x.color}"` : ''}></i>`).join('')}</span></button>`;
     }).join('');
     stagger(body, '.bdgRow');
     $$('#albumBody [data-bdg]').forEach(el => el.onclick = () => { A.pop(); openBadge(SX.BADGES.find(b => b.id === el.dataset.bdg)); });
   }
   function openBadge(b){
-    const g = SV.badges[b.id], t = g ? g.t : -1, v = badgeValue(b);
+    const L = badgeLevels(b), t = badgeGot(b) - 1, v = badgeValue(b);
     modal(`<h3>${b.name}</h3><div class="bdgBig">${medalHtml(b, t)}</div><p class="summitBig" style="font-size:14px">${b.desc}：現在 ${Math.floor(v).toLocaleString('en-US')} ${b.unit}</p>
-      <ul class="quest bdgTiers">${b.tiers.map((x, i) => `<li class="${i <= t ? 'done' : 'hid'}"><span>${SX.BADGE_TIERS[i].name}　${tierGoal(b, i).toLocaleString('en-US')} ${b.unit}${x === 'all' ? '（全部）' : ''}<small>${i <= t ? (i === t && g.d ? g.d + ' 拿到' : '已拿到') : '還沒拿到'}</small></span></li>`).join('')}</ul>
+      <ul class="quest bdgTiers">${L.map((x, i) => `<li class="${i <= t ? 'done' : 'hid'}"><span>${x.name}　${x.goal.toLocaleString('en-US')} ${b.unit}${x.all ? '（全部）' : ''}<small>${i <= t ? (levelDate(b, i) ? levelDate(b, i) + ' 拿到' : '已拿到') : '還沒拿到'}</small></span></li>`).join('')}</ul>
       <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="bdgOk">好</button></div>`);
     $('#bdgOk').onclick = () => { A.pop(); closeModal(); };
   }
@@ -1740,7 +1878,7 @@
     treasure:id => { const tr = id ? SX.TREASURES.find(x => x.id === id) : rollTreasure(M ? M.id : 'xiangshan'); gainTreasure(tr, 'show'); return tr && tr.id; },
     rest:() => { if (st && !st.sleep) { st.stopAt = st.dist + 1; st.restType = 'bench'; } },
     stones:() => { if (st && M) stoneGame(); },
-    date:s => { testDate = s ? new Date(s + 'T12:00:00+08:00') : null; return seasonNow().map(x => x.id); },   // 假裝今天是某一天（台灣時間），不帶參數就回到真實日期
+    date:s => { testDate = s ? new Date(s + 'T12:00:00+08:00') : null; dailyNow = 0; return seasonNow().map(x => x.id); },   // 假裝今天是某一天（台灣時間），不帶參數就回到真實日期
     roll:mid => rollTreasure(mid).id,
     wx:(kind, time) => { wxOverride = kind ? { kind, time:time || 'day' } : null; wx = wxOverride || wxHere(); moodNow(); return wx; },
     get st(){ return st; }, get M(){ return M; }, get SV(){ return SV; } };
