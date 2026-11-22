@@ -14,11 +14,14 @@ let loaded = false;
 // order：Gemini 畫的格子順序不對（左右腳沒輪流）時，播放順序照這串（0 起算的原圖格號）
 // hiker_walk16 原圖左右腳沒照順序畫：挑出「左腳抬起 → 落地 → 右腳抬起 → 落地」的播放順序
 const WALK16 = [8, 6, 1, 4, 14, 5, 0, 15, 9, 2, 11, 3, 13, 7, 12, 10];
+// hiker_stairs16 原圖第 7、15 格是腳剛踩上上一階：往後挪一格，對齊爬階梯節奏（八格圖是第 4、8 格踩上去）
+const STAIRS16 = [15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const SHEETS = [
   [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
   [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
   [/_hop4$/, 4, 1, { air:true }], // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
-  [/_walk16$/, 8, 2, { order:WALK16 }]   // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
+  [/_walk16$/, 8, 2, { order:WALK16 }],  // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
+  [/_stairs16$/, 8, 2, { order:STAIRS16 }] // hiker_stairs16、hiker_rain_stairs16：前 8 格抬左膝、後 8 格抬右膝
 ];
 const POSE = /^hiker_/;   // 登山客的圖：單張動作也用上半身置中（見 prep）
 function sheetOf(id){ for (let i = 0; i < SHEETS.length; i++) if (SHEETS[i][0].test(id)) return SHEETS[i]; return null; }
