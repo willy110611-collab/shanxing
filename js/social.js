@@ -47,7 +47,8 @@
     const R = { send: d => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(d)); }, close: () => { alive = false; clearInterval(ping); if (ws) try { ws.close(); } catch(e){} }, get open(){ return !!ws && ws.readyState === 1; } };
     const connect = () => {
       if (!alive || !acct) return;
-      ws = new WebSocket(`${WS}?room=${encodeURIComponent(name)}&t=${encodeURIComponent(acct.token)}`);
+      const pet = name === 'lobby' && SX.game && SX.game.pet ? `&pet=${encodeURIComponent(SX.game.pet() || '')}` : '';   // 廣場上帶著現在的寵物
+      ws = new WebSocket(`${WS}?room=${encodeURIComponent(name)}&t=${encodeURIComponent(acct.token)}${pet}`);
       ws.onopen = () => { tries = 0; clearInterval(ping); ping = setInterval(() => R.send({ type: 'ping' }), 25000); on({ type: 'open' }); };
       ws.onmessage = e => { let d; try { d = JSON.parse(e.data); } catch(_){ return; } on(d); };
       ws.onclose = () => { clearInterval(ping); on({ type: 'closed' }); if (alive) setTimeout(connect, Math.min(15000, 1000 * 2 ** tries++)); };
@@ -58,7 +59,8 @@
   }
 
   // ───────── 大廳畫面 ─────────
-  let tab = 'chat', lobby = null, msgs = [], people = [], friends = [], invites = [];
+  let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false;
+  const PZ = () => SX.plaza;
   function ensureAccount(then){
     if (acct) return then();
     const mc = $('#mCard'); mc.innerHTML = `<h3>第一次來到山友大廳</h3>
@@ -89,16 +91,20 @@
       clearInterval(open._t); open._t = setInterval(refresh, 20000);
     });
   }
-  function close(){ clearInterval(open._t); if (lobby) { lobby.close(); lobby = null; } }
+  function close(){ clearInterval(open._t); if (PZ()) PZ().unmount(); if (lobby) { lobby.close(); lobby = null; } }
+  // 登山口廣場：伺服器傳來的事件同步到畫面
   function onLobby(d){
-    if (d.type === 'hello') { msgs = d.history || []; people = d.people || []; }
-    else if (d.type === 'chat') { msgs.push(d); if (msgs.length > 80) msgs.shift(); if (d.who.id !== acct.id && A().pop) A().pop(); }
-    else if (d.type === 'join') { if (!people.some(p => p.id === d.who.id)) people.push(d.who); }
-    else if (d.type === 'leave') { people = people.filter(p => p.id !== d.who.id); }
-    else if (d.type === 'open' || d.type === 'closed') {}
-    if (tab === 'chat') renderChat(d.type === 'chat' || d.type === 'hello');
-    const on = $('#lbOnline'); if (on) on.textContent = lobby && lobby.open ? `${people.length} 人在線` : '連線中…';
+    const pz = PZ();
+    if (d.type === 'hello') { msgs = d.history || []; people = d.people || []; plazaNo = d.plaza || 1; sayMax = d.sayMax || sayMax; pz.reset(people, acct.id); }
+    else if (d.type === 'chat') { msgs.push(d); if (msgs.length > 80) msgs.shift(); pz.say(d.who.id, d.text); if (d.who.id !== acct.id && A().pop) A().pop(); }
+    else if (d.type === 'join') { people = people.filter(p => p.id !== d.who.id); people.push(d.who); pz.join(d.who); }
+    else if (d.type === 'leave') { people = people.filter(p => p.id !== d.who.id); pz.leave(d.who.id); }
+    else if (d.type === 'move') pz.move(d.who.id, d.x, d.y);
+    else if (d.type === 'emote') pz.emote(d.who.id, d.k);
+    if (tab === 'plaza' && (d.type === 'chat' || d.type === 'hello')) renderLog();
+    onlineTag();
   }
+  function onlineTag(){ const on = $('#lbOnline'); if (on) on.textContent = lobby && lobby.open ? `廣場 ${plazaNo}・${people.length} 人` : '連線中…'; }
   async function refresh(){
     if (!acct) return;
     try {
@@ -107,7 +113,7 @@
       checkParty();
       if (tab === 'friends') renderFriends();
       updateBadge();
-    } catch(e){ if (tab !== 'chat') toast(e.message, 3000); }
+    } catch(e){ if (tab !== 'plaza') toast(e.message, 3000); }
   }
   function updateBadge(){
     const n = invites.filter(v => v.guest === (acct && acct.id) && v.status === 'pending').length;
@@ -115,20 +121,58 @@
   }
   function render(){
     $$('#scrLobby .tab').forEach(b => { b.classList.toggle('on', b.dataset.lt === tab); b.onclick = () => { if (A().pop) A().pop(); tab = b.dataset.lt; render(); if (tab === 'friends') refresh(); }; });
-    if (tab === 'chat') renderChat(true); else if (tab === 'friends') renderFriends(); else renderMe();
+    const body = $('#lobbyBody'); if (body) body.classList.toggle('plazaMode', tab === 'plaza');
+    if (tab !== 'plaza' && PZ()) PZ().unmount();
+    if (tab === 'plaza') renderPlaza(); else if (tab === 'friends') renderFriends(); else renderMe();
   }
-  function renderChat(scroll){
+  // 廣場分頁：整塊是廣場畫面，左下角聊天框，右下角打招呼
+  function renderPlaza(){
     const body = $('#lobbyBody'); if (!body) return;
-    if (!body.querySelector('#chatList')) {
-      body.innerHTML = `<div class="ppl" id="pplRow"></div><div class="chatList" id="chatList"></div>
-        <form class="chatIn" id="chatForm"><input id="chatTxt" maxlength="200" placeholder="跟山友打聲招呼…" autocomplete="off"><button class="cbtn go sm">送出</button></form>`;
-      $('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatTxt').value.trim(); if (!v) return; if (!lobby || !lobby.open) { toast('還在連線，等一下'); return; } lobby.send({ type: 'chat', text: v }); $('#chatTxt').value = ''; if (SX.game) SX.game.daily('chat'); };
-    }
-    $('#pplRow').innerHTML = people.slice(0, 30).map(p => `<span class="pChip${p.id === acct.id ? ' me' : ''}">${esc(p.name)}</span>`).join('') || '<span class="tiny">大廳目前沒有別人</span>';
-    const L = $('#chatList');
-    L.innerHTML = msgs.length ? msgs.map(m => `<div class="msg${m.who.id === acct.id ? ' me' : ''}"><b>${esc(m.who.name)}</b><span>${esc(m.text)}</span><i>${new Date(m.t).toLocaleTimeString('zh-TW', { hour:'2-digit', minute:'2-digit' })}</i></div>`).join('')
-      : '<div class="empty">還沒有人說話，當第一個吧！</div>';
-    if (scroll) L.scrollTop = L.scrollHeight;
+    body.innerHTML = `<div class="plzChat${logOpen ? ' open' : ''}" id="plzChat"><div class="plzLog" id="chatList"></div>
+        <form class="chatIn" id="chatForm"><input id="chatTxt" maxlength="${sayMax}" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="cbtn go sm">送出</button></form></div>
+      <button class="plzEmoBtn" id="emoBtn" aria-label="打招呼">👋</button>
+      <div class="plzEmoMenu" id="emoMenu">${PZ().EMO.map(e => `<button class="cbtn sm" data-emo="${e.k}"><span>${e.icon}</span>${e.label}</button>`).join('')}</div>`;
+    PZ().mount(body, {
+      onMove: (x, y) => { if (lobby) lobby.send({ type: 'move', x, y }); $('#emoMenu').classList.remove('on'); },
+      onTapPerson: personCard,
+    });
+    $('#chatForm').onsubmit = e => {
+      e.preventDefault(); const v = $('#chatTxt').value.trim(); if (!v) return;
+      if (!lobby || !lobby.open) { toast('還在連線，等一下'); return; }
+      lobby.send({ type: 'chat', text: v }); $('#chatTxt').value = ''; if (SX.game) SX.game.daily('chat');
+    };
+    $('#chatList').onclick = () => { logOpen = !logOpen; $('#plzChat').classList.toggle('open', logOpen); renderLog(); };
+    $('#emoBtn').onclick = () => { if (A().pop) A().pop(); $('#emoMenu').classList.toggle('on'); };
+    $$('[data-emo]').forEach(b => b.onclick = () => {
+      const k = b.dataset.emo; $('#emoMenu').classList.remove('on');
+      PZ().emote(acct.id, k); if (lobby) lobby.send({ type: 'emote', k });
+    });
+    renderLog(); onlineTag();
+  }
+  // 聊天紀錄：平常只露最近 3 句，點一下展開看全部
+  function renderLog(){
+    const L = $('#chatList'); if (!L) return;
+    const list = logOpen ? msgs : msgs.slice(-3);
+    L.innerHTML = list.length ? list.map(m => `<div class="lg${m.who.id === acct.id ? ' me' : ''}"><b>${esc(m.who.name)}</b>${esc(m.text)}</div>`).join('')
+      : '<div class="lg tip">點地面走走，跟山友打聲招呼吧</div>';
+    L.scrollTop = L.scrollHeight;
+  }
+  // 點了廣場上的別人：加好友、邀請一起爬
+  function personCard(p){
+    const fr = friends.find(f => f.id === p.id), opts = SX.MOUNTAINS.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    const mc = $('#mCard'); $('#modal').classList.add('on');
+    mc.innerHTML = `<h3>${esc(p.name)}</h3>
+      ${fr ? `<p class="summitBig">你們是好友。要邀對方一起爬哪座山？</p><select id="pcMt" class="txtIn">${opts}</select>
+        <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcInv">邀請一起爬</button></div>`
+      : `<p class="summitBig">加為好友之後，就能邀請對方一起爬山。</p>
+        <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcAdd">加好友</button></div>`}`;
+    $('#pcX').onclick = () => $('#modal').classList.remove('on');
+    if ($('#pcAdd')) $('#pcAdd').onclick = async () => {
+      try { await api('/friends', { json: { id: p.id } }); toast(`和 ${p.name} 成為好友了！`); if (A().sparkle) A().sparkle(); await refresh(); personCard(p); } catch(e){ toast(e.message, 3000); }
+    };
+    if ($('#pcInv')) $('#pcInv').onclick = async () => {
+      try { await api('/invites', { json: { friend: p.id, mountain: $('#pcMt').value } }); toast('邀請送出了，對方接受後就能一起爬'); $('#modal').classList.remove('on'); refresh(); } catch(e){ toast(e.message, 3000); }
+    };
   }
   function renderFriends(){
     const body = $('#lobbyBody'); if (!body) return;

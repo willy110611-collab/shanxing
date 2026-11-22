@@ -163,3 +163,11 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `enc_e08` | The hiker picking up a dropped plastic bag of litter to carry down the mountain |
 
 （其他奇遇沒有圖時，會照舊顯示程式畫的小圖示。之後想加，檔名就是 `enc_` 加上奇遇代號。）
+
+## 第八批：登山口廣場（山友大廳）
+
+不用去背，整張畫。畫面下方大約 2/3 是空的石板廣場地面（山友的角色會走在上面，所以地上不要畫人、不要畫大東西擋住）。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `plaza_bg` | 9:16 | A cozy Taiwan mountain trailhead plaza seen from a high angle, looking slightly down: the bottom two-thirds of the picture is an open, empty flagstone plaza floor receding into the distance (no people, no animals, nothing standing in the middle). At the far edge of the plaza: a small wooden mountain hut with warm lit windows on the left, a blank wooden trailhead sign arch in the center where the trail enters the forest, a wooden notice board on the right. Taiwan hemlock trees on both sides, layered blue-green mountains and a little cloud sea in the background, soft golden morning light. |

@@ -933,6 +933,33 @@ function drawHero(s, t){
   ctx.restore();
 }
 
+// 給登山口廣場用：在別的畫布 c 的 (X, Y) 腳底畫一個登山客（u：每公分幾像素）
+// p：{ ph 步伐相位, mv 0～1 走動程度, sit 坐下, tint 衣服色調（-1＝自己原色，0～2＝隊友那三種）, pet, flip }
+const TINT_COLS = [['#5f9fd6', '#3c6f9e', '#9ac46a', '#6a9446', '#f2c94c', '#c49a34'], ['#9a7ad0', '#6c519c', '#e88a9a', '#b25a6a', '#f7e8c0', '#cfb38a'], ['#5fbfa0', '#3c8a72', '#e0a050', '#a8723a', '#e88a6a', '#b0583e']];
+S.drawPerson = function(c, X, Y, u, p, t){
+  if (!SHADOW) buildStatic();
+  const keepCtx = ctx, keepRain = isRain, sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
+  const cols = [JK_L, JK_S, BAG_L, BAG_S, HAT_L, HAT_S];
+  ctx = c; isRain = false;
+  hero.ph = p.ph || 0; hero.mv = p.mv || 0; hero.lean = p.mv ? 0.3 : 0; hero.py = -Math.abs(Math.sin(hero.ph)) * 2 * hero.mv; hero.mga = Math.sin(t * 2 + (p.ph || 0)) * 0.3;
+  try {
+    if (p.tint >= 0) [JK_L, JK_S, BAG_L, BAG_S, HAT_L, HAT_S] = TINT_COLS[p.tint % 3];
+    if (p.pet) drawPet({ pet:p.pet, rest:p.sit }, X + (p.flip ? -62 : 62) * u, Y - 4 * u, u * 0.95, t);
+    c.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
+    c.save(); c.translate(X, Y); c.scale(p.flip ? -u : u, u);
+    if (p.tint >= 0) c.filter = 'hue-rotate(' + (150 + p.tint % 3 * 60) + 'deg)';   // 美術圖版本：換衣服色調
+    const s = { rest:!!p.sit };
+    const drawn = heroArt(c, s, t); c.filter = 'none';
+    if (!drawn) { if (p.sit) heroRest(c, t); else heroWalk(c, t); }
+    c.restore();
+  } finally {
+    ctx = keepCtx; isRain = keepRain; Object.assign(hero, sv);
+    [JK_L, JK_S, BAG_L, BAG_S, HAT_L, HAT_S] = cols;
+  }
+  return p.sit ? 118 : 182;     // 頭頂高度（公分），給名牌和對話框對位
+};
+S.hashStr = hashStr;
+
 // ═════════ 世界繪製（由遠到近） ═════════
 function proj(j, f, flat){
   const dz = pZ[j] + f * (pZ[j + 1] - pZ[j]); gs = F / dz;

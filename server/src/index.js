@@ -5,6 +5,9 @@ import { DurableObject } from 'cloudflare:workers';
 const MAX_PHOTO = 450 * 1024;      // 單張照片上限（遊戲端已縮到 720px）
 const DAILY_PHOTOS = 20;           // 每人每天最多上傳幾張
 const ONLINE_MS = 3 * 60 * 1000;   // 多久內有動靜算「在線」
+const PLAZA_CAP = 50;              // 一個登山口廣場最多幾人
+const PLAZA_MAX = 40;              // 最多開到第幾個廣場
+const SAY_MAX = 40;                // 廣場說話一次最多幾個字（頭上冒字用；hello 會告訴遊戲端，輸入框照這個限制）
 
 // ───────── 小工具 ─────────
 const now = () => Date.now();
@@ -104,9 +107,16 @@ export default {
           const inv = await env.DB.prepare('SELECT * FROM invites WHERE id = ? AND status = \'accepted\'').bind(room.slice(6)).first();
           if (!inv || (inv.host !== me.id && inv.guest !== me.id)) return E(env, req, 'forbidden', 403);
         } else if (room !== 'lobby') return E(env, req, 'bad room');
-        const stub = env.ROOM.get(env.ROOM.idFromName(room));
-        const fwd = new Request(req.url, req); fwd.headers.set('X-Player', JSON.stringify({ id: me.id, name: me.name, pet: me.pet }));
-        return stub.fetch(fwd);
+        const qp = url.searchParams.get('pet'), pet = qp !== null ? (/^[a-z]{1,16}$/.test(qp) ? qp : null) : me.pet;   // 現在帶著的寵物（廣場上跟在身邊）
+        const fwd = () => { const f = new Request(req.url, req); f.headers.set('X-Player', JSON.stringify({ id: me.id, name: me.name, pet })); return f; };
+        if (room !== 'lobby') return env.ROOM.get(env.ROOM.idFromName(room)).fetch(fwd());
+        // 登山口廣場：一個廣場最多 PLAZA_CAP 人，滿了就依序開到廣場 2、3…（房間自己判斷滿了沒，不會兩個人同時擠進最後一格）
+        for (let n = 1; n <= PLAZA_MAX; n++) {
+          const f = fwd(); f.headers.set('X-Plaza', String(n));
+          const r = await env.ROOM.get(env.ROOM.idFromName(n === 1 ? 'lobby' : 'lobby' + n)).fetch(f);
+          if (r.status !== 409) return r;
+        }
+        return E(env, req, '廣場都客滿了，等一下再來', 503);
       }
 
       // 以下都要登入
@@ -148,9 +158,11 @@ export default {
       }
       if (path === '/api/friends' && M === 'POST') {
         const b = await req.json().catch(() => ({}));
-        const code = String(b.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-        const f = await env.DB.prepare('SELECT * FROM players WHERE code = ? AND banned = 0').bind(code).first();
-        if (!f) return E(env, req, '找不到這個好友碼', 404);
+        // 用好友碼加，或在登山口廣場點對方角色直接加（給對方的 id）
+        const code = String(b.code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), pid = String(b.id || '').replace(/[^0-9a-f]/g, '');
+        const f = pid ? await env.DB.prepare('SELECT * FROM players WHERE id = ? AND banned = 0').bind(pid).first()
+          : await env.DB.prepare('SELECT * FROM players WHERE code = ? AND banned = 0').bind(code).first();
+        if (!f) return E(env, req, pid ? '找不到這位山友' : '找不到這個好友碼', 404);
         if (f.id === me.id) return E(env, req, '這是你自己的好友碼');
         await env.DB.batch([
           env.DB.prepare('INSERT OR IGNORE INTO friends (a, b, created) VALUES (?, ?, ?)').bind(me.id, f.id, now()),
@@ -242,18 +254,22 @@ export default {
 export class Room extends DurableObject {
   constructor(ctx, env){ super(ctx, env); }
   async fetch(req){
-    const who = JSON.parse(req.headers.get('X-Player') || '{}');
+    const who = JSON.parse(req.headers.get('X-Player') || '{}'), plaza = +req.headers.get('X-Plaza') || 0;
+    // 廣場客滿（同一個人重連不算）：回 409，讓外面改試下一個廣場
+    if (plaza) { const ppl = this.people(); if (ppl.length >= PLAZA_CAP && !ppl.some(p => p.id === who.id)) return new Response('full', { status: 409 }); }
     const pair = new WebSocketPair(), [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ ...who, last: 0, state: null });
+    // 廣場上的起點：入口附近隨機一點（x 0～1 左右，y 0～1 遠到近）
+    const pos = { x: 0.3 + Math.random() * 0.4, y: 0.72 + Math.random() * 0.2 };
+    server.serializeAttachment({ ...who, last: 0, lastMv: 0, lastEm: 0, state: null, pos });
     const hist = (await this.ctx.storage.get('hist')) || [];
-    server.send(JSON.stringify({ type: 'hello', you: who.id, history: hist, people: this.people() }));
-    this.broadcast({ type: 'join', who: { id: who.id, name: who.name, pet: who.pet } }, server);
+    server.send(JSON.stringify({ type: 'hello', you: who.id, plaza, sayMax: SAY_MAX, history: hist, people: this.people() }));
+    this.broadcast({ type: 'join', who: { id: who.id, name: who.name, pet: who.pet, pos } }, server);
     return new Response(null, { status: 101, webSocket: client });
   }
   people(){
     const seen = {}, out = [];
-    for (const ws of this.ctx.getWebSockets()) { const a = ws.deserializeAttachment() || {}; if (!a.id || seen[a.id]) continue; seen[a.id] = 1; out.push({ id: a.id, name: a.name, pet: a.pet, state: a.state }); }
+    for (const ws of this.ctx.getWebSockets()) { const a = ws.deserializeAttachment() || {}; if (!a.id || seen[a.id]) continue; seen[a.id] = 1; out.push({ id: a.id, name: a.name, pet: a.pet, state: a.state, pos: a.pos }); }
     return out;
   }
   broadcast(msg, except){ const s = JSON.stringify(msg); for (const ws of this.ctx.getWebSockets()) if (ws !== except) { try { ws.send(s); } catch (e) {} } }
@@ -262,7 +278,7 @@ export class Room extends DurableObject {
     const a = ws.deserializeAttachment() || {};
     if (d.type === 'chat') {
       const t = Date.now(); if (t - (a.last || 0) < 900) return;   // 防洗版：每秒最多一句
-      const text = cleanText(d.text); if (!text) return;
+      const text = cleanText(d.text).slice(0, SAY_MAX); if (!text) return;
       a.last = t; ws.serializeAttachment(a);
       const msg = { type: 'chat', id: rid(6), who: { id: a.id, name: a.name }, text, t };
       const hist = (await this.ctx.storage.get('hist')) || []; hist.push(msg); while (hist.length > 60) hist.shift();
@@ -273,6 +289,17 @@ export class Room extends DurableObject {
       a.state = { mountain: String(d.mountain || '').slice(0, 24), dist: +d.dist || 0, stam: +d.stam || 0, rest: !!d.rest, t: Date.now() };
       ws.serializeAttachment(a);
       this.broadcast({ type: 'state', who: { id: a.id, name: a.name }, state: a.state }, ws);
+    } else if (d.type === 'move') {
+      // 廣場：點地面要走去的位置（只在點的那一下傳，不是每格畫面都傳）
+      const t = Date.now(); if (t - (a.lastMv || 0) < 150) return;
+      const cl = v => Math.max(0, Math.min(1, +v || 0));
+      a.lastMv = t; a.pos = { x: cl(d.x), y: cl(d.y) }; ws.serializeAttachment(a);
+      this.broadcast({ type: 'move', who: { id: a.id }, x: a.pos.x, y: a.pos.y }, ws);
+    } else if (d.type === 'emote') {
+      // 廣場：打招呼動作（代號由遊戲端決定，這裡只擋掉怪字和連按）
+      const t = Date.now(), k = String(d.k || ''); if (t - (a.lastEm || 0) < 800 || !/^[a-z]{1,10}$/.test(k)) return;
+      a.lastEm = t; ws.serializeAttachment(a);
+      this.broadcast({ type: 'emote', who: { id: a.id }, k }, ws);
     } else if (d.type === 'cheer') {
       this.broadcast({ type: 'cheer', who: { id: a.id, name: a.name }, to: String(d.to || '').slice(0, 20) }, ws);
     } else if (d.type === 'ping') ws.send('{"type":"pong"}');

@@ -1128,7 +1128,7 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
   // 給連線模組用：雲端存檔、每日任務
-  SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0),
+  SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null,
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
   window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests,

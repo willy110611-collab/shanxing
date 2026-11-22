@@ -6,7 +6,7 @@
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $raw = Join-Path $here 'raw'
-$opaque = '^(sky_|ground_|map_|enc_)'
+$opaque = '^(sky_|ground_|map_|enc_|plaza_)'
 Get-ChildItem $raw -File | Where-Object { $_.Extension -match '^\.(png|jpe?g|webp)$' } | ForEach-Object {
   $name = $_.BaseName.ToLower()
   if ($name -match $opaque) {

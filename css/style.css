@@ -344,18 +344,26 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .codeBox{font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all;background:#fffdf4;border:2px dashed var(--ink);border-radius:10px;padding:10px;margin:10px 0;user-select:all;-webkit-user-select:all}
 .codeTag{font-family:ui-monospace,Consolas,monospace;font-size:18px;letter-spacing:2px;background:#fffdf4;border:2px solid var(--ink);border-radius:8px;padding:2px 8px}
 #scrLobby .pBody{display:flex;flex-direction:column}
-.ppl{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.pChip{font-size:12px;padding:3px 9px;border-radius:12px;background:#fff7e4;border:2px solid var(--ink);color:var(--ink)}
-.pChip.me{background:#ffe08a}
-.chatList{flex:1;min-height:200px;overflow-y:auto;padding:10px;border-radius:14px;background:rgba(255,250,236,.92);border:2.5px solid var(--ink);display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
-.msg{display:flex;flex-direction:column;max-width:82%;align-self:flex-start;background:#fff;border:2px solid var(--ink);border-radius:4px 14px 14px 14px;padding:6px 10px;font-size:14px;color:var(--ink)}
-.msg.me{align-self:flex-end;background:#e4f3cf;border-radius:14px 4px 14px 14px}
-.msg b{font-size:11px;font-weight:normal;color:var(--ink2)}
-.msg span{word-break:break-word;line-height:1.5}
-.msg i{font-style:normal;font-size:10px;color:var(--ink2);align-self:flex-end;opacity:.7}
-.chatList .empty{color:var(--ink2);text-shadow:none;padding:30px 10px}
-.chatIn{display:flex;gap:8px;margin-top:10px}
-.chatIn input{flex:1;min-width:0;font:inherit;font-size:16px;padding:9px 12px;border-radius:var(--irrS);border:2.5px solid var(--ink);background:#fffdf4;color:var(--ink)}
+/* 登山口廣場：整塊畫面，左下聊天框、右下打招呼 */
+#scrLobby .pBody.plazaMode{position:relative;padding:0;overflow:hidden;touch-action:manipulation}
+.plzCv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.plzChat{position:absolute;left:8px;bottom:calc(8px + env(safe-area-inset-bottom));width:calc(100% - 84px);max-width:320px;z-index:2}
+.plzLog{max-height:66px;overflow-y:auto;padding:5px 8px;border-radius:12px;background:rgba(255,250,236,.62);border:2px solid rgba(58,42,32,.45);font-size:13px;line-height:1.45;color:var(--ink);-webkit-overflow-scrolling:touch;cursor:pointer}
+.plzChat.open .plzLog{max-height:min(40vh,260px);background:rgba(255,250,236,.94);border-color:var(--ink)}
+.plzLog .lg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plzChat.open .plzLog .lg{white-space:normal;word-break:break-word}
+.plzLog .lg b{font-weight:normal;color:var(--ink2);margin-right:5px}
+.plzLog .lg.me b{color:#5f8a3e}
+.plzLog .lg.tip{color:var(--ink2)}
+.chatIn{display:flex;gap:6px;margin-top:6px}
+.chatIn input{flex:1;min-width:0;font:inherit;font-size:16px;padding:7px 10px;border-radius:var(--irrS);border:2.5px solid var(--ink);background:#fffdf4;color:var(--ink)}
+.chatIn .cbtn{white-space:nowrap}
+.plzEmoBtn{position:absolute;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:2.5px solid var(--ink);background:#ffe9b0;font-size:28px;line-height:1;box-shadow:0 3px 0 var(--ink);z-index:2;cursor:pointer}
+.plzEmoBtn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+.plzEmoMenu{position:absolute;right:10px;bottom:calc(78px + env(safe-area-inset-bottom));display:none;flex-direction:column;gap:6px;z-index:3}
+.plzEmoMenu.on{display:flex}
+.plzEmoMenu .cbtn{white-space:nowrap;display:flex;align-items:center;gap:6px;justify-content:flex-start}
+.plzEmoMenu .cbtn span{font-size:18px}
 .frRow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:14px;color:var(--ink)}
 .frRow:first-of-type{border-top:0}
 .frRow>span:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
