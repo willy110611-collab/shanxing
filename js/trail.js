@@ -2587,10 +2587,9 @@ function drawLights(t){
     ctx.globalAlpha = (0.45 + 0.45 * Math.sin(t * 2 + f.ph)) * (isNight ? 1 : 0.75);
     ctx.drawImage(GLOW, W / 2 + f.x * sc - r, HOR + (CAMH - f.y) * sc - r, r * 2, r * 2);
   }
-  if (isNight && curS && !curS.sleep) {       // 頭燈光束
+  if (isNight && curS && !curS.sleep) {       // 頭燈：從背後看不到燈本身，只畫照到前方地上的光
     const r = W * 0.36;
     ctx.save(); ctx.translate(hero.sx, hero.sy - H * 0.15); ctx.scale(1, 0.6); ctx.globalAlpha = 0.42; ctx.drawImage(GLOW, -r, -r, r * 2, r * 2); ctx.restore();
-    ctx.globalAlpha = 0.9; ctx.drawImage(GLOW, hero.sx - 9 * U, hero.top + 6 * U, 18 * U, 18 * U);
   }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
