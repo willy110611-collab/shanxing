@@ -353,7 +353,7 @@
       mc.innerHTML = `<h3>照片審核</h3><div class="mBtns"><button class="cbtn sm" data-st="pending">待審核</button><button class="cbtn sm" data-st="reported">被檢舉</button><button class="cbtn sm" data-st="hidden">已隱藏</button></div>
         ${L.length ? L.map(p => `<div class="revRow" data-id="${p.id}"><img src="${API}/photo/${p.id}?k=${encodeURIComponent(k)}"><div><b>${esc(mName(p.mountain))}</b>・${p.alt} m・${esc(p.by || '')}${p.reports ? `・檢舉 ${p.reports}` : ''}
           <div class="mBtns"><button class="cbtn go sm" data-a="ok">通過</button><button class="cbtn sm" data-a="hidden">隱藏</button><button class="cbtn red sm" data-a="delete">刪除</button></div></div></div>`).join('') : '<p class="summitBig">沒有要處理的照片。</p>'}
-        <div class="mBtns"><button class="cbtn" id="revX">關閉</button></div>`;
+        <div class="mBtns"><button class="cbtn" id="revX">← 返回</button></div>`;
       mc.querySelectorAll('[data-st]').forEach(b => b.onclick = () => review(b.dataset.st));
       mc.querySelectorAll('.revRow [data-a]').forEach(b => b.onclick = async () => {
         const row = b.closest('.revRow');
@@ -361,7 +361,7 @@
         if (r2.ok) row.remove(); else toast('沒成功');
       });
       $('#revX').onclick = () => $('#modal').classList.remove('on');
-    } catch(e){ mc.innerHTML = `<h3>照片審核</h3><p>${esc(e.message)}</p><div class="mBtns"><button class="cbtn" id="revX">關閉</button></div>`; $('#revX').onclick = () => $('#modal').classList.remove('on'); }
+    } catch(e){ mc.innerHTML = `<h3>照片審核</h3><p>${esc(e.message)}</p><div class="mBtns"><button class="cbtn" id="revX">← 返回</button></div>`; $('#revX').onclick = () => $('#modal').classList.remove('on'); }
   }
 
   // ───────── 推播通知：設定頁的「通知」開關 ─────────

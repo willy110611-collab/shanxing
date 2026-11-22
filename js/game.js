@@ -296,8 +296,7 @@
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
     const grade = SX.gradeOf(id), g = m.group && SX.GROUP[m.group];
     const card = $('#routeCard');
-    card.innerHTML = `<button class="rc-x" id="rcX">✕</button>
-      ${g ? `<button class="chip rc-back" id="rcBack">← ${g.full}</button>` : ''}
+    card.innerHTML = `${g ? `<button class="cbtn sm cBack" id="rcBack">← ${g.full}</button>` : '<button class="cbtn sm cBack" id="rcX">← 返回</button>'}
       <div class="ic-h"><b>${m.name}</b><span class="ic-alt">${m.area}・${m.alt.toLocaleString('en-US')} m</span><span class="stars">${stars}</span></div>
       <div class="ic-wx paper"><canvas id="rcWx"></canvas><span>現在山上：${wxText(w) || '晴'}${done ? `　已登頂 ${done} 次` : ''}</span></div>
       ${seasonChips(id)}
@@ -322,7 +321,7 @@
         <div class="rc-btns"><button class="cbtn go" disabled>尚未解鎖</button></div>`}`;
     card.classList.add('on'); card.scrollTop = 0;
     wxIcon($('#rcWx'), w.kind, w.time);
-    $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
+    if (!g) $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
     if (g) $('#rcBack').onclick = e => { e.stopPropagation(); A.pop(); showGroup(g.id); };
     // 下山要按兩次（第一次換成確認字樣），避免誤按
     const dn = $('#rcDown'); if (dn) dn.onclick = e => { e.stopPropagation(); A.pop(); if (!dn.dataset.arm) { dn.dataset.arm = 1; dn.textContent = '再按一次確定下山（進度歸零）'; return; } goDown(id); hideRoute();
@@ -352,7 +351,7 @@
     const g = SX.GROUP[gid]; if (!g) return;
     const ps = SX.peaksOf(gid).slice().sort((a, b) => a.recMin - b.recMin), L = SX.M[g.lead], nDone = ps.filter(m => SV.done[m.id]).length;
     const w = wxOverride || calcWx(g.lead), card = $('#routeCard');
-    card.innerHTML = `<button class="rc-x" id="rcX">✕</button>
+    card.innerHTML = `<button class="cbtn sm cBack" id="rcX">← 返回</button>
       <div class="ic-h"><b>${g.full}</b><span class="ic-alt">${L.area}・已登頂 ${nDone}／${ps.length}</span></div>
       <div class="ic-wx paper"><canvas id="rcWx"></canvas><span>現在山上：${wxText(w) || '晴'}</span></div>
       ${seasonChips(gid)}
@@ -1074,7 +1073,7 @@
   }
   function openBag(back){   // back：從寶物放大卡回來時，捲回原本的位置
     const have = SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
-    modal(`<button class="rc-x mX" id="bagOk" aria-label="關閉">✕</button><h3>背包</h3>
+    modal(`<button class="cbtn sm mBack" id="bagOk">← 返回</button><h3>背包</h3>
       ${SV.titles.length ? `<div class="grp" style="margin-top:0">稱號（點一個掛在身上）</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${SV.titles.map(x => `<button class="chip" data-title="${x}"${SV.title === x ? ' style="background:#ffe08a"' : ''}>${x}</button>`).join('')}</div>` : ''}
       <div class="grp" style="margin-top:0">寶物 ${have} / ${SX.TREASURES.length}</div>
       <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''} ${RAR_CLS[x.rarity] || ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>`
@@ -1238,7 +1237,7 @@
           <small>${def.unit ? `${Math.floor(tk.n).toLocaleString('en-US')} / ${def.goal.toLocaleString('en-US')} m` : `${tk.n} / ${def.goal}`}</small></div>
           <button class="cbtn sm ${tk.done && !tk.got ? 'go' : ''}" data-dy="${i}" ${tk.done && !tk.got ? '' : 'disabled'}>${tk.got ? '已領取' : tk.done ? '領取' : '進行中'}</button></div>`; }).join('')}
       <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務。完成後領取，會拿到一件寶物。</p>
-      <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">關閉</button></div>`);
+      <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">← 返回</button></div>`);
     // 領完都回到每日畫面
     $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; save(); updateDailyBadge(); closeModal(); claimSeq([signKind]); };
     $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; save(); updateDailyBadge(); closeModal(); claimSeq(['common']); });
@@ -1263,7 +1262,7 @@
     const bTot = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0), bGot = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0);
     const row = (name, n, tot) => `<div class="pfRow"><span>${name}</span><div class="dyBar"><i style="width:${tot ? Math.min(100, n / tot * 100) : 0}%"></i></div><b>${n} / ${tot}</b></div>`;
     const who = (SX.social && SX.social.acct && SX.social.acct.name) || '山友';
-    modal(`<button class="rc-x mX" id="pfX" aria-label="關閉">✕</button><h3>我的山行紀錄</h3>
+    modal(`<button class="cbtn sm mBack" id="pfX">← 返回</button><h3>我的山行紀錄</h3>
       <div class="pfHead">${petSvg(SV.pet)}<div><b>${who}</b>${SV.title ? `<small>${SV.title}</small>` : ''}<small>${SV.born} 開始登山・第 ${days} 天</small></div></div>
       <div class="ic-meta pfStats">
         <div class="paper"><small>累積步行</small><b>${km >= 100 ? km.toFixed(0) : km.toFixed(1)} km</b></div>
@@ -1590,7 +1589,7 @@
     } else {
       if (!SV.lots.length) { body.innerHTML = '<div class="empty">還沒有籤詩。<br>爬完象山，到福德祠求一支吧。</div>'; return; }
       body.innerHTML = SV.lots.map(i => { const f = SX.FORTUNES[i]; return f ? `<div class="lotItem" data-lot="${i}"><span><b>${f.no}</b>　${f.poem[0]}</span><span>${f.rank}</span></div>` : ''; }).join(''); stagger(body, '.lotItem');
-      $$('.lotItem').forEach(el => el.onclick = () => { A.pop(); const f = SX.FORTUNES[+el.dataset.lot]; modal(`${lotHtml(f)}<div class="mBtns"><button class="cbtn" id="lOk2">關閉</button></div>`); $('#lOk2').onclick = () => closeModal(); });
+      $$('.lotItem').forEach(el => el.onclick = () => { A.pop(); const f = SX.FORTUNES[+el.dataset.lot]; modal(`${lotHtml(f)}<div class="mBtns"><button class="cbtn" id="lOk2">← 返回</button></div>`); $('#lOk2').onclick = () => closeModal(); });
     }
   }
 
