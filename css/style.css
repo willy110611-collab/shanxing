@@ -639,3 +639,8 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .tutDots{display:flex;justify-content:center;gap:7px;margin:12px 0 2px}
 .tutDots i{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);background:transparent}
 .tutDots i.on{background:#8fcf6e}
+
+/* 廣場聊天框可以收起：右上角「收起」小牌；收起後只剩左下角「聊天」小牌，點了再展開 */
+.plzChatTog{position:absolute;right:0;top:-30px;padding:3px 10px;border-radius:999px;border:2px solid var(--ink);background:rgba(255,250,236,.94);color:var(--ink);font-size:12.5px;white-space:nowrap}
+.plzChat.hid .plzLog,.plzChat.hid .chatIn{display:none}
+.plzChat.hid .plzChatTog{position:static;padding:7px 14px;font-size:14px;box-shadow:0 2px 4px rgba(40,25,10,.25)}

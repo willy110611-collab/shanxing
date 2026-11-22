@@ -63,7 +63,7 @@
   }
 
   // ───────── 大廳畫面 ─────────
-  let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false;
+  let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false, chatHid = false;   // chatHid：廣場聊天框收起來，只剩一顆「聊天」小牌
   const PZ = () => SX.plaza;
   // 還沒有帳號：大廳裡面放一張「取暱稱」的木牌卡（不用蓋住整個畫面的彈出視窗，上面的「← 地圖」永遠按得到）
   // 不想取名字可以按「先不要」回地圖，之後想來再來；換手機的人直接在這張卡貼復原碼
@@ -139,7 +139,7 @@
   // 廣場分頁：整塊是廣場畫面，左下角聊天框，右下角打招呼
   function renderPlaza(){
     const body = $('#lobbyBody'); if (!body) return;
-    body.innerHTML = `<div class="plzChat${logOpen ? ' open' : ''}" id="plzChat"><div class="plzLog" id="chatList"></div>
+    body.innerHTML = `<div class="plzChat${logOpen ? ' open' : ''}${chatHid ? ' hid' : ''}" id="plzChat"><button class="plzChatTog" id="chatTog" type="button">${chatHid ? '聊天 ▴' : '收起 ▾'}</button><div class="plzLog" id="chatList"></div>
         <form class="chatIn" id="chatForm"><input id="chatTxt" maxlength="${sayMax}" placeholder="說點什麼…" autocomplete="off" enterkeyhint="send"><button class="cbtn go sm">送出</button></form></div>
       <button class="plzEmoBtn" id="emoBtn" aria-label="打招呼">👋</button>
       <div class="plzEmoMenu" id="emoMenu">${PZ().EMO.map(e => `<button class="cbtn sm" data-emo="${e.k}"><span>${SX.art ? SX.art.img(PZ().emoArt(e.k), e.icon) : e.icon}</span>${e.label}</button>`).join('')}</div>`;
@@ -152,6 +152,7 @@
       if (!lobby || !lobby.open) { toast('還在連線，等一下'); return; }
       lobby.send({ type: 'chat', text: v }); $('#chatTxt').value = ''; if (SX.game) SX.game.daily('chat');
     };
+    $('#chatTog').onclick = () => { chatHid = !chatHid; $('#plzChat').classList.toggle('hid', chatHid); $('#chatTog').textContent = chatHid ? '聊天 ▴' : '收起 ▾'; if (A().pop) A().pop(); };
     $('#chatList').onclick = () => { logOpen = !logOpen; $('#plzChat').classList.toggle('open', logOpen); renderLog(); };
     $('#emoBtn').onclick = () => { if (A().pop) A().pop(); $('#emoMenu').classList.toggle('on'); };
     $$('[data-emo]').forEach(b => b.onclick = () => {
