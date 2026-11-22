@@ -1922,7 +1922,9 @@ const PLANKS = 4;         // 木棧道每段幾片木板
 const RISER_DK = 0.3;     // 階梯立面再壓暗多少（立面面對鏡頭、背光，要明顯比踏面暗，階梯才讀得出一階一階）
 const WOOD_VAR = 0.5;     // 每塊木頭／石階深淺變化的強度
 const WOOD_SH = 0.35;    // 木棧道投在左邊草地上的影子寬（公尺）
-function bankH(i, side){ return (TH.trail === 'wood' ? 0.05 : 0.05 + 0.08 * vn(i * 0.13 + (side > 0 ? 5.1 : 0), 53)) * (1 - endK(i)); }   // 山頂過後沒有路，路邊的土坎也跟著消失
+function bankH0(i, side){ return (TH.trail === 'wood' ? 0.05 : 0.05 + 0.08 * vn(i * 0.13 + (side > 0 ? 5.1 : 0), 53)) * (1 - endK(i)); }   // 山頂過後沒有路，路邊的土坎也跟著消失
+let bankA = new Float32Array(2);   // 每段兩邊的土坎高度（換山時算一次；地形、路緣每格要查很多次）
+function bankH(i, side){ return i >= 0 && i <= N + 1 ? bankA[i * 2 + (side > 0 ? 1 : 0)] : bankH0(i, side); }
 function terrH(i, side, d){
   const rw = rwAt(i);   // 這一段的路半寬（每段不一樣，地形從路緣量起）
   if (d <= rw) return 0;
@@ -2055,7 +2057,7 @@ function stoneSE(){ return TH.trail === 'stairs' && snowAmt < 0.5; }
 // 草唇下一條深褐綠接觸陰影 → 路邊散落小石子。每段每邊切 SOFT_K 小截，節點的寬窄換山時算一次存在 softE；
 // 所有段兩邊的同一層合成一筆畫（土邊每邊一筆、陰影一筆、草唇一筆、石子三筆）
 const SOFT_K = 4;                      // 每段每邊切幾小截（節點跟前後段共用，接得起來）
-const SOFT_J = 34, SOFT_FADE = 8;      // 幾段以內畫（最後幾段淡入；再遠路緣只剩一兩個像素）
+const SOFT_J = 26, SOFT_FADE = 8;      // 幾段以內畫（最後幾段淡入；再遠路緣只剩一兩個像素）
 const SOFT_IN = [0.01, 0.1];           // 土邊吃進路面多少（公尺）
 const SOFT_SPILL = 0.3;                // 草唇蓋進路面最多多少（公尺，乘上超過 1 的部分）
 const SOFT_PEB_J = 20, SOFT_PEB_N = 3, SOFT_PEB_P = 0.45;   // 路邊小石子：幾段以內、每邊每段最多幾顆、每顆出現的機率
@@ -2067,6 +2069,8 @@ let softE = new Float32Array(SOFT_V * 2);
 // 這一截中間草尖往下多垂多少（公尺）、草唇上緣往外蓋多少（公尺）、這一截要不要有一叢草尖、
 // 土邊外緣蓋到土坎多高（0～1）、這一截中間那一點土邊吃進路面多少（公尺）、中間那一點外緣蓋到土坎多高
 function buildSoft(){
+  bankA = new Float32Array((N + 2) * 2);
+  for (let i = 0; i <= N + 1; i++) { bankA[i * 2] = bankH0(i, -1); bankA[i * 2 + 1] = bankH0(i, 1); }
   const n = (N + 2) * SOFT_K + 1; softE = new Float32Array(n * 2 * SOFT_V);
   for (let g = 0; g < n; g++) for (let s = 0; s < 2; s++) {
     const o = (g * 2 + s) * SOFT_V;
@@ -2085,7 +2089,7 @@ const SBAND = new Float32Array(18);   // 兩邊草地第一、二條線的近端
 const softG = new Int8Array(2);        // 兩邊草地第一條的明暗（drawWorld 畫草地時記下來，草唇用同一個顏色）
 // 一段平路兩邊的路緣（路面畫完之後叫）：x1、yb、s1 近端，x2、y2、s2 遠端，w1、w2 兩端的路半寬（像素），a 不透明度，ta 草地貼圖的不透明度，zA 這段近端的世界位置
 function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
-  const P = SOFT_P, nt = j < 8 ? 6 : j < 16 ? 3 : 1;   // 每截幾根草尖：近處多、遠處少（遠處一根只剩一兩個像素）
+  const P = SOFT_P, nt = j < 8 ? 6 : j < 14 ? 2 : 1;   // 每截幾根草尖：近處多、遠處少（遠處一根只剩一兩個像素）
   for (let k = 0; k <= SOFT_K; k++) {
     const f = k / SOFT_K, ak = f * s2 / ((1 - f) * s1 + f * s2), s = 1 / ((1 - f) / s1 + f / s2);   // 世界上固定的位置（走近時土邊不會滑動）換成畫面上的比例
     const x = lerp(x1, x2, ak), y = lerp(yb, y2, ak), hw = lerp(w1, w2, ak), g = i * SOFT_K + k;
@@ -2098,7 +2102,7 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
       const b = sd * 9; P[o + 10] = lerp(SBAND[b + 4], SBAND[b + 6], ak); P[o + 11] = lerp(SBAND[b + 5], SBAND[b + 7], ak);
     }
   }
-  // 路面靠邊那一圈漸漸變成土色：往內 SOFT_WEAR[0] 公尺（每個節點寬窄不一）三層疊起來，越靠邊越濃（像顏料暈開，不是一條硬邊）
+  // 路面靠邊那一圈漸漸變成土色：往內 SOFT_WEAR[0] 公尺（每個節點寬窄不一）SOFT_WEAR_N 層疊起來，越靠邊越濃（像顏料暈開，不是一條硬邊）
   if (!stp) softWear(i, 0, LUT[43 * FOGN + fi], a);
   // 土邊：路面邊緣往內吃進一點 → 土坎半截，內緣、外緣都凹凸不平。顏色跟那一邊的土坎一樣（左邊受光、右邊背光），土坎和土邊連成一片，
   // 路面和土坎之間那條直線換成凹凸的土邊內緣；土坎上緣那條直線由草唇蓋掉
@@ -2126,7 +2130,7 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
     ctx.fillStyle = GRS[fi * 21 + softG[sd] + 10]; ctx.fill();   // 跟旁邊草地同一個顏色（不壓暗：草唇不會變成一圈深色的邊）
     if (TEX.grass && ta > 0.03) { texAff(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, zA + F / s2 - F / s1, ta * GRASS_A, 0); ctx.fill(); ctx.globalAlpha = a; }
   }
-  // 路緣外面被踩過的草：從草唇下緣往外 SOFT_WEAR[1] 公尺，草色往淺的土黃綠拉（三層疊起來，越靠路越淺），草唇、土坎、草地連成一片
+  // 路緣外面被踩過的草：從草唇下緣往外 SOFT_WEAR[1] 公尺，草色往淺的土黃綠拉（SOFT_WEAR_N 層疊起來，越靠路越淺），草唇、土坎、草地連成一片
   softWear(i, 1, LUT[40 * FOGN + fi], a);
   ctx.globalAlpha = a;
   // 路邊的小石子：散在土邊上、路面邊緣（影子 → 石身 → 右上受光，各一筆）
@@ -2159,8 +2163,8 @@ function softLip(i, k, sd, what, nt){
     ctx.moveTo(P[o + 8], P[o + 9]); ctx.lineTo(P[q + 8], P[q + 9]); ctx.lineTo(P[q + 6], P[q + 7]); ctx.lineTo(P[o + 6], P[o + 7]); ctx.closePath();
     const tl = softE[e + 2] * (softE[e + 4] ? 1 : 0.4);   // 這一截草尖多長（有的一截只有短短的草毛）
     for (let t = 0; t < nt; t++) {
-      const id = g * 8 + t, h = Hh(id, 830 + sd); if (Hh(id, 834 + sd) < 0.15) continue;   // 草尖位置、粗細、長短、歪的方向都不一樣，偶爾空一根（不像鋸齒）
-      const am = (t + 0.1 + 0.8 * Hh(id, 836 + sd)) / nt, hw = (0.22 + 0.3 * Hh(id, 838 + sd)) / nt, a0 = am - hw, a1 = am + hw, sm = lerp(sa, sb, am), L = tl * (0.3 + 1.1 * Hh(id, 832 + sd)) * sm, lean = (h - 0.5) * 0.9;
+      const h = Hh(g * 8 + t, 830 + sd), h2 = (h * 7.31) % 1, h3 = (h * 13.7) % 1, h4 = (h * 29.3) % 1, h5 = (h * 53.9) % 1; if (h5 < 0.15) continue;   // 草尖位置、粗細、長短、歪的方向都不一樣，偶爾空一根（不像鋸齒）；一根只算一次雜湊，其他從它拆出來（省時間）
+      const am = (t + 0.1 + 0.8 * h2) / nt, hw = (0.22 + 0.3 * h3) / nt, a0 = am - hw, a1 = am + hw, sm = lerp(sa, sb, am), L = tl * (0.3 + 1.1 * h4) * sm, lean = (h - 0.5) * 0.9;
       const bx = lerp(P[o + 6], P[q + 6], am), by = lerp(P[o + 7], P[q + 7], am);
       ctx.moveTo(lerp(P[o + 6], P[q + 6], a0), lerp(P[o + 7], P[q + 7], a0) - L * 0.15); ctx.lineTo(lerp(P[o + 6], P[q + 6], a1), lerp(P[o + 7], P[q + 7], a1) - L * 0.15);
       ctx.lineTo(bx - side * L * (0.6 + lean), by + L * (0.5 - lean * 0.5)); ctx.closePath();   // 草尖往路面那邊、往下垂
@@ -2171,18 +2175,20 @@ function softLip(i, k, sd, what, nt){
   const da = Math.min(1, u0 * 3) * 0.09 * sa, db = Math.min(1, u1 * 3) * 0.09 * sb;   // 陰影：草唇下緣往路面那邊、往下偏一小段
   ctx.moveTo(P[o + 6], P[o + 7]); ctx.lineTo(P[q + 6], P[q + 7]); ctx.lineTo(P[q + 6] - side * db, P[q + 7] + db * 0.5); ctx.lineTo(P[o + 6] - side * da, P[o + 7] + da * 0.5); ctx.closePath();
 }
-const SOFT_WEAR = [0.4, 0.55], SOFT_WEAR_A = 0.18;   // 路面那側漸層土色、草地那側磨損草色各多寬（公尺，每個節點再乘 0.7～1.3）、每一層多濃（三層疊）
-// 路緣的漸層帶（what 0＝路面那側往內、1＝草地那側從草唇下緣往外）：三層一層比一層窄，疊起來越靠路緣越濃；兩邊同一層一筆畫
+const WEARK = new Float32Array((SOFT_K + 1) * 2);
+const SOFT_WEAR = [0.4, 0.55], SOFT_WEAR_A = 0.24, SOFT_WEAR_N = 2;   // 路面那側漸層土色、草地那側磨損草色各多寬（公尺，每個節點再乘 0.7～1.3）、每一層多濃、疊幾層（層數少一點省效能）
+// 路緣的漸層帶（what 0＝路面那側往內、1＝草地那側從草唇下緣往外）：一層比一層窄，疊起來越靠路緣越濃；兩邊同一層一筆畫
 function softWear(i, what, col, a){
   const P = SOFT_P;
   ctx.fillStyle = col; ctx.globalAlpha = a * SOFT_WEAR_A;
-  for (let m = 1; m <= 3; m++) {
+  for (let k = 0; k <= SOFT_K; k++) for (let sd = 0; sd < 2; sd++) WEARK[k * 2 + sd] = SOFT_WEAR[what] * (0.7 + 0.6 * Hh(i * SOFT_K + k, 850 + what * 2 + sd)) / SOFT_WEAR_N;
+  for (let m = 1; m <= SOFT_WEAR_N; m++) {
     ctx.beginPath();
     for (let sd = 0; sd < 2; sd++) {
       const side = sd ? 1 : -1, dd = Math.max(0.3, SBAND[sd * 9 + 8]);
       for (let k = 0; k < SOFT_K; k++) {
         const o = (k * 2 + sd) * SOFT_PN, q = o + SOFT_PN * 2;
-        const wa = SOFT_WEAR[what] * m / 3 * (0.7 + 0.6 * Hh(i * SOFT_K + k, 850 + what * 2 + sd)), wb = SOFT_WEAR[what] * m / 3 * (0.7 + 0.6 * Hh(i * SOFT_K + k + 1, 850 + what * 2 + sd));
+        const wa = WEARK[k * 2 + sd] * m, wb = WEARK[k * 2 + 2 + sd] * m;
         if (what === 0) { ctx.moveTo(P[o], P[o + 1]); ctx.lineTo(P[q], P[q + 1]); ctx.lineTo(P[q] - side * wb * P[q + 2], P[q + 1]); ctx.lineTo(P[o] - side * wa * P[o + 2], P[o + 1]); ctx.closePath(); }
         else {
           const ua = Math.min(1, wa / dd), ub = Math.min(1, wb / dd);
