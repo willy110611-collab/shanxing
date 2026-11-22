@@ -1470,7 +1470,7 @@
     const isDone = r => { const m = byPlay(r); return !!(m && SV.done[m.id]); };
     const n = SX.BAIYUE.filter(p => isDone(p.rank)).length, open = SX.BAIYUE.filter(p => byPlay(p.rank)).length;
     body.innerHTML = `<div class="colHead">百岳 <b>${n}</b>／${SX.BAIYUE.length}・遊戲裡能爬 ${open} 座</div>` + SX.BAIYUE_GROUPS.map(g => {
-      const rs = g.peaks.map(p => SX.BY[p[0]]);
+      const rs = g.peaks.map(p => SX.BYNAME[p[0]]);
       return `<div class="grp byG">${g.name}<small>${rs.filter(p => isDone(p.rank)).length}／${rs.length}</small></div><div class="byGrid">` + rs.map(p => {
         const s = isDone(p.rank) ? 'done' : byPlay(p.rank) ? 'open' : 'soon';
         return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>尚未開放</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;

@@ -22,44 +22,44 @@ SX.MOUNTAINS = [
   { id:'taiping', name:'太平山', area:'宜蘭', lon:121.53, lat:24.50, startAlt:1950, alt:2100, dist:3500, diff:2,
     feat:'翠峰湖、檜木林、蹦蹦車', end:'見晴懷古步道',
     theme:{ sky:['#b5d4e0','#eef0e0'], far:'#8faaa3', mid:'#4b7f5d', near:'#6aa665', trail:'wood', wall:[1,1], fog:true, bigtree:true } },
-  // 合歡群峰：group 是山群代號（地圖上合成一根旗子，見 SX.GROUPS）；by 是百岳排名（見 SX.BAIYUE）
+  // 合歡群峰：group 是山群代號（地圖上合成一根旗子，見 SX.GROUPS）；baiyue:true 是百岳，海拔和排名從百岳帳拿（見 SX.BAIYUE）
   // 同一山群沒寫 theme 的山，步道外觀用山群主峰的（在下面 SX.MOUNTAINS.forEach 補上，不另外抄一份）
-  { id:'hehuan', name:'合歡主峰', group:'hehuan', by:36, area:'南投', lon:121.27, lat:24.14, startAlt:3150, alt:3416, dist:3000, diff:3,
+  { id:'hehuan', name:'合歡主峰', group:'hehuan', baiyue:true, area:'南投', lon:121.27, lat:24.14, startAlt:3150, dist:3000, diff:3,
     feat:'高山杜鵑、滿天星空、冬天會下雪', end:'合歡主峰',
     theme:{ sky:['#7fb6e6','#e6f0f7'], far:'#8f9fb8', mid:'#7e9f78', near:'#a9bf72', trail:'dirt', wall:[0.5,0.35], snow:true, alpine:true } },
-  { id:'hh_shimen', name:'石門山', group:'hehuan', by:66, area:'南投', lon:121.287, lat:24.152, startAlt:3060, alt:3236, diff:1,
+  { id:'hh_shimen', name:'石門山', group:'hehuan', baiyue:true, area:'南投', lon:121.287, lat:24.152, startAlt:3060, diff:1,
     feat:'公路旁最好親近的百岳、整片箭竹草坡、回頭就是合歡主峰', end:'石門山三角點' },
-  { id:'hh_east', name:'合歡東峰', group:'hehuan', by:35, area:'南投', lon:121.282, lat:24.137, startAlt:3150, alt:3416, diff:3,
+  { id:'hh_east', name:'合歡東峰', group:'hehuan', baiyue:true, area:'南投', lon:121.282, lat:24.137, startAlt:3150, diff:3,
     feat:'一路陡上的石階、回頭看松雪樓、東邊是奇萊連峰', end:'合歡東峰頂' },
-  { id:'hh_north', name:'合歡北峰', group:'hehuan', by:34, area:'南投', lon:121.262, lat:24.18, startAlt:3000, alt:3422, diff:3,
+  { id:'hh_north', name:'合歡北峰', group:'hehuan', baiyue:true, area:'南投', lon:121.262, lat:24.18, startAlt:3000, diff:3,
     feat:'之字形草坡、杜鵑花叢、山頂看奇萊和雪山', end:'合歡北峰三角點' },
-  { id:'hh_west', name:'合歡西峰', group:'hehuan', by:83, area:'南投', lon:121.237, lat:24.19, startAlt:3000, alt:3144, diff:4,
+  { id:'hh_west', name:'合歡西峰', group:'hehuan', baiyue:true, area:'南投', lon:121.237, lat:24.19, startAlt:3000, diff:4,
     feat:'翻過北峰、長長的箭竹稜線、上上下下好幾個鞍部', end:'合歡西峰三角點' },
   // 嘉明湖線：嘉明湖本身不是百岳（沒有 by），當山群的代表；山群裡的百岳是向陽山、三叉山
   { id:'jiaming', name:'嘉明湖', group:'jiaming', area:'台東', lon:121.02, lat:23.29, startAlt:2320, alt:3310, dist:13000, diff:4,
     feat:'天使的眼淚、高山草原、山羌出沒', end:'嘉明湖畔',
     theme:{ sky:['#78b2e4','#e3f0f6'], far:'#8f9fbc', mid:'#86a56e', near:'#b6c56e', trail:'dirt', wall:[0.6,0.3], alpine:true, lake:true, grass:true } },
-  { id:'xiangyang', name:'向陽山', group:'jiaming', by:16, area:'台東・高雄', lon:121.005, lat:23.282, startAlt:2320, alt:3600, diff:4,
+  { id:'xiangyang', name:'向陽山', group:'jiaming', baiyue:true, area:'台東・高雄', lon:121.005, lat:23.282, startAlt:2320, diff:4,
     feat:'向陽大崩壁、紅檜松林、黑水塘', end:'向陽山' },
-  { id:'sancha', name:'三叉山', group:'jiaming', by:28, area:'台東・花蓮', lon:121.028, lat:23.30, startAlt:2320, alt:3494, diff:5,
+  { id:'sancha', name:'三叉山', group:'jiaming', baiyue:true, area:'台東・花蓮', lon:121.028, lat:23.30, startAlt:2320, diff:5,
     feat:'一等三角點、無邊草原、遠望嘉明湖', end:'三叉山一等三角點' },
   // 雪主東：雪山主峰＋雪山東峰
-  { id:'xueshan', name:'雪山主峰', group:'xueshan', by:5, area:'台中', lon:121.23, lat:24.38, startAlt:2140, alt:3886, dist:10900, diff:5,
+  { id:'xueshan', name:'雪山主峰', group:'xueshan', baiyue:true, area:'台中', lon:121.23, lat:24.38, startAlt:2140, dist:10900, diff:5,
     feat:'黑森林、雪山圈谷、冰河地形', end:'雪山主峰',
     theme:{ sky:['#6faae0','#e4eef6'], far:'#8a96b6', mid:'#3f6e58', near:'#93b06a', trail:'dirt', wall:[0.95,0.3], snow:true, alpine:true } },
-  { id:'xueshan_east', name:'雪山東峰', group:'xueshan', by:74, area:'台中', lon:121.255, lat:24.388, startAlt:2140, alt:3199, diff:4,
+  { id:'xueshan_east', name:'雪山東峰', group:'xueshan', baiyue:true, area:'台中', lon:121.255, lat:24.388, startAlt:2140, diff:4,
     feat:'哭坡、七卡山莊、遠看聖稜線', end:'雪山東峰' },
   // 玉山群峰：主峰、前峰、西峰、北峰（B 級）、東峰（C+ 級，十峻之首）
-  { id:'yushan', name:'玉山主峰', group:'yushan', by:1, area:'嘉義・南投', lon:120.957, lat:23.47, startAlt:2610, alt:3952, dist:10900, diff:5,
+  { id:'yushan', name:'玉山主峰', group:'yushan', baiyue:true, area:'嘉義・南投', lon:120.957, lat:23.47, startAlt:2610, dist:10900, diff:5,
     feat:'排雲山莊、碎石坡、主峰疊石', end:'玉山主峰',
     theme:{ sky:['#5f9edc','#e2ecf5'], far:'#8790b2', mid:'#6f8f70', near:'#a7b07a', trail:'scree', wall:[0.6,0.3], snow:true, alpine:true } },
-  { id:'yushan_front', name:'玉山前峰', group:'yushan', by:65, area:'嘉義・南投', lon:120.913, lat:23.475, startAlt:2610, alt:3236, diff:4,
+  { id:'yushan_front', name:'玉山前峰', group:'yushan', baiyue:true, area:'嘉義・南投', lon:120.913, lat:23.475, startAlt:2610, diff:4,
     feat:'前峰不前、碎石陡坡、俯看塔塔加', end:'玉山前峰' },
-  { id:'yushan_west', name:'玉山西峰', group:'yushan', by:24, area:'嘉義・南投', lon:120.925, lat:23.469, startAlt:2610, alt:3528, diff:5,
+  { id:'yushan_west', name:'玉山西峰', group:'yushan', baiyue:true, area:'嘉義・南投', lon:120.925, lat:23.469, startAlt:2610, diff:5,
     feat:'冷杉林、西峰山神廟、正面看主峰', end:'玉山西峰' },
-  { id:'yushan_north', name:'玉山北峰', group:'yushan', by:3, area:'南投', lon:120.96, lat:23.487, startAlt:2610, alt:3920, diff:5,
+  { id:'yushan_north', name:'玉山北峰', group:'yushan', baiyue:true, area:'南投', lon:120.96, lat:23.487, startAlt:2610, diff:5,
     feat:'玉山氣象站、看主峰最美的角度', end:'玉山北峰氣象站' },
-  { id:'yushan_east', name:'玉山東峰', group:'yushan', by:2, area:'南投', lon:120.967, lat:23.47, startAlt:2610, alt:3940, diff:5,
+  { id:'yushan_east', name:'玉山東峰', group:'yushan', baiyue:true, area:'南投', lon:120.967, lat:23.47, startAlt:2610, diff:5,
     feat:'十峻之首、岩壁攀爬、頭盔上陣', end:'玉山東峰' },
 ];
 SX.M = {}; SX.MOUNTAINS.forEach(m => SX.M[m.id] = m);
@@ -224,9 +224,45 @@ SX.GROUP = {}; SX.GROUPS.forEach(g => SX.GROUP[g.id] = g);
 SX.groupOf = id => (SX.M[id] && SX.M[id].group) || id;          // 山 → 山群代號（不在山群裡的山就是自己）
 SX.peaksOf = gid => SX.MOUNTAINS.filter(m => SX.groupOf(m.id) === gid);
 SX.placeName = id => SX.GROUP[id] ? SX.GROUP[id].name : SX.M[id] ? SX.M[id].name : id;   // 山群用山群名，其他用山名
+// ===== 百岳帳：台灣百岳 100 座（官方分級表，依完百路線分 23 個山群）=====
+// 每列 [山名, 海拔, 官方分級]。海拔用內政部國土測繪中心 1/5000 像片基本圖的最新測量（整理自維基百科「臺灣百岳」列表的「最新測高」欄，2026-11 查）
+// 排名不手寫：照海拔由高到低算出來（SX.BAIYUE 的 rank），數字改了排名自己跟著變
+// 遊戲裡能爬的百岳在 SX.MOUNTAINS 寫 baiyue:true（名字要跟這裡一樣），海拔和排名都從這裡拿，不另外寫
+SX.BAIYUE_GROUPS = [
+  { name:'北一段', peaks:[['審馬陣山',3139.3,'A'],['南湖北山',3534.2,'B'],['南湖東峰',3639.4,'B'],['馬比杉山',3211,'C'],['南湖大山',3740.9,'B'],['南湖南峰',3504.9,'C'],['巴巴山',3448.2,'C'],['中央尖山',3697.7,'C+']] },
+  { name:'北二段', peaks:[['閂山',3167.5,'A'],['鈴鳴山',3271.2,'B'],['無明山',3449.2,'C+'],['甘薯峰',3157.1,'C+']] },
+  { name:'南一段', peaks:[['關山',3667.4,'C'],['海諾南山',3173.2,'C'],['小關山',3248.1,'C'],['卑南主山',3293.7,'C']] },
+  { name:'南二段', peaks:[['八通關山',3335,'A'],['大水窟山',3642.6,'B'],['達芬尖山',3206.4,'C'],['塔芬山',3068.8,'C'],['雲峰',3561.8,'C'],['轆轆山',3279,'C'],['南雙頭山',3358.7,'C'],['三叉山',3494.6,'A'],['向陽山',3601.1,'A']] },
+  { name:'南三段', peaks:[['無雙山',3242.8,'C+'],['東巒大山',3480.8,'C+'],['東郡大山',3617.2,'C+'],['內嶺爾山',3277.7,'C'],['義西請馬至山',3252,'C+'],['丹大山',3329,'C'],['六順山',3009.1,'B']] },
+  { name:'馬博橫斷', peaks:[['秀姑巒山',3826.1,'B'],['馬博拉斯山',3774.6,'C+'],['馬利加南山',3560.9,'C+'],['盆駒山',3027,'C+'],['馬西山',3442.6,'C+'],['喀西帕南山',3276.6,'C+']] },
+  { name:'能安縱走', peaks:[['能高山',3260.8,'C'],['能高南峰',3348.5,'C'],['光頭山',3066.8,'C'],['白石山',3106.5,'C'],['安東軍山',3066.5,'C']] },
+  { name:'奇萊連峰', peaks:[['奇萊主峰',3560.4,'B'],['奇萊南峰',3357.3,'A'],['南華山',3181.6,'A']] },
+  { name:'奇萊東稜', peaks:[['奇萊北峰',3605.6,'B'],['太魯閣大山',3282.3,'C+'],['立霧主山',3070.6,'C'],['帕托魯山',3102.1,'C'],['盤石山',3104.9,'C']] },
+  { name:'合歡群峰', peaks:[['合歡主峰',3416.6,'A'],['合歡北峰',3421.8,'A'],['合歡西峰',3144.1,'A'],['合歡東峰',3419.3,'A'],['石門山',3235.9,'A']] },
+  { name:'東台一霸', peaks:[['新康山',3339.9,'C'],['布拉克桑山',3020.9,'C']] },
+  { name:'干卓萬山塊', peaks:[['干卓萬山',3281.8,'C'],['卓社大山',3368,'C'],['牧山',3239.3,'C'],['火山',3257.3,'C']] },
+  { name:'玉山群峰', peaks:[['玉山主峰',3952.4,'A'],['玉山前峰',3233,'A'],['玉山西峰',3519.1,'A'],['玉山北峰',3854.9,'B'],['玉山東峰',3872.7,'C+'],['玉山南峰',3856.7,'C+'],['東小南山',3707.9,'C'],['南玉山',3380.8,'C'],['鹿山',2981.4,'C']] },
+  { name:'巒郡', peaks:[['郡大山',3277.6,'A'],['巒大山',3084.9,'C+']] },
+  { name:'雪山西南稜', peaks:[['大雪山',3529.6,'C'],['雪山主峰',3884.6,'A'],['中雪山',3172.4,'A'],['頭鷹山',3509.1,'C'],['火石山',3308.9,'C']] },
+  { name:'雪北線', peaks:[['雪山東峰',3199,'A'],['雪山北峰',3703,'C+'],['志佳陽山',3290.8,'A']] },
+  { name:'武陵四秀', peaks:[['桃山',3323.5,'A'],['喀拉業山',3132.5,'A'],['池有山',3300.2,'A'],['品田山',3527.9,'B']] },
+  { name:'大小劍', peaks:[['大劍山',3593.3,'B'],['劍山',3256.5,'C'],['佳陽山',3313.7,'B']] },
+  { name:'中橫三星', peaks:[['畢祿山',3369.9,'A'],['羊頭山',3032.8,'A'],['屏風山',3247.5,'B']] },
+  { name:'南橫三星', peaks:[['庫哈諾辛山',3114,'A'],['塔關山',3218.5,'A'],['關山嶺山',3173.7,'A']] },
+  { name:'大霸群峰', peaks:[['大霸尖山',3489.8,'A'],['小霸尖山',3418.9,'B'],['加利山',3111.9,'A'],['伊澤山',3296.3,'A']] },
+  { name:'五嶽老么', peaks:[['北大武山',3089.1,'A']] },
+  { name:'一支獨秀', peaks:[['白姑大山',3341.3,'B']] },
+];
+SX.BAIYUE = [];   // 攤平成一份（照排名），每座：{ rank, name, alt, grade, group }
+SX.BAIYUE_GROUPS.forEach(g => g.peaks.forEach(p => SX.BAIYUE.push({ name:p[0], alt:p[1], grade:p[2], group:g.name })));
+SX.BAIYUE.sort((a, b) => b.alt - a.alt).forEach((p, i) => p.rank = i + 1);   // 排名＝照海拔由高到低
+SX.BY = {}; SX.BAIYUE.forEach(p => SX.BY[p.rank] = p);
+SX.BYNAME = {}; SX.BAIYUE.forEach(p => SX.BYNAME[p.name] = p);
 SX.MOUNTAINS.forEach(function(m){
   var r = SX.REC[m.id];
   if (r) Object.assign(m, r);
+  var b = m.baiyue && SX.BYNAME[m.name];
+  if (b) { m.by = b.rank; m.alt = b.alt; }   // 百岳的排名、海拔只寫在百岳帳
   if (!m.theme && m.group) m.theme = SX.M[SX.GROUP[m.group].lead].theme;   // 同一山群共用主峰的步道外觀
   if (!m.recMin) m.recMin = Math.max(20, Math.round(m.dist / 60));
   if (!m.recNote) m.recNote = '一般山友約 ' + m.recMin + ' 分鐘';
@@ -243,37 +279,6 @@ SX.MOUNTAINS.forEach(m => {
   SX.PINS.push({ id:g.id, name:g.name, isGroup:true, area:L.area, lon:L.lon, lat:L.lat, diff:L.diff, dist:L.dist, alt:Math.max(...SX.peaksOf(g.id).map(p => p.alt)) });
 });
 
-// ===== 百岳帳：台灣百岳 100 座（官方分級表，依完百路線分 23 個山群）=====
-// 每列 [百岳排名, 山名, 海拔, 官方分級]；遊戲裡能爬的山用自己身上的 by（排名）連過來
-SX.BAIYUE_GROUPS = [
-  { name:'北一段', peaks:[[84,'審馬陣山',3139,'A'],[21,'南湖北山',3535,'B'],[14,'南湖東峰',3639,'B'],[72,'馬比杉山',3209,'C'],[8,'南湖大山',3740,'B'],[25,'南湖南峰',3516,'C'],[31,'巴巴山',3448,'C'],[11,'中央尖山',3703,'C+']] },
-  { name:'北二段', peaks:[[80,'閂山',3167,'A'],[63,'鈴鳴山',3240,'B'],[30,'無明山',3449,'C+'],[82,'甘薯峰',3156,'C+']] },
-  { name:'南一段', peaks:[[13,'關山',3666,'C'],[78,'海諾南山',3174,'C'],[61,'小關山',3248,'C'],[53,'卑南主山',3293,'C']] },
-  { name:'南二段', peaks:[[37,'八通關山',3404,'A'],[9,'大水窟山',3724,'B'],[69,'達芬尖山',3222,'C'],[98,'塔芬山',3038,'C'],[19,'雲峰',3562,'C'],[57,'轆轆山',3277,'C'],[46,'南雙頭山',3333,'C'],[28,'三叉山',3494,'A'],[16,'向陽山',3600,'A']] },
-  { name:'南三段', peaks:[[68,'無雙山',3222,'C+'],[40,'東巒大山',3360,'C+'],[29,'東郡大山',3487,'C+'],[73,'內嶺爾山',3204,'C'],[76,'義西請馬至山',3179,'C+'],[62,'丹大山',3240,'C'],[89,'六順山',3106,'B']] },
-  { name:'馬博橫斷', peaks:[[6,'秀姑巒山',3860,'B'],[7,'馬博拉斯山',3805,'C+'],[18,'馬利加南山',3577,'C+'],[81,'盆駒山',3163,'C+'],[33,'馬西山',3429,'C+'],[70,'喀西帕南山',3220,'C+']] },
-  { name:'能安縱走', peaks:[[58,'能高山',3261,'C'],[42,'能高南峰',3349,'C'],[95,'光頭山',3059,'C'],[88,'白石山',3108,'C'],[94,'安東軍山',3067,'C']] },
-  { name:'奇萊連峰', peaks:[[20,'奇萊主峰',3559,'B'],[41,'奇萊南峰',3357,'A'],[75,'南華山',3183,'A']] },
-  { name:'奇萊東稜', peaks:[[15,'奇萊北峰',3605,'B'],[56,'太魯閣大山',3282,'C+'],[93,'立霧主山',3069,'C'],[91,'帕托魯山',3100,'C'],[90,'盤石山',3105,'C']] },
-  { name:'合歡群峰', peaks:[[36,'合歡主峰',3416,'A'],[34,'合歡北峰',3422,'A'],[83,'合歡西峰',3144,'A'],[35,'合歡東峰',3416,'A'],[66,'石門山',3236,'A']] },
-  { name:'東台一霸', peaks:[[45,'新康山',3335,'C'],[99,'布拉克桑山',3036,'C']] },
-  { name:'干卓萬山塊', peaks:[[55,'干卓萬山',3282,'C'],[43,'卓社大山',3343,'C'],[64,'牧山',3239,'C'],[59,'火山',3257,'C']] },
-  { name:'玉山群峰', peaks:[[1,'玉山主峰',3952,'A'],[65,'玉山前峰',3236,'A'],[24,'玉山西峰',3528,'A'],[3,'玉山北峰',3920,'B'],[2,'玉山東峰',3940,'C+'],[4,'玉山南峰',3900,'C+'],[10,'東小南山',3709,'C'],[38,'南玉山',3381,'C'],[96,'鹿山',3043,'C']] },
-  { name:'巒郡', peaks:[[54,'郡大山',3292,'A'],[97,'巒大山',3042,'C+']] },
-  { name:'雪山西南稜', peaks:[[23,'大雪山',3529,'C'],[5,'雪山主峰',3884,'A'],[79,'中雪山',3172,'A'],[26,'頭鷹山',3508,'C'],[50,'火石山',3308,'C']] },
-  { name:'雪北線', peaks:[[74,'雪山東峰',3199,'A'],[12,'雪山北峰',3702,'C+'],[47,'志佳陽山',3327,'A']] },
-  { name:'武陵四秀', peaks:[[48,'桃山',3324,'A'],[85,'喀拉業山',3132,'A'],[51,'池有山',3301,'A'],[22,'品田山',3529,'B']] },
-  { name:'大小劍', peaks:[[17,'大劍山',3593,'B'],[67,'劍山',3223,'C'],[49,'佳陽山',3313,'B']] },
-  { name:'中橫三星', peaks:[[39,'畢祿山',3370,'A'],[100,'羊頭山',3033,'A'],[60,'屏風山',3248,'B']] },
-  { name:'南橫三星', peaks:[[86,'庫哈諾辛山',3114,'A'],[71,'塔關山',3220,'A'],[77,'關山嶺山',3174,'A']] },
-  { name:'大霸群峰', peaks:[[27,'大霸尖山',3505,'A'],[32,'小霸尖山',3445,'B'],[87,'加利山',3111,'A'],[52,'伊澤山',3296,'A']] },
-  { name:'五嶽老么', peaks:[[92,'北大武山',3090,'A']] },
-  { name:'一支獨秀', peaks:[[44,'白姑大山',3341,'B']] },
-];
-SX.BAIYUE = [];   // 攤平成一份（照排名），每座：{ rank, name, alt, grade, group }
-SX.BAIYUE_GROUPS.forEach(g => g.peaks.forEach(p => SX.BAIYUE.push({ rank:p[0], name:p[1], alt:p[2], grade:p[3], group:g.name })));
-SX.BAIYUE.sort((a, b) => a.rank - b.rank);
-SX.BY = {}; SX.BAIYUE.forEach(p => SX.BY[p.rank] = p);
 // 官方登山分級（一般季節）：need 是要先登頂過哪一級（或更難）的百岳才開放
 // 遊戲裡還沒有 need 那一級的百岳時，改看再下一級（SX.gradeNeed 算，例如還沒有 C 級的山，C+ 就先要 B 級）
 // snow：雪季時卡片上的提醒（只提醒、不擋）
