@@ -143,7 +143,9 @@ const GAIT = {
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
 };
 // 走路圖的高度修正：每張圖量「帽頂到鞋底」佔整格多高（量出來都在 97～100%），用一般走路圖當基準換算，換圖時人不會忽大忽小。重畫了圖要重新量
-const GAIT_H = { hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
+// 一般走路只用正背面的四格圖：八格版有 6 格身體往右轉，直路上看起來斜著走（換成正背面重畫的八格圖再改回來）
+const WALK_DRY = 'hiker_walk', WALK_RAIN = 'hiker_rain_walk';
+const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
 const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
@@ -1365,8 +1367,8 @@ function rainy(id){ const r = RAIN_OF[id]; return isRain && r && ART.get(r) ? r 
 function gaitSheet(){
   gait.sf = false;
   if (gait.act) { gait.sid = gait.act; gait.sf = gait.aflip; return; }
-  // 一般走路：有八格版就用八格（走路比較順）；下雨天穿黃色雨衣
-  const walk = isRain && ART.get('hiker_rain_walk8') ? 'hiker_rain_walk8' : isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : ART.get('hiker_walk8') ? 'hiker_walk8' : 'hiker_walk';
+  // 一般走路：正背面四格圖（WALK_DRY／WALK_RAIN），下雨天穿黃色雨衣
+  const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;
   // 階梯、累了：重畫成正背面直直走的版本（雨天換雨衣版）；彎道：轉身圖（往右前方，左彎鏡射），沒有雨衣版所以雨天照舊一般走路
   const m = gait.mode, id = m === 'stairs' ? rainy('hiker_stairs8') : m === 'tired' ? rainy('hiker_tired_walk8') : m === 'turn' && !isRain ? 'hiker_turn_walk8' : null;
   if (id && ART.get(id)) { gait.sid = id; gait.sf = m === 'turn' && gait.modeF; }
@@ -1650,10 +1652,9 @@ function heroArt(c, s, t, fl, me){
   if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
   if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return ART.drawFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
-  const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
   const fw = s.face === 'front' ? 'hiker_front_walk8' : s.face === 'side' ? 'hiker_side_walk8' : null;   // 廣場：往鏡頭走用正面、往旁邊走用側面（plaza.js 決定方向、往左時整個人鏡射），停下來面向鏡頭
   if (fw && ART.get(fw)) return ART.drawFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
-  const walk = isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk');   // 下雨天穿黃色雨衣
+  const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
   return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
 }
