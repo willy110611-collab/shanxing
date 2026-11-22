@@ -1,7 +1,7 @@
 // 山行小日子：離線快取。程式與頁面「先抓網路、失敗才用快取」，所以更新會馬上生效；音樂圖示則先用快取。
 // 兩個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
 // 玩家只會下載有換過的圖和新圖（美術圖網址帶 ?v=檔案指紋，圖換了網址才會變）。
-const CACHE = 'shanxing-v70';
+const CACHE = 'shanxing-v71';
 const ART_CACHE = 'shanxing-art';
 const isArt = u => /\/(audio|art)\//.test(u.pathname) && !/manifest\.json$/.test(u.pathname);
 self.addEventListener('install', e => { self.skipWaiting(); });
