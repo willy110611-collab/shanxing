@@ -74,8 +74,8 @@ const QUAL = {
   slow:1.2, ok:1.06,                  // 慢的四分之一超過「一格該花的時間」的 1.2 倍算太慢；最慢的一成都在 1.06 倍內算順
   win:90, gap:3, upAfter:8, upMax:64, // 看最近幾格、最少隔幾秒、順了幾秒才升一級（最多等幾秒）
   dpr:[2, 1.5, 1.25, 1.25, 1, 0.85],
-  plant:[0, 0, 0.5, 1, 1, 1], plantJ:55, // 第 2 級起：55 段（約 90 公尺）以外每段少畫兩個植物位置
-  turf:[0, 0, 0, 1, 1, 1], turfCut:10,   // 第 3 級起：草叢少畫 10 段
+  plant:[0, 0, 0.5, 1, 1, 1], plantJ:55, hedgeCut:10,   // 第 2 級起：55 段（約 90 公尺）以外每段少畫兩個植物位置、植物牆少畫 10 段
+  turf:[0, 0, 0, 1, 1, 1], turfCut:10, turfRowJ:8,      // 第 3 級起：草叢少畫 10 段、8 段以外每段 4 排只留 2 排
   light:[0, 0, 0, 0, 1, 1],              // 第 4 級起：樹影、光斑不畫
   phone:1,                            // 手機（觸控＋小螢幕）從第 1 級（1.5 倍）開始，順的話才往上升
   ease:0.8                            // 植物、草叢、光影跟著畫質慢慢變（每秒變多少）
@@ -487,7 +487,7 @@ function drawTurf(i, j, y1, y2, s1, fq, fade, DS, gw){
   if (base < 0.01) return;
   const nw = clamp((TURF_NEAR + 1.5 - zj) / 3, 0, 1), rowsW = (y1 - y2) / (0.6 * spN.hm * s1);   // nw：近景草帶佔幾成；rowsW：這段在畫面上排得下幾排
   for (let q = TURF_R - 1; q >= 0; q--) {
-    const rk = TURF_RANK[q], ra = rk ? clamp(rowsW - rk, 0, 1) : 1, aN = base * ra * nw, aF = base * ra * (1 - nw);
+    const rk = TURF_RANK[q], ra = (rk ? clamp(rowsW - rk, 0, 1) : 1) * (rk >= 2 ? 1 - qs.turf * clamp((zj - QUAL.turfRowJ) / 4, 0, 1) : 1), aN = base * ra * nw, aF = base * ra * (1 - nw);
     if (aN + aF < 0.01) continue;
     const sn = aN < 0.01 ? 3 : 1;   // 只剩遠景草帶時，只走每三個位置（位置還是同一組）
     for (let side = -1; side <= 1; side += 2) {
@@ -1979,7 +1979,12 @@ function drawWorld(b, t, jHi, jLo, far){
         }
         // 草地底色：依坡面明暗連續變（以前每兩段換一次深淺、每格坡面只分三階，一段一段像色塊）
         // 遠端往內縮 1 像素：底色的反鋸齒邊不會蓋到後面那段已經貼好的草地（以前每段交界有一條淡淡的亮線）
-        for (k = 1; k < nS - 1; k++) { const e = side * 0.8; ctx.fillStyle = GRS[fi * 21 + Math.round(tSh[k] * 10) + 10]; quad(tX1[k] - e, tY1[k], tX1[k + 1] + e, tY1[k + 1], tX2[k + 1] + e, tY2[k + 1] + 1, tX2[k] - e, tY2[k] + 1); }
+        // 相鄰幾條顏色一樣（遠處坡面明暗差不多）就合成一筆畫
+        for (k = 1; k < nS - 1;) {
+          const e = side * 0.8, c = Math.round(tSh[k] * 10); ctx.fillStyle = GRS[fi * 21 + c + 10]; ctx.beginPath();
+          do { ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + 1); ctx.lineTo(tX2[k] - e, tY2[k] + 1); k++; } while (k < nS - 1 && Math.round(tSh[k] * 10) === c);
+          ctx.fill();
+        }
         if (TEX.grass && ta > 0.03) {   // 草地貼圖：近處切成薄橫條各自對齊透視，跟前後段接得起來（下雪時淡掉，露出底下積雪的白色坡面）
           gNS = nS; texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * GRASS_A * (1 - snowFall * snowAmt * 0.85), grassPath, SUB_GRASS);
           ctx.globalAlpha = fade;
@@ -2135,7 +2140,7 @@ function drawWorld(b, t, jHi, jLo, far){
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * (0.8 + 0.45 * Hh(i, k * 8 + 8)), fq, farA(j, 64, 8), fade * pa * ea);   // 種在真正的地面高度；影子 64 段以外不畫（慢慢淡掉）
     }
     // 植物牆：貼著路邊 0.3～4 公尺擠滿蕨類、灌木、箭竹（越包越密），森林步道再夾幾棵貼著路的樹幹，像走在綠色隧道裡
-    const hA = fade * farA(j, HEDGE_J, 8);   // 植物牆畫到 HEDGE_J 段，最後 8 段慢慢淡入；靠近鏡頭的不再特別砍掉，讓它自己滑出畫面
+    const hA = fade * farA(j, HEDGE_J - qs.plant * QUAL.hedgeCut, 8);   // 植物牆畫到 HEDGE_J 段，最後 8 段慢慢淡入；靠近鏡頭的不再特別砍掉，讓它自己滑出畫面
     if (hA > 0.005) for (k = HEDGE_N - 1; k >= 0; k--) {
       const h0 = 200 + k * 9;
       if (Hh(i, h0) > wl * HEDGE_P) continue;
