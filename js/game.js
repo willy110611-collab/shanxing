@@ -24,7 +24,7 @@
     born:null,   // 開始登山的日子（個人紀錄用）
     badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, snowTop:0, bestStreak:0, walkSec:0 },   // walkSec：真的在走的秒數（個人紀錄用）
-    set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false } });
+    set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false, clean:false } });
   let SV = blank();
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
   let imgDirty = false;
@@ -511,6 +511,11 @@
   $('#rsUp').onclick = () => { if (st && M) { A.pop(); pickUpload(M.id, st.dist); } };
 
   // 浮在休息點／寶物上方的小木牌
+  // 收合畫面資訊：狀態面板、小地圖、下方選單一起收起來，只看風景；右下角小鈕再點一次展開
+  const hudTog = $('#hudTog');
+  const setClean = on => { SV.set.clean = on; $('#scrClimb').classList.toggle('clean', on); hudTog.setAttribute('aria-label', on ? '展開畫面資訊' : '收起畫面資訊'); };
+  hudTog.onclick = () => { A.pop(); setClean(!SV.set.clean); save(); };
+  setClean(!!SV.set.clean);
   const tag = $('#propTag'); let tagO = null;
   function updTag(){
     let n = null;
