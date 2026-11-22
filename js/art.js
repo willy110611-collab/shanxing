@@ -17,11 +17,14 @@ let loaded = false;
 const WALK16 = [0, 5, 1, 2, 4, 6, 7, 3, ~0, ~5, ~1, ~2, ~4, ~6, ~7, ~3];
 // hiker_stairs16 原圖第 7、15 格是腳剛踩上上一階：往後挪一格，對齊爬階梯節奏（八格圖是第 4、8 格踩上去）
 const STAIRS16 = [15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+// hiker_step8：Gemini 只畫「右腳跨一步」8 格，後半步（左腳）整組左右鏡射：兩步一模一樣，換腳有兩腳並排那一格，不會小碎步
+const STEP8 = [0, 1, 2, 3, 4, 5, 6, 7, ~0, ~1, ~2, ~3, ~4, ~5, ~6, ~7];
 const SHEETS = [
   [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
   [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
   [/_hop4$/, 4, 1, { air:true }], // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
   [/_walk16$/, 8, 2, { order:WALK16 }],  // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
+  [/_step8$/, 8, 1, { order:STEP8 }],    // hiker_step8、hiker_rain_step8
   [/_stairs16$/, 8, 2, { order:STAIRS16 }] // hiker_stairs16、hiker_rain_stairs16：前 8 格抬左膝、後 8 格抬右膝
 ];
 const POSE = /^hiker_/;   // 登山客的圖：單張動作也用上半身置中（見 prep）

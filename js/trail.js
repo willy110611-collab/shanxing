@@ -148,9 +148,9 @@ const GAIT = {
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
 };
 // 走路圖的高度修正：每張圖量「帽頂到鞋底」佔整格多高（量出來都在 97～100%），用一般走路圖當基準換算，換圖時人不會忽大忽小。重畫了圖要重新量
-// 一般走路：正背面十六格圖（格子播放順序在 art.js 的 WALK16 重排，左右腳輪流）
-const WALK_DRY = 'hiker_walk16', WALK_RAIN = 'hiker_rain_walk16';
-const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_stairs16:1, hiker_rain_stairs16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
+// 一般走路：hiker_step8（右腳一步 8 格＋鏡射成左腳一步，art.js 的 STEP8），換腳有兩腳並排那一格
+const WALK_DRY = 'hiker_step8', WALK_RAIN = 'hiker_rain_step8';
+const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_step8:1, hiker_rain_step8:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_stairs16:1, hiker_rain_stairs16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
 const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
