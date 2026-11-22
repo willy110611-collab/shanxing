@@ -434,7 +434,7 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | 檔名 | 名稱 | 內容 |
 |---|---|---|
 | `t_front_sticker` | 「前峰不前」貼紙 | a hand-drawn round sticker of a tiny out-of-breath hiker on a steep slope |
-| `t_shrine_card` | 西峰山神廟平安小卡 | a small card with a photo of a tiny stone mountain shrine among fir trees |
+| `t_shrine_card` | 西峰山神廟平安小卡（**不需要**：寺廟相關內容已拿掉，不用畫） | a small card with a photo of a tiny stone mountain shrine among fir trees |
 | `t_weather_log` | 玉山氣象站觀測紀錄卡 | a handwritten weather observation sheet with a grid, a pencil and a small thermometer doodle |
 | `t_ridge_sketch` | 十峻之首岩壁速寫 | a pencil sketch of a jagged rock face on cream paper (legendary) |
 | `t_crying_slope` | 哭坡過關證書 | a small crooked handwritten certificate with a wooden-step slope doodle and a smiling face |
