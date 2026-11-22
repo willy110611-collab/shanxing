@@ -1466,6 +1466,9 @@
   catchUp();
   renderMap();
   if (SV.set.gps) setGps(true);
+  // 開場讀取畫面：美術圖全部載完才收起來（玩家不會看到程式畫的備用圖），收起後先到山友大廳
+  SX.art.onProgress((d, t) => { const f = $('#ldFill'); if (f && t) f.style.width = Math.round(d / t * 100) + '%'; });
+  SX.art.whenReady(() => { const L = $('#loading'); if (L) L.classList.add('done'); go('lobby'); });
   if (SV.cur && SX.M[SV.cur]) { const p = P(SV.cur); if (p.dist > 0 && !p.fin) setTimeout(() => { if (screen !== 'map') return; selId = SV.cur; try { WM.focus(SV.cur); } catch(e){} showRoute(SV.cur); }, 700); }
   requestAnimationFrame(loop);
   document.addEventListener('gesturestart', e => e.preventDefault());

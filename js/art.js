@@ -74,6 +74,12 @@ A.has = function(id){ return !!lib[id]; };
 A.ready = function(){ return loaded; };
 // 圖到了之後通知畫面重建（例如步道的樹、石頭貼圖）
 A.onLoad = function(fn){ listeners.push(fn); if (loaded && Object.keys(lib).length) fn(); };
+// 開場讀取畫面用：whenReady 在圖全部處理完（或沒有圖、清單讀不到）時呼叫一次；onProgress(已完成, 總數)
+const readyFns = [], progFns = []; let prog = [0, 0];
+A.whenReady = function(fn){ if (loaded) fn(); else readyFns.push(fn); };
+A.onProgress = function(fn){ progFns.push(fn); fn(prog[0], prog[1]); };
+function setProg(d, t){ prog = [d, t]; progFns.forEach(fn => { try { fn(d, t); } catch (e) {} }); }
+function finish(){ loaded = true; readyFns.splice(0).forEach(fn => { try { fn(); } catch (e) {} }); }
 // 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）
 A.drawFrame = function(ctx, id, i, cx, by, h, flip){
   const e = lib[id]; if (!e) return false;
@@ -92,16 +98,18 @@ A.crop = function(id, i){
 
 function load(){
   fetch('art/manifest.json', { cache:'no-cache' }).then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
-    if (!Array.isArray(list) || !list.length) { loaded = true; return; }
+    if (!Array.isArray(list) || !list.length) { finish(); return; }
     // lazy：只在卡片上顯示的大插圖（奇遇、登頂），開遊戲時不下載，<img> 顯示時瀏覽器才去拿
     list.filter(it => it.lazy).forEach(it => { const id = it.file.replace(/\.[a-z]+$/i, ''); lib[id] = { img:null, w:0, h:0, frames:[], opaque:true, lazy:true }; urls[id] = 'art/' + it.file + '?v=' + it.v; });
-    return Promise.all(list.filter(it => !it.lazy).map(it => new Promise(res => {
+    const todo = list.filter(it => !it.lazy); let done = 0; setProg(0, todo.length);
+    return Promise.all(todo.map(it => new Promise(res => {
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
       const u = 'art/' + file + '?v=' + it.v;      // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
-      img.onload = () => { try { lib[id] = prep({ id, file }, img); lib[id].fit = it.fit || null; urls[id] = u; } catch (e) {} res(); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
-      img.onerror = () => res();
+      const end = () => { setProg(++done, todo.length); res(); };
+      img.onload = () => { try { lib[id] = prep({ id, file }, img); lib[id].fit = it.fit || null; urls[id] = u; } catch (e) {} end(); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
+      img.onerror = end;
       img.src = u;
-    }))).then(() => { loaded = true; listeners.forEach(fn => { try { fn(); } catch (e) {} }); });
+    }))).then(() => { listeners.forEach(fn => { try { fn(); } catch (e) {} }); finish(); });   // 先讓各畫面換上美術圖，再收起讀取畫面
   });
 }
 load();
