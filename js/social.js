@@ -1,7 +1,7 @@
 // 山行小日子 — 連線功能：帳號、山友大廳聊天、好友、一起爬、共享照片牆、照片審核
 // 後端：Cloudflare Workers（server/ 資料夾）。帳號只存在這支手機上，另外給一組復原碼換手機用。
 (function(){
-  const API = 'https://shanxing-api.willy110611.workers.dev/api';
+  const API = self.SX_API;                 // 後端網址寫在 js/config.js（sw.js 也要用）
   const WS = API.replace(/^http/, 'ws') + '/ws';
   const KEY = 'shanxing-net-v1', KEY_PARTY = 'shanxing-party-v1', KEY_ADMIN = 'shanxing-admin-key';
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -357,6 +357,35 @@
     } catch(e){ mc.innerHTML = `<h3>照片審核</h3><p>${esc(e.message)}</p><div class="mBtns"><button class="cbtn" id="revX">關閉</button></div>`; $('#revX').onclick = () => $('#modal').classList.remove('on'); }
   }
 
-  SX.social = { open, close, uploadPhoto, fillWall, review, get acct(){ return acct; }, get party(){ return party; } };
+  // ───────── 推播通知：設定頁的「通知」開關 ─────────
+  // 開關狀態只存在這裡（KEY_PUSH）；關掉遊戲時把「登山客快到山頂的時間」告訴伺服器，排程到時間就推播
+  const KEY_PUSH = 'shanxing-push-v1';
+  let pushOn = !!load(KEY_PUSH, false);
+  const b64u8 = s => { const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+  async function pushSet(on){
+    if (!acct) throw new Error('先到山友大廳取個暱稱建帳號，才能收通知');
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent), home = window.matchMedia && matchMedia('(display-mode: standalone)').matches;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window))
+      throw new Error(ios && !home ? 'iPhone 要先按分享 →「加入主畫面」，從主畫面打開遊戲才能收通知' : '這個瀏覽器不支援通知');
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!on) {
+      if (sub) { await api('/push/sub', { method: 'DELETE', json: { endpoint: sub.endpoint } }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
+      pushOn = false; store(KEY_PUSH, false); return false;
+    }
+    if (await Notification.requestPermission() !== 'granted') throw new Error('沒有允許通知；要收的話，到手機設定裡打開這個網站的通知');
+    const { key } = await api('/push/key'); if (!key) throw new Error('通知服務還沒準備好，晚點再試');
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(key) });
+    await api('/push/sub', { json: { endpoint: sub.endpoint } });
+    pushOn = true; store(KEY_PUSH, true); return true;
+  }
+  function sendEta(leaving){
+    if (!acct || !pushOn) return;
+    const e = leaving && SX.game && SX.game.summitEta ? SX.game.summitEta() : null;
+    fetch(API + '/eta', { method: 'POST', keepalive: true, headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: JSON.stringify(e || { at: null }) }).catch(() => {});
+  }
+  document.addEventListener('visibilitychange', () => sendEta(document.hidden));
+
+  SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; } };
   if (acct) { refresh(); }
 })();

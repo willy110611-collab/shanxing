@@ -12,5 +12,6 @@
   "vars": {
     "ALLOW_ORIGINS": "https://willy110611-collab.github.io,http://localhost:8770"
   },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true }
 }

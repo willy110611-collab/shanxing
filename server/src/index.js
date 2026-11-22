@@ -41,8 +41,45 @@ const pub = p => ({ id: p.id, name: p.name, code: p.code, mountain: p.mountain, 
   walked: Math.round(p.walked || 0), summits: p.summits || 0, week: p.wk === weekNo() ? Math.max(0, Math.round((p.walked || 0) - (p.wk_base || 0))) : 0 });
 const MAX_SAVE = 400 * 1024;
 
+// ───────── 推播通知 ─────────
+// 推播本身不帶內容（不用做內容加密）：先把通知存進 push_queue，再叫醒手機；手機的 sw.js 收到後用自己的 endpoint 來拿內容。
+// VAPID 金鑰：VAPID_PUBLIC（給瀏覽器訂閱用）、VAPID_PRIVATE（JWK，用來簽名），都是 secret。
+const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+let vapidKey = null;
+async function vapidJwt(env, endpoint){
+  if (!vapidKey) vapidKey = await crypto.subtle.importKey('jwk', JSON.parse(env.VAPID_PRIVATE), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const enc = o => b64u(new TextEncoder().encode(JSON.stringify(o)));
+  const head = enc({ typ: 'JWT', alg: 'ES256' }), body = enc({ aud: new URL(endpoint).origin, exp: Math.floor(now() / 1000) + 12 * 3600, sub: 'https://willy110611-collab.github.io/shanxing/' });
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, vapidKey, new TextEncoder().encode(head + '.' + body));
+  return head + '.' + body + '.' + b64u(sig);
+}
+async function wake(env, endpoint){
+  if (!env.VAPID_PRIVATE || !env.VAPID_PUBLIC) return;
+  try {
+    const r = await fetch(endpoint, { method: 'POST', headers: { TTL: '86400', Urgency: 'normal', Authorization: `vapid t=${await vapidJwt(env, endpoint)}, k=${env.VAPID_PUBLIC}`, 'Content-Length': '0' } });
+    if (r.status === 404 || r.status === 410) await env.DB.batch([env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ?').bind(endpoint), env.DB.prepare('DELETE FROM push_queue WHERE endpoint = ?').bind(endpoint)]);   // 手機取消訂閱了
+  } catch (e) {}
+}
+// 通知某位玩家（他所有訂閱過的手機）
+async function notify(env, player, title, body, tag){
+  const subs = (await env.DB.prepare('SELECT endpoint FROM push_subs WHERE player = ?').bind(player).all()).results;
+  for (const s of subs) {
+    await env.DB.prepare('INSERT INTO push_queue (endpoint, title, body, tag, created) VALUES (?, ?, ?, ?, ?)').bind(s.endpoint, title, body, tag || null, now()).run();
+    await wake(env, s.endpoint);
+  }
+}
+
 // ───────── 路由 ─────────
 export default {
+  // 排程（每 5 分鐘）：關掉遊戲的玩家，登山客快走到山頂了就通知；清掉放太久沒人拿的通知
+  async scheduled(ev, env){
+    const due = (await env.DB.prepare('SELECT * FROM eta WHERE sent = 0 AND at <= ? LIMIT 200').bind(now()).all()).results;
+    for (const e of due) {
+      await env.DB.prepare('UPDATE eta SET sent = 1 WHERE player = ?').bind(e.player).run();
+      await notify(env, e.player, `快到${e.name}山頂了！`, '你的登山客只差最後幾步，回來一起見證登頂的那一刻吧。', 'summit');
+    }
+    await env.DB.prepare('DELETE FROM push_queue WHERE created < ?').bind(now() - 3 * 864e5).run();
+  },
   async fetch(req, env){
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors(env, req) });
     const url = new URL(req.url), path = url.pathname.replace(/\/+$/, ''), M = req.method;
@@ -95,6 +132,15 @@ export default {
           return J(env, req, { ok: true });
         }
         return E(env, req, 'not found', 404);
+      }
+
+      // 推播：公開金鑰（瀏覽器訂閱用）、手機收到推播後來拿通知內容（用自己的 endpoint 當鑰匙，拿完就刪）
+      if (path === '/api/push/key' && M === 'GET') return J(env, req, { key: env.VAPID_PUBLIC || null });
+      if (path === '/api/push/pending' && M === 'GET') {
+        const ep = url.searchParams.get('e') || '';
+        const r = (await env.DB.prepare('SELECT id, title, body, tag FROM push_queue WHERE endpoint = ? ORDER BY id LIMIT 10').bind(ep).all()).results;
+        if (r.length) await env.DB.prepare('DELETE FROM push_queue WHERE endpoint = ? AND id <= ?').bind(ep, r[r.length - 1].id).run();
+        return J(env, req, { notes: r });
       }
 
       // 即時房間（大廳／一起爬）：WebSocket
@@ -151,6 +197,24 @@ export default {
         return J(env, req, { ok: true, updated: now() });
       }
 
+      // 推播訂閱（設定頁的「通知」開關）
+      if (path === '/api/push/sub' && (M === 'POST' || M === 'DELETE')) {
+        const b = await req.json().catch(() => ({})), ep = String(b.endpoint || '');
+        if (!/^https:\/\/[^\s]{10,800}$/.test(ep)) return E(env, req, '訂閱資料不對');
+        if (M === 'DELETE') { await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ? AND player = ?').bind(ep, me.id).run(); return J(env, req, { ok: true }); }
+        await env.DB.prepare('INSERT INTO push_subs (endpoint, player, created) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET player = excluded.player').bind(ep, me.id, now()).run();
+        return J(env, req, { ok: true });
+      }
+      // 關掉遊戲時：登山客預計走到山頂前的時間（at 為空＝取消，例如玩家回到遊戲了）
+      if (path === '/api/eta' && M === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        if (!b.at) { await env.DB.prepare('DELETE FROM eta WHERE player = ?').bind(me.id).run(); return J(env, req, { ok: true }); }
+        const at = Math.max(now() + 60e3, Math.min(+b.at || 0, now() + 3 * 864e5));
+        await env.DB.prepare('INSERT INTO eta (player, mountain, name, at, sent) VALUES (?, ?, ?, ?, 0) ON CONFLICT(player) DO UPDATE SET mountain = excluded.mountain, name = excluded.name, at = excluded.at, sent = 0')
+          .bind(me.id, String(b.mountain || '').slice(0, 24), cleanName(b.name) || '山', at).run();
+        return J(env, req, { ok: true });
+      }
+
       // 好友
       if (path === '/api/friends' && M === 'GET') {
         const r = await env.DB.prepare('SELECT p.* FROM friends f JOIN players p ON p.id = f.b WHERE f.a = ? AND p.banned = 0 ORDER BY p.seen DESC').bind(me.id).all();
@@ -191,6 +255,7 @@ export default {
         if (!fr) return E(env, req, '只能邀請好友');
         const id = rid(8);
         await env.DB.prepare('INSERT INTO invites (id, host, guest, mountain, created) VALUES (?, ?, ?, ?, ?)').bind(id, me.id, b.friend, String(b.mountain || '').slice(0, 24), now()).run();
+        await notify(env, b.friend, `${me.name} 邀你一起爬山`, '打開山友大廳的「好友」看看要不要一起去。', 'invite');
         return J(env, req, { id });
       }
       if ((m = path.match(/^\/api\/invites\/([0-9a-f]+)$/)) && M === 'POST') {
@@ -199,6 +264,7 @@ export default {
         if (!inv || inv.guest !== me.id) return E(env, req, 'not found', 404);
         const status = b.accept ? 'accepted' : 'declined';
         await env.DB.prepare('UPDATE invites SET status = ? WHERE id = ?').bind(status, m[1]).run();
+        if (b.accept) await notify(env, inv.host, `${me.name} 接受了你的邀請`, '一起出發吧！打開遊戲就能開始一起爬。', 'invite');
         return J(env, req, { ok: true, status, mountain: inv.mountain });
       }
 

@@ -288,8 +288,8 @@
     return Math.max(0, altAt(m, f) - 500) / 3500 * 0.5 + (w.time === 'night' ? 0.35 : w.time === 'dawn' ? 0.15 : 0)
       + (w.kind === 'rain' ? 0.4 : w.kind === 'fog' ? 0.2 : 0) + (m.theme.alpine || m.theme.snow ? 0.2 : 0);
   }
-  // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）
-  function simulate(p, m, dt, boost, offline){
+  // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）；dry：只是試算（不記里程、不算每日任務）
+  function simulate(p, m, dt, boost, offline, dry){
     if (p.sleep) { p.stam = Math.min(100, p.stam + NAP * dt); p.temp = Math.min(100, p.temp + 2 * dt); if (p.stam >= 60 && p.temp >= 50) p.sleep = false; return 0; }
     if (p.rest) { p.stam = Math.min(100, p.stam + REST * dt); p.temp = Math.min(100, p.temp + 4 * dt); if (offline && p.stam >= 100 && p.temp >= 95) p.rest = false; return 0; }
     const dev = SV.set.devOn && SV.set.fast ? 20 : 1;
@@ -297,11 +297,19 @@
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
     if (p.stopAt != null && p.stopAt - 1 - p.dist <= d) { d = Math.max(0, p.stopAt - 1 - p.dist); stop = true; }
-    p.dist += d; SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) daily('walk', d); p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
+    p.dist += d; if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) daily('walk', d); } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
     p.temp = clamp(p.temp + ((boost ? 0.15 : 0) - chill(m, p.dist / m.dist, wx) * 0.08) * dt, 0, 100);
     if (stop) { p.rest = true; p.stopAt = null; p.stam = Math.max(0, p.stam); return d; }
     if (p.stam <= 0 || p.temp <= 0) { p.stam = Math.max(0, p.stam); p.sleep = true; }
     return d;
+  }
+  // 關掉遊戲後，登山客大概什麼時候走到山頂前（給推播「快到山頂了」用）；48 小時內走不到就回 null
+  function summitEta(){
+    if (!SV.cur || !SX.M[SV.cur]) return null;
+    const m = SX.M[SV.cur], p = JSON.parse(JSON.stringify(P(SV.cur)));
+    if (p.fin || p.dist >= m.dist - 2.5) return null;
+    for (let t = 0; t < OFFLINE_CAP; t += 30) { simulate(p, m, 30, false, true, true); if (p.dist >= m.dist - 2.5) return { mountain:m.id, name:m.name, at:Date.now() + (t + 30) * 1000 }; }
+    return null;
   }
   // 離線／離開畫面的時間補走（最多 48 小時，兩天一夜的大山也走得完）
   function catchUp(){
@@ -1056,6 +1064,8 @@
         <input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.vol}"><p>腳步聲、鳥叫、雨聲和廟裡的鐘聲。</p></div>
       <div class="setRow"><h4>人在山上，定位加速<button class="tgl ${s.gps ? 'on' : ''}" id="sGps"></button></h4>
         <p>開啟後會用手機定位。你人真的在這座山附近（大約 3 公里內）的時候，真的走一公尺，遊戲裡就多走三公尺。不在山上就沒有作用。只有遊戲畫面開著的時候才會計算，比較耗電。</p></div>
+      <div class="setRow"><h4>通知<button class="tgl ${SX.social && SX.social.pushOn ? 'on' : ''}" id="sPush"></button></h4>
+        <p>山友邀你一起爬、對方接受邀請、還有關掉遊戲後登山客快走到山頂時，手機會跳通知。iPhone 要先「加入主畫面」，從主畫面打開才收得到。</p></div>
       <div class="setRow"><h4 id="tipsH">操作小抄</h4>
         <p>放著不管，角色會照山友實際紀錄的速度慢慢走，關掉遊戲也會繼續。長按畫面（或按住 W／↑）可以走快一點，但比較累。點長椅或觀景台可以休息、拍照、疊石頭。</p></div>
       ${s.dev || devPeek ? `<div class="setRow"><h4>開發者選項</h4>
@@ -1080,6 +1090,11 @@
     $('#sVol').oninput = e => { s.vol = +e.target.value; A.setVol(s.vol); save(); };
     $('#sVol').onchange = () => { A.unlock(); A.pop(); };
     $('#sGps').onclick = () => { s.gps = !s.gps; save(); setGps(s.gps); renderSettings(); };
+    $('#sPush').onclick = async () => {
+      if (!SX.social) return; const want = !SX.social.pushOn; $('#sPush').disabled = true;
+      try { await SX.social.pushSet(want); toast(want ? '通知打開了' : '通知關掉了'); } catch(e){ toast(e.message, 4200); }
+      renderSettings();
+    };
     if (s.dev) {
       const need = () => { if (!st || !M || st.fin) { toast('先開始爬一座山'); return false; } return true; };
       $('#dFast').onclick = () => { s.devOn = true; s.fast = !s.fast; save(); renderSettings(); };
@@ -1134,7 +1149,7 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
   // 給連線模組用：雲端存檔、每日任務
-  SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null,
+  SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
   window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests,
