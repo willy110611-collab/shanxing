@@ -3,6 +3,7 @@ window.SX = window.SX || {};
 
 // 每座山：經緯度（畫地圖用）、海拔、遊戲距離（公尺）、難度（飯糰數）、外觀主題
 // theme.wall：[登山口, 山頂] 步道兩側被植物包住的程度（1＝森林綠色隧道、0.3＝高山稜線只剩矮箭竹）
+// themeOver：同一山群的山沒寫 theme 時用主峰的，只想改幾項就寫在這裡（例如向陽山、三叉山看不到嘉明湖：{ lake:false }），在下面跟主峰的合併
 SX.MOUNTAINS = [
   { id:'xiangshan', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
     feat:'城市高樓、步道石階、山頂六顆大石頭', end:'象山頂的六巨石',
@@ -40,9 +41,9 @@ SX.MOUNTAINS = [
     feat:'天使的眼淚、高山草原、山羌出沒', end:'嘉明湖畔',
     theme:{ sky:['#78b2e4','#e3f0f6'], far:'#8f9fbc', mid:'#86a56e', near:'#b6c56e', trail:'dirt', wall:[0.6,0.3], alpine:true, lake:true, grass:true } },
   { id:'xiangyang', name:'向陽山', group:'jiaming', baiyue:true, area:'台東・高雄', lon:121.005, lat:23.282, startAlt:2320, diff:4,
-    feat:'向陽大崩壁、紅檜松林、黑水塘', end:'向陽山' },
+    feat:'向陽大崩壁、紅檜松林、黑水塘', end:'向陽山', themeOver:{ lake:false } },
   { id:'sancha', name:'三叉山', group:'jiaming', baiyue:true, area:'台東・花蓮', lon:121.028, lat:23.30, startAlt:2320, diff:5,
-    feat:'一等三角點、無邊草原、遠望嘉明湖', end:'三叉山一等三角點' },
+    feat:'一等三角點、無邊草原、遠望嘉明湖', end:'三叉山一等三角點', themeOver:{ lake:false } },
   // 雪主東：雪山主峰＋雪山東峰
   { id:'xueshan', name:'雪山主峰', group:'xueshan', baiyue:true, area:'台中', lon:121.23, lat:24.38, startAlt:2140, dist:10900, diff:5,
     feat:'黑森林、雪山圈谷、冰河地形', end:'雪山主峰',
@@ -257,7 +258,7 @@ SX.MOUNTAINS.forEach(function(m){
   if (r) Object.assign(m, r);
   var b = m.baiyue && SX.BYNAME[m.name];
   if (b) { m.by = b.rank; m.alt = b.alt; }   // 百岳的排名、海拔只寫在百岳帳
-  if (!m.theme && m.group) m.theme = SX.M[SX.GROUP[m.group].lead].theme;   // 同一山群共用主峰的步道外觀
+  if (!m.theme && m.group) m.theme = m.themeOver ? Object.assign({}, SX.M[SX.GROUP[m.group].lead].theme, m.themeOver) : SX.M[SX.GROUP[m.group].lead].theme;   // 同一山群共用主峰的步道外觀；themeOver 只改其中幾項
   if (!m.recMin) m.recMin = Math.max(20, Math.round(m.dist / 60));
   if (!m.recNote) m.recNote = '一般山友約 ' + m.recMin + ' 分鐘';
   if (!m.route) m.route = [[0.3,0.9],[0.5,0.5],[0.6,0.1]];
