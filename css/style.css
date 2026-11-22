@@ -631,3 +631,7 @@ p,li,small,.rc-feat,.summitBig{text-wrap:pretty}
 
 /* 標題用霞鶩文楷（字型定義在 :root --fontT） */
 h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family:var(--fontT)}
+
+/* 羊皮紙狀態面板上，海拔數字跳動時改用深橘（原本的淡黃在淺紙上看不清楚） */
+.hudP .hudAlt .dg.jump{animation-name:dgJumpInk}
+@keyframes dgJumpInk{0%{transform:translateY(0)}35%{transform:translateY(-6px) scale(1.18);color:#c0662f}100%{transform:none}}
