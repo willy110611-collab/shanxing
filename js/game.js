@@ -441,7 +441,7 @@
       .mCard::before,.mCard::after,.infoCard::before,.infoCard::after,#restSheet::before,#restSheet::after{display:none!important}
       .mCard .summitBig,.mCard .tiny,.mCard p,.infoCard .ic-h b,.infoCard .rc-h b,.mCard .grp,.mCard .empty{color:var(--ink)!important;text-shadow:none!important}
       .mCard .stoneGame .sg-top{color:#fff7e4!important;text-shadow:var(--txo)!important}`);
-    if (u('ui_ribbon')) css.push(`.mCard h3{display:block;width:fit-content;max-width:100%;margin:0 auto 12px!important;padding:8px 4px 12px;border-style:solid;border-width:0 34px;border-color:transparent;border-image:url("${u('ui_ribbon')}") 0 130 fill / 0 34px stretch;color:var(--ink)!important;text-shadow:none!important;font-size:18px!important}`);
+    if (u('ui_ribbon')) css.push(`.mCard h3{display:block;width:fit-content;max-width:100%;margin:0 auto 12px!important;padding:8px 2px 12px;border-style:solid;border-width:0 26px;border-color:transparent;border-image:url("${u('ui_ribbon')}") 0 130 fill / 0 26px stretch;color:var(--ink)!important;text-shadow:none!important;font-size:16px!important;white-space:nowrap;letter-spacing:0}`);   // 標題一行放完，不准折成兩行
     if (u('ui_tab') && u('ui_tab_on')) css.push(`.tab{background:url("${u('ui_tab')}") center/100% 100% no-repeat!important;border:0!important;box-shadow:none!important;color:var(--ink)!important;text-shadow:0 1px 0 rgba(255,240,210,.6)!important}
       .tab.on{background-image:url("${u('ui_tab_on')}")!important;color:#fff7e4!important;text-shadow:var(--txo)!important}`);
     if (u('ui_toggle_on') && u('ui_toggle_off')) css.push(`.tgl{width:62px!important;height:30px!important;border:0!important;box-shadow:none!important;background:url("${u('ui_toggle_off')}") center/contain no-repeat!important}

@@ -351,6 +351,19 @@ function pTreasure(g){
 }
 function mkTab(list){ let sum = 0; for (let i = 0; i < list.length; i++) sum += list[i][1]; let acc = 0; return list.map(function(e){ acc += e[1] / sum; return { p:acc, arr:e[0] }; }); }
 function pick(tab, r){ for (let i = 0; i < tab.length; i++) if (r < tab[i].p) return tab[i].arr; return tab[tab.length - 1].arr; }
+// 美術圖山頂三角點（summit_marker）：石柱正面直寫山名。正面位置是照這張圖量的（裁掉透明邊後的比例）
+const SUMMIT_FACE = { x:0.4, y0:0.3, y1:0.8, w:0.34 };
+function artSummitSpr(name){
+  const c0 = ART.crop('summit_marker'); if (!c0) return null;
+  groundShade(c0);
+  const c = mk(c0.width, c0.height), g = c.getContext('2d'), B = SUMMIT_FACE, n = Math.min(4, name.length); g.drawImage(c0, 0, 0);
+  const fs = Math.min(c.width * B.w * 0.85, (B.y1 - B.y0) * c.height / n * 0.82);
+  g.font = '700 ' + fs + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(120,30,26,.85)';
+  for (let i = 0; i < n; i++) g.fillText(name[i], c.width * B.x, c.height * B.y0 + fs * (i + 0.6));
+  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
+  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
+  return { c:c, h:h, w:1.7 * c.width / c.height, hm:1.7, ax:0.5 };
+}
 function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) || sprite(1.4, 1.5, 80, function(g){ pSign(g, txt); })); }
 // 美術圖路標（sign_wood）：上面那塊箭頭木板寫字。木板位置是照這張圖量的（裁掉透明邊後的比例）
 const SIGN_BOARD = { x:0.54, y:0.175, w:0.62, h:0.075, rot:-0.07 };
@@ -391,7 +404,7 @@ function buildSprites(){
   SPR.rail = artOr('railing', 1.0, []);        // 只有美術圖：路旁的木欄杆
   SPR.fall = artOr('waterfall', 4.2, []);      // 只有美術圖：路旁小瀑布
   SPR.treasure = artOr('treasure_box', 0.6, [sprite(0.7, 0.55, 80, pTreasure)]);
-  SPR.summit = [sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
+  SPR.summit = [artSummitSpr((M && M.name) || '山頂') || sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
   const al = th.alpine;
   smallTab = mkTab([[SPR.rhodo, al ? 3 : 1.4], [SPR.rock, (al || th.rocks || th.trail === 'scree') ? 3 : 1], [SPR.bamboo, al ? 3 : 0.5], [SPR.fern, al ? 0.3 : 2.5], [SPR.grass, 3], [SPR.flower, 1.5], [SPR.silver, th.grass ? 3 : 0.3]]);
@@ -1014,7 +1027,8 @@ const PET_H = { shiba:46, bear:58, leopardcat:40, magpie:34 };
 function petArt(s, x, y, u, t){
   const id = s.pet, walk = ART.get('pet_' + id + '_walk') ? 'pet_' + id + '_walk' : (id === 'shiba' && ART.get('shiba_walk') ? 'shiba_walk' : null);
   if (!walk) return false;
-  const sitting = hero.mv < 0.3 || s.sleep, sit = id === 'shiba' && sitting && ART.get('shiba_sit') ? 'shiba_sit' : null, h = PET_H[id] || 44;
+  const sitting = hero.mv < 0.3 || s.sleep, h = PET_H[id] || 44;
+  const sit = !sitting ? null : ART.get('pet_' + id + '_sit') ? 'pet_' + id + '_sit' : (id === 'shiba' && ART.get('shiba_sit') ? 'shiba_sit' : null);   // 坐姿：pet_<id>_sit，柴犬也接受第一批的 shiba_sit
   ctx.drawImage(SHADOW, x - 27 * u, y - 10 * u, 50 * u, 20 * u);
   ctx.save(); ctx.translate(x, y); ctx.scale(u, u);
   if (sit) ART.drawFrame(ctx, sit, 0, 0, 0, h * 0.95);
@@ -1054,7 +1068,9 @@ function walkFrame(){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * 4) : 0; 
 function heroArt(c, s, t){
   if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, 112);
   if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, 115);
-  return ART.drawFrame(c, 'hiker_walk', walkFrame(), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176);
+  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, 196);   // 站上山頂：舉起登山杖歡呼
+  const walk = isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : 'hiker_walk';   // 下雨天穿黃色雨衣
+  return ART.drawFrame(c, walk, walkFrame(), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176);
 }
 function drawHero(s, t){
   proj(jhG, fhG, false);
