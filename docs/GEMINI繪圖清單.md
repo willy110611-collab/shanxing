@@ -286,3 +286,4 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 |---|---|---|
 | `grass_clumps` | 16:9 | 洋紅底。A row of 8 separate short wild grass clumps of different shapes (ankle height), seen slightly from above at a low angle, evenly spaced, each fully visible, same lighting from the upper right. |
 | `trail_bank` | 16:9 | 洋紅底。A horizontal strip of a small soil bank at the edge of a mountain trail seen from the side: a short vertical dirt cut with exposed tree roots and small pebbles, moss on top edge, seamless tileable left-right. |
+| `icon_lock` | 1:1 | 洋紅底。A small round brass padlock icon in the same style as the other round icons (warm brass, ink outline, a tiny mountain engraved on the lock body), closed shackle, no text. 放 `06.介面`（地圖上還不能爬的山用） |
