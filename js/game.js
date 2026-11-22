@@ -1448,6 +1448,8 @@
     if (!on) return;
     if (!navigator.geolocation) { toast('這支手機不支援定位'); return; }
     $('#gpsTag').textContent = '定位中…';
+    // 之前已經按過「不允許」：瀏覽器不會再問，直接說明怎麼打開
+    if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name:'geolocation' }).then(p => { if (p.state === 'denied' && SV.set.gps) gpsDenied(); }).catch(() => {});
     gpsWatch = navigator.geolocation.watchPosition(pos => {
       const c = pos.coords, tagEl = $('#gpsTag');
       if (c.accuracy > 60) { tagEl.textContent = '定位訊號弱'; return; }
@@ -1459,7 +1461,17 @@
       }
       gpsPrev = { latitude:c.latitude, longitude:c.longitude };
       tagEl.textContent = !M ? '定位好了，選一座山出發吧' : near ? `人在山上！真的走了 ${Math.round(gpsTotal)} m（×3）` : '不在這座山附近，定位加速沒有作用';
-    }, () => { toast('沒有拿到定位權限'); SV.set.gps = false; save(); $('#gpsTag').classList.remove('on'); }, { enableHighAccuracy:true, maximumAge:5000 });
+    }, err => {
+      // 玩家按「不允許」：整個關掉（停止等待、開關跟著關、說明怎麼重新打開）；只是訊號弱或逾時：繼續等，不關
+      if (err && err.code === 1) gpsDenied();
+      else $('#gpsTag').textContent = '定位訊號弱，再等一下';
+    }, { enableHighAccuracy:true, maximumAge:5000, timeout:30000 });
+  }
+  function gpsDenied(){
+    if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
+    SV.set.gps = false; save(); $('#gpsTag').classList.remove('on');
+    if (screen === 'settings') renderSettings();
+    toast('沒有拿到定位權限，定位加速先關掉了。想用的話，到手機設定允許這個網站使用位置，再回來打開', 5200);
   }
 
   // ───────── 啟動 ─────────
