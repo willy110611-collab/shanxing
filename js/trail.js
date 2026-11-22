@@ -64,7 +64,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_A = 0.09, TURN_X = 0.07;   // 轉彎傾身：看腳下往前幾段的彎度、彎到多少算全傾、最多傾幾弧度（約 5 度）、腳往內側偏幾公尺
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -138,6 +138,7 @@ const GAIT = {
   bendIn:0.012, bendOut:0.007,          // 轉身走路圖只在真的彎道：腳下往前 8 公尺的平均彎度超過 bendIn 換上、低於 bendOut 才算彎完（直線上的小擺動不會換）
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
+  stairCad:1.35,                        // 階梯上一步踩一階：踏面很短（很陡）時步頻最多是平路的這麼多倍，再快就放慢前進（腳不會原地狂踩、在階梯上滑）
   tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
   hold:1.5,                             // 換了一種走路圖以後，至少用這麼多秒才能再換（不會一閃一閃）
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
@@ -1293,10 +1294,22 @@ const LEAFC = ['#8fbf5a', '#d9a441', '#c9703f', '#6fa85a'];
 function updHero(s, t, dt, dist, sp){
   const mv = (sp > 0.05 && !s.rest && !s.sleep) ? 1 : 0;
   hero.mv += (mv - hero.mv) * Math.min(1, dt * 8);
-  // 步伐：平路一個循環（兩步）走 STRIDE 公尺；階梯上一步踩一階，步子變短（腳才不會在階梯上滑），身體往前傾一點
+  // 步伐：平路一個循環（兩步）走 STRIDE 公尺；階梯上一步踩一階，身體往前傾一點
+  // 階梯上步伐相位跟畫面上的踏面對齊：第 4、8 格腳踩上下一階的踏面時，身體剛好開始升上那一階（heroGround）
   const si = Math.floor(dist / SEG), rise = sAt(si) === 1 ? eAt(si + 1) - eAt(si) : 0, nSt = rise > 0 ? clamp(Math.ceil(rise / STEP_H), 1, 4) : 0;
-  const stride = (nSt ? clamp(2 * SEG / nSt, 0.85, STRIDE) : STRIDE) * GAIT.stride[gait.lvl], dd = dist - hero.pd;
-  hero.ph = (Math.abs(dd) < 3 && hero.pd >= 0) ? hero.ph + dd / stride * TAU : dist / STRIDE * TAU; hero.pd = dist;   // 一下子跳很遠（換山、補進度）就直接重算
+  const sm = stairSteps(nSt), stepL = nSt ? SEG / (nSt * sm) : 0, dd = dist - hero.pd;
+  hero.stepL = stepL;
+  if (Math.abs(dd) < 3 && hero.pd >= 0) {
+    let inc = dd / (nSt ? 2 * stepL : STRIDE * GAIT.stride[gait.lvl]) * TAU;
+    if (nSt && dd > 0) {
+      // 這一步走到哪（0～1）→ 相位該在哪；差多少在接下來半步內慢慢補上（只往前補，腳不會倒著走），從一般走路圖換過來步伐接得上
+      const u = (dist / SEG - si) * nSt * sm, e = u - Math.floor(u);
+      let err = Math.PI * (e - STAIR_UP + 0.75) - (hero.ph + inc); err -=Math.PI * Math.round(err / Math.PI);
+      inc = Math.max(inc * 0.35, inc + err * Math.min(1, dd / stepL * 2));
+    }
+    hero.ph += inc;
+  } else hero.ph = dist / STRIDE * TAU;   // 一下子跳很遠（換山、補進度）就直接重算
+  hero.pd = dist;
   hero.stair += ((nSt ? clamp(rise / SEG / 0.45, 0.4, 1) : 0) - hero.stair) * Math.min(1, dt * 3);
   // 背包：阻尼彈簧跟著步伐上下彈
   const tgt = -Math.abs(Math.sin(hero.ph)) * 3 * hero.mv;
@@ -1340,7 +1353,8 @@ function updGait(s, dt, dist){
     else if (gait.tH <= 0 && stam >= G.happy && hero.stair < 0.2 && Math.abs(hero.turn) < 0.2) { if (!(RMOT && RMOT.matches)) gaitStart('hiker_hop4', G.hopDur); gait.tH = rnd(G.hop); }
   }
   // 前進速度：做動作時停下來，累了慢慢走；長按快走照原本的速度。慢慢變，不會一下子停住
-  const tg = gait.act ? 0 : s.boost ? 1 : G.pace[lvl];
+  const cad = hero.stepL ? Math.min(1, G.stairCad * hero.stepL / (STRIDE / 2)) : 1;   // 很陡的階梯（踏面短）放慢，一步還是踩一階
+  const tg = gait.act ? 0 : (s.boost ? 1 : G.pace[lvl]) * cad;
   gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
   if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
   gaitMode(dt, dist, stam);
@@ -1360,7 +1374,7 @@ function gaitMode(dt, dist, stam){
   if (want !== gait.mode && (gait.modeT >= G.hold || (want === 'stairs' && gait.mode === 'turn'))) { gait.mode = want; gait.modeT = 0; gait.modeF = kc < 0; }
 }
 S.pace = function(){ return gait.pace; };
-S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
+S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv, ph:hero.ph, stepL:hero.stepL }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
 // 現在要用哪一張走路圖、要不要鏡射（寫在 gait.sid、gait.sf；每格都會跑，不產生新的陣列、字串）
 const RAIN_OF = { hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
 function rainy(id){ const r = RAIN_OF[id]; return isRain && r && ART.get(r) ? r : id; }
@@ -1663,8 +1677,8 @@ const tintFilter = k => 'hue-rotate(' + (150 + k % 3 * 60) + 'deg)';   // 美術
 function heroGround(){
   const j = jhG, f = fhG, rise = pW[j + 1] - pW[j], base = pW[j] + rise * f;
   if (sAt(bG + j) !== 1 || !(rise > 0)) return base;
-  const n = clamp(Math.ceil(rise / STEP_H), 1, 4), x = f * n, k = Math.floor(x), e = x - k;
-  const up = curS && (curS.rest || curS.sleep) ? 0 : clamp((e - 0.62) / 0.38, 0, 1);
+  const n = clamp(Math.ceil(rise / STEP_H), 1, 4), x = f * n, k = Math.floor(x), e = x - k, e0 = 1 - (1 - STAIR_UP) / stairSteps(n);   // e0：腳踩上下一階的地方（跟 updHero 步伐相位同一個 STAIR_UP）
+  const up = curS && (curS.rest || curS.sleep) ? 0 : clamp((e - e0) / (1 - e0), 0, 1);
   return pW[j] + rise * (k + up * up * (3 - 2 * up)) / n;
 }
 // 休息時坐的長椅：長椅在停下來的地方前面一點（遊戲走到長椅前 1 公尺停），找得到就坐在椅面上
@@ -1744,6 +1758,11 @@ function wallAt(i){ const wl = TH.wall || (TH.alpine ? [0.5, 0.3] : [1, 1]); ret
 // 路肩土坎：步道是踩出來的凹槽，兩邊有一道幾乎垂直的土坎（高度沿路慢慢變）。木棧道是鋪在地上的，只留一點點邊
 const BANKW = 0.08;
 const STEP_H = 0.28;      // 一階最高幾公尺（原本 0.2；遠處橫木太密像百葉窗，間距拉開約 1.4 倍）
+// 爬階梯的節奏（階梯走路圖八格：1～4 左腳抬起、跨上下一階、踩穩，5～8 右腳一樣）：
+// 每一步走到 STAIR_UP（0～1）時腳踩上下一階的踏面（第 4、8 格），接著身體升上那一階，走到 1 剛好站上去
+const STAIR_UP = 0.72;
+// 一段路分成 n 階；只有一階時（很緩的長踏面）一階走兩步，其他都一步一階
+function stairSteps(n){ return n === 1 ? 2 : 1; }
 const PLANKS = 4;         // 木棧道每段幾片木板
 const RISER_DK = 0.3;     // 階梯立面再壓暗多少（立面面對鏡頭、背光，要明顯比踏面暗，階梯才讀得出一階一階）
 const WOOD_VAR = 0.5;     // 每塊木頭／石階深淺變化的強度
