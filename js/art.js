@@ -90,13 +90,21 @@ function prep(name, img){
   const cols = /_walk8?$/.test(name.id) ? 4 : 1, rows = /_walk8$/.test(name.id) ? 2 : 1, n = cols * rows;
   const cw = Math.floor(c.width / cols), ch = Math.floor(c.height / rows), fr = [];
   for (let i = 0; i < n; i++) { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch; fr.push(bounds(px, c.width, x0, y0, cw, ch) || { x:x0, y:y0, w:cw, h:ch }); }
-  // 多格動作：每格用同樣的寬高（取最大），以各自的腳底中心對齊，走路時才不會忽大忽小
+  // 多格動作：每格用同樣的寬高，腳底對齊；左右用「身體（上半身那一段）的重心」對齊，不用整格外框的中心：
+  // 外框會跟著登山杖、跨出去的腳變寬變窄，用外框置中的話身體每格左右跳
   if (n > 1) {
-    const W = Math.max.apply(null, fr.map(f => f.w)), H = Math.max.apply(null, fr.map(f => f.h));
-    fr.forEach((f, i) => { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch, cx = f.x + f.w / 2, by = f.y + f.h; f.x = Math.round(clampN(cx - W / 2, x0, x0 + cw - W)); f.y = Math.max(y0, by - H); f.w = W; f.h = by - f.y; });
+    const cxs = fr.map(f => torsoX(px, c.width, f));
+    const W = Math.max.apply(null, fr.map((f, i) => Math.ceil(2 * Math.max(cxs[i] - f.x, f.x + f.w - cxs[i])))), H = Math.max.apply(null, fr.map(f => f.h));
+    fr.forEach((f, i) => { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch, w = Math.min(W, cw), by = f.y + f.h; f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.y = Math.max(y0, by - H); f.w = w; f.h = by - f.y; });
   }
   e.frames = fr;
   return toBitmap(c).then(b => { e.img = b; return e; });
+}
+// 一格裡身體的左右重心：只看外框高度 20%～55% 那一段（頭到腰，不含腳和登山杖尖），用不透明度加權
+function torsoX(d, Wd, f){
+  let s = 0, m = 0;
+  for (let y = Math.round(f.y + f.h * 0.2), ye = Math.round(f.y + f.h * 0.55); y < ye; y++) for (let x = f.x; x < f.x + f.w; x++) { const a = d[(y * Wd + x) * 4 + 3]; if (a > 24) { s += a; m += a * x; } }
+  return s ? m / s : f.x + f.w / 2;
 }
 function clampN(v, a, b){ return b < a ? a : Math.max(a, Math.min(b, v)); }
 
