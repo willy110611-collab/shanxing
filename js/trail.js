@@ -38,7 +38,10 @@ const SCALE = {
   hero:1.76, heroSit:1.0, heroSleep:1.0, heroSummit:1.96,
   bench:0.96, benchSeat:0.45, rail:1.1, sign:1.2, summit:1.3, rock:1.1, cairn:0.95, mycairn:0.45, note:1.4, treasure:0.6, view:1.75, fall:4.2,
   pine:8.2, broad:6.4, bigtree:12.5, sakura:5.6, wishtree:4.4,
-  rhodo:1.5, bamboo:1.3, fern:0.9, grass:0.55, flower:0.5, silver:1.9
+  rhodo:1.5, bamboo:1.3, fern:0.9, grass:0.55, flower:0.5, silver:1.9,
+  railPost:1.16, railBar:0.09,              // 欄杆柱子比扶手高一點點；扶手是一根約 9 公分粗的圓木
+  hedgeFern:1.1, bambooTall:2.4, trunk:12,  // 植物牆：蕨類叢約 1 公尺、高的箭竹約 2.4 公尺；貼近鏡頭的樹幹很高（樹冠在畫面上緣以外）
+  hut:7.5, shrine:1.2, station:3.6, rockwall:6   // 路旁地標：排雲山莊（三層木屋）、西峰山神廟、北峰氣象站、東峰岩壁
 };
 const RAIL_J = 64, RAIL_H = SCALE.rail, RAIL_D = RW + 0.12;   // 欄杆：幾段以內畫、高度、離路中心多遠（公尺）
 let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
@@ -533,6 +536,7 @@ function buildSprites(){
   SPR.bench = artOr('bench', SCALE.bench, [sprite(SCALE.bench * 2.1, SCALE.bench, 80, pBench)]);
   SPR.view = artOr('deck_view', SCALE.view, [sprite(SCALE.view * 2.1, SCALE.view, 70, pView)]);
   SPR.fall = artOr('waterfall', SCALE.fall, []);      // 只有美術圖：路旁小瀑布
+  SPR.railPost = artOr('rail_post', SCALE.railPost, null); SPR.railBar = artOr('rail_bar', SCALE.railBar, null);   // 兩張都有才用美術圖欄杆，不然照舊程式畫
   SPR.treasure = artOr('treasure_box', SCALE.treasure, [sprite(SCALE.treasure * 1.17, SCALE.treasure, 80, pTreasure)]);
   SPR.summit = [artSummitSpr((M && M.name) || '山頂') || sprite(SCALE.summit * 0.76, SCALE.summit, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
@@ -1482,7 +1486,8 @@ function root(i, j, fade){
 }
 // 連續欄杆：木棧道整條都有、石階步道在階梯段才有，兩邊都架。每段一根柱子，柱頂之間連扶手＋中間一根橫木，跟著坡度往上斜
 function railOn(i){ return TH.trail === 'wood' || (TH.trail === 'stairs' && (sAt(i) === 1 || sAt(i + 1) === 1)); }
-function drawRail(i, j, fi, fade){
+function drawRail(i, j, fi, fade, fq){
+  if (SPR.railPost && SPR.railBar) { railArt(i, j, fade, fq); return; }
   const lit = LUT[28 * FOGN + fi], dk = LUT[31 * FOGN + fi], ink = farA(j, 30, 6), A = fade * farA(j, RAIL_J, 10), AI = A * ink;   // 遠處整道欄杆慢慢淡入，近處才加的墨線也是淡入
   for (let side = -1; side <= 1; side += 2) {
     proj(j + 1, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + 1, side, RAIL_D) * gs, sb = gs;
@@ -1496,6 +1501,33 @@ function drawRail(i, j, fi, fade){
     }
     if (!railOn(i + 1)) railPost(xb, yb, sb, lit, dk, A, AI);                 // 欄杆終點
     if (!railOn(i - 1) || (i & 1) === 0) railPost(xa, ya, sa, lit, dk, A, AI); // 每兩段一根；欄杆起點一定有
+  }
+  ctx.globalAlpha = fade;
+}
+// 美術圖欄杆：柱子（rail_post）照原本的間距，扶手和中間橫木（rail_bar）從這段起點拉到終點、跟著坡度斜
+// 一根橫木跨兩段（柱子之間）：雙數段用圖的左半、單數段用右半，接起來剛好一整根
+function railArt(i, j, fade, fq){
+  const A = fade * farA(j, RAIL_J, 10), P = SPR.railPost[0], B = SPR.railBar[0], half = i & 1;
+  if (A < 0.01) return;
+  for (let side = -1; side <= 1; side += 2) {
+    proj(j + 1, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + 1, side, RAIL_D) * gs, sb = gs;
+    proj(j, 0, false); const xa = gx + side * RAIL_D * gs, ya = gy - terrH(i, side, RAIL_D) * gs, sa = gs;
+    if (side < 0 ? Math.max(xa, xb) < -4 : Math.min(xa, xb) > W + 4) continue;
+    const th = SCALE.railBar * (sa + sb) * 0.5, len = Math.hypot(xb - xa, yb - ya);
+    for (let q = 0; q < 2; q++) {               // 扶手＋中間橫木
+      const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb;
+      for (let hz = 0; hz < 2; hz++) {          // 原色＋霧化剪影（遠處融進霧裡）
+        if (hz ? fq <= 0.04 : fq >= 0.96) continue;
+        const a = hz ? A * fq : A; if (a < 0.01) continue;
+        const img = mip(hz ? B.h : B.c, len * 2 * DPR), sw = img.width / 2, sh = img.height;
+        ctx.globalAlpha = a;
+        ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa, DPR * (ha - th * 0.5));
+        ctx.drawImage(img, sw * half, 0, sw, sh, 0, 0, sw, sh);
+      }
+    }
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!railOn(i + 1)) { proj(j + 1, 0, false); drawSpr(P, xb, yb, sb, fq, 0.5, A); }        // 欄杆終點
+    if (!railOn(i - 1) || !half) { proj(j, 0, false); drawSpr(P, xa, ya, sa, fq, 0.5, A); }   // 每兩段一根；欄杆起點一定有
   }
   ctx.globalAlpha = fade;
 }
@@ -1746,7 +1778,7 @@ function drawWorld(b, t){
       const intr = clamp((RW + 0.3 - (xo - sp.w * sc * 0.5)) / 0.4, 0, 1), fa = 1 - intr * (1 - clamp((gz - HZ + 0.2) / 1.2, 0, 1));
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * sc, fq, farA(j, 50, 8), hA * fa);
     }
-    if (!below && farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade);
+    if (!below && farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq);
     // 路緣的草叢／蕨類：故意往路面內側蓋過路緣 15～25% 的寬度，路邊才不會是一條筆直的線
     const eA = fade * farA(j, EDGE_J, 8);   // 路緣草叢：最遠 8 段慢慢淡入
     if (eA > 0.005) for (let side = -1; side <= 1; side += 2) {
