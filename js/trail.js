@@ -30,6 +30,7 @@ let props = [], cairns = [], AP = [];
 let SPR = {}, signSpr = {}, VG = {}, hazeCss = '#dfe6e2', hazeRgb = [223,230,226];
 let smallTab = [], treeTab = [], edgeTab = [], hedgeTab = [];
 const EDGE_J = 40, EDGE_P = 0.55;   // 路緣草叢：幾段以內畫、每邊每段出現的機率
+const PASS_P = 0.035, PASS_IN = 0.9;   // 鏡頭前掠過的芒草／蕨類：每段出現的機率（約 45 公尺一叢）、內緣離路中心至少幾公尺（在登山客那個深度已經在他身邊，不會擋到人）
 const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1;   // 植物牆：幾段以內畫、每段幾個位置、每個位置出現的機率（再乘上 theme.wall）
 // 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
 // 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
@@ -971,6 +972,7 @@ S.props = function(fromM, toM){
 S.allProps = function(){ return AP.map(function(o){ return { type:o.type, m:o.m, side:o.side, text:o.text }; }); };   // 測試用：目前這座山所有路旁道具
 S.stepAt = function(){ const out = []; for (let i = 0; i < N; i++) if (stepF[i] && !stepF[i - 1]) out.push(i * SEG); return out; };   // 測試用：階梯段起點（公尺）
 S.edgeAt = function(){ const out = []; for (let i = 1; i <= N; i++) if (edgeK[i] > 0.5 && !(edgeK[i - 1] > 0.5)) out.push({ m:i * SEG, side:dropS[i] }); return out; };   // 測試用：貼著稜線邊緣那幾段的起點（公尺）與往下掉的那一邊
+S.passAt = function(){ const out = []; for (let i = 0; i <= N; i++) if (Hh(i, 300) < PASS_P && !railOn(i)) out.push(Math.round(i * SEG)); return out; };   // 測試用：鏡頭前掠過的芒草／蕨類在哪裡（公尺）
 S.addCairn = function(m, side){ cairns.push({ type:'mycairn', m:Math.max(0, +m || 0), side:side < 0 ? -1 : 1, text:'' }); mergeProps(); };
 S.setCairns = function(list){
   cairns = [];
@@ -1720,6 +1722,15 @@ function drawWorld(b, t){
       if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
       proj(j, f, false);
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, Math.max(xo, RW + BANKW)) * gs, gs * m, fq, 1, eA);
+    }
+    // 偶爾一叢芒草或蕨類長在路緣、往路面斜：從遠處慢慢靠近，走過時比背景快很多地從畫面邊緣滑出去（離鏡頭很近，大半被畫面切掉）
+    const pA = fade * farA(j, 30, 6);
+    if (pA > 0.005 && !railOn(i) && Hh(i, 300) < PASS_P) {
+      const side = Hh(i, 301) < 0.5 ? -1 : 1, arr = (TH.alpine || TH.grass || Hh(i, 302) < 0.5) ? SPR.silver : SPR.fern, sp = arr[(Hh(i, 303) * arr.length) | 0];
+      const sc = 1.1 + 0.35 * Hh(i, 304), xo = PASS_IN + sp.w * sc * 0.5, f = Hh(i, 305);
+      if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+      proj(j, f, false);
+      drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, Math.max(xo, RW + BANKW)) * gs, gs * sc, fq, 0.6, pA);
     }
     // 互動道具與路標
     while (pi >= 0 && AP[pi].m >= z0) { const o = AP[pi--]; if (o.m < z0 + SEG) drawProp(o, i, j, (o.m - z0) / SEG, fq, t, fade); }
