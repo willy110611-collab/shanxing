@@ -816,7 +816,7 @@
       SV.quests[q.id] = today();
       const r = q.reward || {}; let txt = '';
       if (r.title) { if (!SV.titles.includes(r.title)) SV.titles.push(r.title); if (!SV.title) SV.title = r.title; txt = `稱號「${r.title}」`; }
-      if (r.item) { const tr = SX.TREASURES.find(x => x.id === r.item); if (tr) { SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1; txt = `寶物「${tr.name}」`; } }
+      if (r.item) { const tr = SX.TREASURES.find(x => x.id === r.item); if (tr) { gainTreasure(tr, 'quiet'); txt = `寶物「${tr.name}」`; } }   // 走 gainTreasure，才會記第一次拿到的日期
       if (r.pet) { if (!SV.pets.includes(r.pet)) SV.pets.push(r.pet); const p = SX.PETS.find(x => x.id === r.pet); txt = `新夥伴「${p ? p.name : r.pet}」`; }
       msgs.push(`完成隱藏任務「${q.name}」${txt ? '，得到' + txt : ''}`);
     });
