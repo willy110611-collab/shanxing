@@ -644,7 +644,7 @@
     // 集印帳：紅色印章圖，下緣壓一塊紅框小牌寫山名和日期（字跟著章的大小縮放）；整枚章用「取暗色」混色，米色底會融進紙裡像真的蓋上去
     css.push(`.stampArt{position:relative;width:100%;aspect-ratio:1;container-type:inline-size;transform:rotate(-8deg);mix-blend-mode:darken}
       .stampArt img{display:block;width:100%;height:100%;object-fit:contain}
-      .stampArt span{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);padding:1.5cqw 5cqw 2cqw;background:#fbf2df;border:max(1.5px,1.6cqw) solid #b8322a;border-radius:3cqw;color:#b8322a;text-align:center;line-height:1.15;white-space:nowrap;text-shadow:none;font-family:Huninn,sans-serif}
+      .stampArt span{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);padding:1.5cqw 5cqw 2cqw;background:#fbf2df;border:max(1.5px,1.6cqw) solid #b8322a;border-radius:3cqw;color:#b8322a;text-align:center;line-height:1.15;white-space:nowrap;text-shadow:none;font-family:var(--fontB)}
       .stampArt b{display:block;font-size:13cqw;letter-spacing:.08em}.stampArt i{display:block;font-style:normal;font-size:9.5cqw;font-weight:bold}
       .stampSlot:has(.stampArt){padding:2px}`);
     // 便條／許願紙：綁繩小紙卡當底圖，字放在紙的位置、跟紙一樣順時針斜 16°
@@ -1347,7 +1347,7 @@
     return `<svg viewBox="0 0 100 100"><g transform="rotate(-8 50 50)" opacity=".9">
       <circle cx="50" cy="50" r="44" fill="none" stroke="#c8402f" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="#c8402f" stroke-width="1.5" stroke-dasharray="3 3"/>
       <path d="M22 62 L38 38 L48 50 L60 30 L78 62Z" fill="#c8402f" opacity=".85"/>
-      <text x="50" y="80" text-anchor="middle" font-size="15" fill="#c8402f" font-family="Huninn,sans-serif">${m.name}</text>
+      <text x="50" y="80" text-anchor="middle" font-size="15" fill="#c8402f" style="font-family:var(--fontB)">${m.name}</text>
       <text x="50" y="25" text-anchor="middle" font-size="8.5" fill="#c8402f">${(date || '').replace(/\//g,'.')}</text></g></svg>`;
   }
   $('#bStamp').onclick = () => busyWrap(done => {
@@ -1652,7 +1652,9 @@
   if (SV.set.gps) setGps(true);
   // 開場讀取畫面：美術圖全部載完才收起來（玩家不會看到程式畫的備用圖），收起後先到山友大廳
   SX.art.onProgress((d, t) => { const f = $('#ldFill'); if (f && t) f.style.width = Math.round(d / t * 100) + '%'; });
-  SX.art.whenReady(() => { const L = $('#loading'); if (L) L.classList.add('done'); go('lobby'); });
+  // 美術圖和兩套手寫字型都到了才收起讀取畫面（畫布上的字和木牌會用到字型；字型載入失敗也會往下走）
+  const fontsReady = document.fonts && document.fonts.load ? Promise.all(['16px Iansui', '16px "LXGW WenKai TC"'].map(f => document.fonts.load(f, '山行').catch(() => {}))) : Promise.resolve();
+  SX.art.whenReady(() => fontsReady.then(() => { const L = $('#loading'); if (L) L.classList.add('done'); go('lobby'); }));
   if (SV.cur && SX.M[SV.cur]) { const p = P(SV.cur); if (p.dist > 0 && !p.fin) setTimeout(() => { if (screen !== 'map') return; selId = SV.cur; try { WM.focus(SX.groupOf(SV.cur)); } catch(e){} showRoute(SV.cur); }, 700); }
   requestAnimationFrame(loop);
   document.addEventListener('gesturestart', e => e.preventDefault());

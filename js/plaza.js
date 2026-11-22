@@ -6,7 +6,7 @@
 'use strict';
 const SX = window.SX = window.SX || {};
 const P = SX.plaza = {};
-const TAU = Math.PI * 2, INK = '#3a2a20', FONT = "'Huninn','PingFang TC','Microsoft JhengHei',sans-serif";
+const TAU = Math.PI * 2, INK = '#3a2a20', FONT = getComputedStyle(document.documentElement).getPropertyValue('--fontB').trim() || 'sans-serif';   // 字型在 css/style.css 的 --fontB
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SPEED = 0.2;           // 每秒走多少廣場寬
 const SAY_MS = 5000;         // 頭上冒字停留多久

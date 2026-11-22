@@ -15,7 +15,9 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#cdb58c;overscroll-behavior:none}
-body{font-family:"Huninn","jf open 粉圓","PingFang TC","Microsoft JhengHei",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none;touch-action:manipulation}
+/* 字型只在這裡設定一次：內文芫荽（手寫鉛筆感）、標題霞鶩文楷（毛筆手寫感）；畫布上的字也讀 --fontB */
+:root{--fontB:"Iansui","PingFang TC","Microsoft JhengHei",sans-serif;--fontT:"LXGW WenKai TC","Iansui","PingFang TC",serif}
+body{font-family:var(--fontB);color:var(--ink);-webkit-user-select:none;user-select:none;touch-action:manipulation}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 #app{position:fixed;inset:0;margin:auto;width:100%;max-width:480px;height:100dvh;overflow:hidden;overflow:clip;background:var(--cream)}   /* clip：藏在畫面外的抽屜不會讓整個畫面被捲動（點按鈕、輸入框聚焦時畫面上移露出空白） */
 @media (min-width:520px){ #app{border-radius:26px;height:min(100dvh,920px);box-shadow:0 0 0 3px var(--ink),0 20px 60px rgba(60,34,16,.4)} body{display:grid;place-items:center} }
@@ -588,3 +590,6 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .byInfo span{color:var(--wood2);white-space:nowrap}
 .byInfo b{font-weight:normal;text-align:right}
 .byInfo p{margin:0 0 4px;font-size:12.5px;line-height:1.5;color:var(--ink2)}
+
+/* 標題用霞鶩文楷（字型定義在 :root --fontT） */
+h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family:var(--fontT)}
