@@ -394,3 +394,50 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `summit_hh_east` | Hehuan East Peak summit after a very steep stone-step climb, looking down at a small alpine lodge far below and the jagged Qilai ridges to the east |
 | `summit_hh_north` | Hehuan North Peak summit with a stone triangulation marker, wide green dwarf-bamboo ridges, pink alpine rhododendron bushes, Qilai and Xueshan ranges on the horizon |
 | `summit_hh_west` | Hehuan West Peak summit at the end of a long remote bamboo ridge, a lonely triangulation stone, rolling ridgelines and a sea of clouds in the late afternoon light |
+
+## 第 15 批：百岳第二階段（玉山群峰、雪山東峰、向陽山、三叉山）＋合歡群峰集印章
+
+共通規則、主角設定、去背規則照最前面。檔名已定，直接照抄。集印章最後四個是合歡群峰（石門山、東峰、北峰、西峰）。
+
+### 放進 `07.奇遇`：登頂插圖（16:9，不用去背，抵達山頂時顯示）
+
+| 檔名 | 場景 |
+|---|---|
+| `summit_yushan_front` | Yushan Front Peak summit, a steep grey scree slope with a few twisted Yushan junipers, looking down on the Tataka saddle and forested ridges below, clouds rising from the valley |
+| `summit_yushan_west` | Yushan West Peak summit among tall Taiwan fir trees, a tiny old stone mountain shrine on the trail, and the huge rocky face of Yushan main peak seen straight across the valley |
+| `summit_yushan_north` | Yushan North Peak summit with a small white mountain weather station and wind instruments, the golden sunset-lit Yushan main peak beside it above a sea of clouds |
+| `summit_yushan_east` | Yushan East Peak, a sharp jagged rocky summit with steep rock gullies, the hiker wearing a climbing helmet, dramatic deep valleys below and the Central Mountain Range in the distance |
+| `summit_xueshan_east` | Xueshan East Peak, a gentle dwarf-bamboo summit with a survey marker, a long wooden-step slope behind, the Holy Ridge and the Nanhu mountains on the horizon |
+| `summit_xiangyang` | Xiangyang Mountain summit on a dwarf-bamboo ridge, the huge eroded Xiangyang landslide cliff face across the valley, a small dark alpine pond below |
+| `summit_sancha` | Sancha Mountain, a vast rolling golden-green alpine grassland summit with wind sweeping the grass, a tiny deep-blue oval lake visible far away, a simple stone memorial standing quietly |
+
+（雪山主峰、玉山主峰的登頂插圖已有，不用重畫。）
+
+### 放進 `09.集印帳`
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `stamp_yushan_front` `stamp_yushan_west` `stamp_yushan_north` `stamp_yushan_east` `stamp_xueshan_east` `stamp_xiangyang` `stamp_sancha` `stamp_hh_shimen` `stamp_hh_east` `stamp_hh_north` `stamp_hh_west` | 1:1 | 洋紅底。Eleven round red-ink rubber stamp impressions in the same style as the existing mountain stamps, each showing the silhouette of that peak's summit view above (shrine / weather station / jagged rock / landslide cliff / grassland and lake), slightly uneven ink, **no text**. |
+
+### 放進 `02.素材`（沿途新物件）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `shrine_small` | 1:1 | 洋紅底。A tiny old mountain shrine made of grey stone with a small tiled roof, a few stones and a little offering in front, Taiwan high-mountain style. |
+| `weather_station` | 1:1 | 洋紅底。A small white high-mountain weather station building with a wind vane, anemometer and solar panel on a rocky base. |
+| `hut_paiyun` | 16:9 | 洋紅底。A two-storey mountain lodge with a grey roof and wooden porch at the edge of a fir forest, 3/4 view (Paiyun Lodge style), no text on signs. |
+| `rock_wall` | 9:16 | 洋紅底。A tall steep grey rock wall with a narrow gully and a few small alpine plants in cracks, as a trail-side climbing section. |
+| `hiker_helmet` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind wearing a red climbing helmet over the safari hat strap, gripping a rock with one hand. |
+
+### 放進 `04.背包`：新寶物（全部 1:1、洋紅底）
+
+| 檔名 | 名稱 | 內容 |
+|---|---|---|
+| `t_front_sticker` | 「前峰不前」貼紙 | a hand-drawn round sticker of a tiny out-of-breath hiker on a steep slope |
+| `t_shrine_card` | 西峰山神廟平安小卡 | a small card with a photo of a tiny stone mountain shrine among fir trees |
+| `t_weather_log` | 玉山氣象站觀測紀錄卡 | a handwritten weather observation sheet with a grid, a pencil and a small thermometer doodle |
+| `t_ridge_sketch` | 十峻之首岩壁速寫 | a pencil sketch of a jagged rock face on cream paper (legendary) |
+| `t_crying_slope` | 哭坡過關證書 | a small crooked handwritten certificate with a wooden-step slope doodle and a smiling face |
+| `t_cirque_card` | 圈谷冰河遺跡圖鑑卡 | a field-guide card illustrating a glacial cirque bowl |
+| `t_landslide_sketch` | 向陽大崩壁素描卡 | a charcoal sketch of a layered eroded cliff face |
+| `t_sancha_rubbing` | 三叉山一等三角點拓印 | a charcoal rubbing on paper of a first-class survey marker stone |
