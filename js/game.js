@@ -19,7 +19,7 @@
 
   // ───────── 存檔 ─────────
   // 資料形狀先照之後接後端的樣子放：userPhotos、cairns、bag、quests 都是可以直接同步的清單／對照表
-  const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[], bagLog:{},   // bagLog：寶物 id → { first 第一次拿到的日期, mt 在哪座山, last 最近一次 }
+  const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, bagLog:{},   // bagLog：寶物 id → { first 第一次拿到的日期, mt 在哪座山, last 最近一次 }
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
     born:null,   // 開始登山的日子（個人紀錄用）
     intro:null,  // 第一次出發的玩法小卡看過的日子（只出現一次）
@@ -40,7 +40,7 @@
       imgDirty = true;   // 舊存檔的照片還在主 key 裡：第一次存檔時搬到 KEY_IMG
       try { const ri = JSON.parse(localStorage.getItem(KEY_IMG) || 'null'); if (ri) { if (Array.isArray(ri.photos)) SV.photos = ri.photos; if (Array.isArray(ri.userPhotos)) SV.userPhotos = ri.userPhotos; imgDirty = false; } } catch(e){}
       SV.set = Object.assign(b.set, o.set); SV.stats = Object.assign(b.stats, o.stats);
-      ['photos','lots','titles','pets','userPhotos'].forEach(k => { if (!Array.isArray(SV[k])) SV[k] = b[k]; });
+      ['photos','titles','pets','userPhotos'].forEach(k => { if (!Array.isArray(SV[k])) SV[k] = b[k]; });
       ['prog','done','stamps','bag','bagLog','quests','cairns','badges','encSeen'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
       // 新手禮物出來前就玩過的存檔（有寶物或登頂過）：當作都送過了，不會突然多拿稀有寶物
       if (!o.gifts || typeof o.gifts !== 'object') SV.gifts = Object.keys(SV.bag).length || Object.keys(SV.done).length ? Object.fromEntries(Object.keys(FIRST_GIFTS).map(k => [k, '舊存檔'])) : {};
@@ -49,6 +49,14 @@
       if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
       // 山的全程改短過（玉山、雪山 11000 → 10900 公尺）：還沒登頂的進度停在山頂前一公尺，不能等於全程（出發時會被當成走完、從頭開始）
       for (const id in SV.prog) { const p = SV.prog[id], m = SX.M[id]; if (m && p && !p.fin && p.dist >= m.dist) p.dist = m.dist - 1; }
+      // 福德祠和籤詩冊拿掉了：舊存檔的籤詩清單丟掉；以前象山要進福德祠才蓋得到章，登頂過但沒蓋的補蓋（日期用今天）
+      delete SV.lots;
+      for (const id in SV.done) if (SX.M[id] && SV.done[id] > 0 && !SV.stamps[id]) SV.stamps[id] = today();
+      // 拿掉的寶物、奇遇（例如西峰山神廟平安小卡）：背包和奇遇圖鑑只留資料裡還有的，「收集幾種寶物」任務才不會算到不存在的東西
+      const TRID = new Set(SX.TREASURES.map(x => x.id)), ENID = new Set(SX.ENCOUNTERS.map(x => x.id));
+      for (const k in SV.bag) if (!TRID.has(k)) { delete SV.bag[k]; delete SV.bagLog[k]; }
+      for (const k in SV.bagLog) if (!TRID.has(k)) delete SV.bagLog[k];
+      for (const k in SV.encSeen) if (!ENID.has(k)) delete SV.encSeen[k];
     }
   } catch(e){ SV = blank(); }
   // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
@@ -317,7 +325,7 @@
       ${ok ? `<div class="rc-feat"><em>建議：</em>${fitText(m)}</div>` : ''}
       <div class="rc-feat"><em>紀錄：</em>${m.recNote}</div>
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
-      <div class="rc-feat"><em>終點：</em>${m.end}</div>${m.temple ? `<div class="rc-feat"><em>路上：</em>會經過${m.temple}（登頂後能去擲筊、求籤）</div>` : ''}
+      <div class="rc-feat"><em>終點：</em>${m.end}</div>
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
       ${permit ? `<div class="rc-feat"><em>入山管制：</em>${permit.reason}（目前 ${permit.have} 人）。到山友大廳邀好友一起爬，對方接受就會入隊；寵物不算人數。</div>` : ''}
       ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。想改爬${m.name}，要先下山（${trN}的進度會歸零）。</div>
@@ -1322,7 +1330,7 @@
     arrived = true; st.dist = M.dist; st.fin = true; st.rest = false; st.stopAt = null;
     $('#restSheet').classList.remove('on');
     SV.done[M.id] = (SV.done[M.id] || 0) + 1;
-    if (!M.temple) SV.stamps[M.id] = SV.stamps[M.id] || today();
+    SV.stamps[M.id] = SV.stamps[M.id] || today();
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
     if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
     if (wx.kind === 'fog') S.fogTop = (S.fogTop || 0) + 1;   // 霧中登頂（徽章用）
@@ -1346,10 +1354,9 @@
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
         ${gift ? `<div class="giftRow ${RAR_CLS[gift.rarity] || ''}" style="${RAR_BG[gift.rarity] || ''}">${trSvg(gift)}<span><small>第一次登頂的禮物</small><b>${gift.name}</b><span class="chip" style="background:${RAR_COL[gift.rarity]}">${gift.rarity}</span></span></div>` : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
-        ${M.temple ? `<p class="summitBig">下山會經過${M.temple}，要不要進去拜一下？</p>` : '<p class="summitBig">集印帳蓋上新的章了！</p>'}
+        <p class="summitBig">集印帳蓋上新的章了！</p>
         ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
-        <div class="mBtns">${M.temple ? '<button class="cbtn red" id="aTemple">去福德祠</button>' : ''}<button class="cbtn ${M.temple ? '' : 'go'}" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`);
-      if (M.temple) $('#aTemple').onclick = () => { closeModal(); openTemple(); };
+        <div class="mBtns"><button class="cbtn go" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`);
       $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
       checkQuests();
     }, 1400);
@@ -1423,147 +1430,6 @@
     else { catchUp(); A.setOn(SV.set.sound); }
   });
 
-  // ───────── 廟宇 ─────────
-  let bwaStreak = 0, lotState = null, incensed = false, busy = false;
-  function openTemple(){
-    go('temple'); bwaStreak = 0; lotState = null; incensed = false;
-    $('#tName').textContent = '象山福德小祠';
-    $('#tMsg').innerHTML = '心裡默念自己的名字、住哪裡，還有想問的事，<br>再來擲筊或求籤。';
-    drawTemple();
-    setTimeout(() => A.bell(), 300);
-  }
-  $('#tBack').onclick = () => { A.pop(); SV.cur = null; save(); go('map'); };
-  function drawTemple(){
-    $('#tStage').innerHTML = `<svg viewBox="0 0 360 440">
-      <defs>
-        <radialGradient id="gGlow" cx=".5" cy=".45" r=".6"><stop offset="0" stop-color="#fff1b8"/><stop offset=".6" stop-color="#ffc861"/><stop offset="1" stop-color="#e08a3c"/></radialGradient>
-        <linearGradient id="gRoof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ee6a52"/><stop offset="1" stop-color="#c13f2e"/></linearGradient>
-        <linearGradient id="gWall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbf1df"/><stop offset="1" stop-color="#e9d6b8"/></linearGradient>
-        <linearGradient id="gPil" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e0624d"/><stop offset=".4" stop-color="#f08a72"/><stop offset="1" stop-color="#b8402f"/></linearGradient>
-        <linearGradient id="gBz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9a64e"/><stop offset="1" stop-color="#9b6a28"/></linearGradient>
-      </defs>
-      <ellipse cx="180" cy="392" rx="170" ry="26" fill="rgba(120,70,30,.18)"/>
-      <rect x="40" y="350" width="280" height="36" rx="10" fill="#d8c6a8" stroke="#8a6a48" stroke-width="3"/>
-      <path d="M48 358h264" stroke="#fff" stroke-width="2" stroke-dasharray="6 6" opacity=".6"/>
-      <rect x="70" y="170" width="220" height="184" rx="10" fill="url(#gWall)" stroke="#8a6a48" stroke-width="3"/>
-      <rect x="118" y="196" width="124" height="150" rx="56" ry="56" fill="url(#gGlow)" stroke="#8c4a2f" stroke-width="3" class="glowPulse"/>
-      <ellipse cx="180" cy="262" rx="30" ry="40" fill="#fff6d0" opacity=".7"/>
-      <ellipse cx="180" cy="244" rx="16" ry="16" fill="#fff9e2" opacity=".8"/>
-      <rect x="140" y="320" width="80" height="26" rx="6" fill="#b5523a" stroke="#7a3322" stroke-width="2.5"/>
-      <path d="M148 330h64" stroke="#f5c75b" stroke-width="2" stroke-dasharray="4 4"/>
-      <rect x="74" y="170" width="20" height="184" rx="6" fill="url(#gPil)" stroke="#8c3324" stroke-width="2.5"/>
-      <rect x="266" y="170" width="20" height="184" rx="6" fill="url(#gPil)" stroke="#8c3324" stroke-width="2.5"/>
-      <path d="M84 180c-6 30 6 60 0 90s6 50 0 80" stroke="#f5c75b" stroke-width="2.4" fill="none" stroke-dasharray="3 5"/>
-      <path d="M276 180c-6 30 6 60 0 90s6 50 0 80" stroke="#f5c75b" stroke-width="2.4" fill="none" stroke-dasharray="3 5"/>
-      <path d="M20 168 Q14 140 34 136 Q180 120 326 136 Q346 140 340 168 Q180 150 20 168Z" fill="url(#gRoof)" stroke="#7e2a1e" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M40 136 Q60 96 110 88 L250 88 Q300 96 320 136 Q180 120 40 136Z" fill="url(#gRoof)" stroke="#7e2a1e" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M34 136 Q20 110 6 100 Q24 104 40 120" fill="#e8604a" stroke="#7e2a1e" stroke-width="2.6" stroke-linejoin="round"/>
-      <path d="M326 136 Q340 110 354 100 Q336 104 320 120" fill="#e8604a" stroke="#7e2a1e" stroke-width="2.6" stroke-linejoin="round"/>
-      <rect x="120" y="76" width="120" height="14" rx="7" fill="#3f8a73" stroke="#2a5e4e" stroke-width="2.4"/>
-      <circle cx="180" cy="68" r="10" fill="#f3c74e" stroke="#9b6a28" stroke-width="2.4"/>
-      <path d="M60 120 Q180 104 300 120" stroke="#ffd7b0" stroke-width="2" fill="none" stroke-dasharray="5 6" opacity=".8"/>
-      <rect x="148" y="142" width="64" height="24" rx="5" fill="#2f5e52" stroke="#f3c74e" stroke-width="2"/>
-      <text x="180" y="159" text-anchor="middle" font-size="14" fill="#f8d36a" letter-spacing="3">福德祠</text>
-      ${[50, 310].map(x => `<line x1="${x}" y1="160" x2="${x}" y2="176" stroke="#7a5230" stroke-width="2"/><ellipse cx="${x}" cy="194" rx="16" ry="20" fill="#e5483a" stroke="#8c2a1e" stroke-width="2.5"/><path d="M${x-15} 194h30" stroke="#f3c74e" stroke-width="2.4"/><rect x="${x-6}" y="172" width="12" height="5" rx="2" fill="#f3c74e"/><rect x="${x-6}" y="211" width="12" height="5" rx="2" fill="#f3c74e"/>`).join('')}
-      <g id="burner">
-        <path d="M140 372 Q140 400 180 402 Q220 400 220 372Z" fill="url(#gBz)" stroke="#6e4a1a" stroke-width="3"/>
-        <rect x="134" y="364" width="92" height="12" rx="6" fill="#e2b45c" stroke="#6e4a1a" stroke-width="2.6"/>
-        <path d="M150 400l-6 14M210 400l6 14" stroke="#6e4a1a" stroke-width="4" stroke-linecap="round"/>
-      </g>
-      <g id="incense"></g>
-      <g id="lotTube" transform="translate(292 300)">
-        <g id="tubeInner"><path d="M-16 0 L-12 56 L12 56 L16 0Z" fill="#c9853d" stroke="#6e4a1a" stroke-width="2.6"/>
-        ${[-10,-5,0,5,10].map((x,i) => `<rect x="${x-1.8}" y="${-22 - (i%2)*6}" width="3.6" height="30" rx="1.5" fill="#e9c27a" stroke="#8a5a2a" stroke-width="1"/>`).join('')}
-        <path d="M-16 0 L16 0" stroke="#6e4a1a" stroke-width="2.6"/><path d="M-13 20h26M-12 38h24" stroke="#f3d08a" stroke-width="2" stroke-dasharray="3 3"/></g>
-      </g>
-      <g id="bwaArea"></g>
-    </svg>`;
-  }
-  function busyWrap(fn){ if (busy) return; busy = true; fn(() => busy = false); }
-
-  $('#bIncense').onclick = () => busyWrap(done => {
-    A.unlock(); A.bell();
-    $('#incense').innerHTML = [-14, 0, 14].map((dx, i) => `<line x1="${180+dx}" y1="368" x2="${180+dx*1.3}" y2="322" stroke="#a5523a" stroke-width="2.6" stroke-linecap="round"/><circle cx="${180+dx*1.3}" cy="322" r="2.6" fill="#ff7b3a"/>
-      <ellipse class="smoke" style="animation-delay:${i*0.7}s" cx="${180+dx*1.3}" cy="310" rx="7" ry="11" fill="#fff" opacity=".6"/>
-      <ellipse class="smoke" style="animation-delay:${i*0.7 + 1.5}s" cx="${180+dx*1.3 + 4}" cy="306" rx="6" ry="10" fill="#fff" opacity=".5"/>`).join('');
-    $('#tMsg').innerHTML = incensed ? '香還在燒，煙慢慢往上飄。' : '點了三炷香，跟土地公打聲招呼：<br>「今天平平安安上山了，謝謝照顧。」';
-    incensed = true; setTimeout(done, 600);
-  });
-
-  // 擲筊：flat = 平面朝上（陽），round = 凸面朝上（陰）
-  function bwaSvg(i, face, phase){
-    const x = 110 + i*140, y = 432;
-    const flat = face === 'flat';
-    return `<g class="bwa" id="bw${i}" style="transform-origin:${x}px ${y}px">
-      <path d="M${x-26} ${y} Q${x} ${flat ? y-30 : y-36} ${x+26} ${y} Q${x} ${y-10} ${x-26} ${y}Z" fill="${flat ? '#e8604a' : '#c43d2c'}" stroke="#7e2a1e" stroke-width="2.6" stroke-linejoin="round"/>
-      ${flat ? `<path d="M${x-20} ${y-3} Q${x} ${y-12} ${x+20} ${y-3}" stroke="#f7a08a" stroke-width="2" fill="none"/>` : `<path d="M${x-14} ${y-18} Q${x} ${y-28} ${x+12} ${y-20}" stroke="#ff9a82" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>`}
-    </g>`;
-  }
-  function tossBwa(cb){
-    A.unlock();
-    const r = Math.random(), res = r < 0.5 ? 'holy' : r < 0.75 ? 'laugh' : 'yin';
-    const faces = res === 'holy' ? (Math.random() < 0.5 ? ['flat','round'] : ['round','flat']) : res === 'laugh' ? ['flat','flat'] : ['round','round'];
-    const area = $('#bwaArea');
-    area.innerHTML = bwaSvg(0, 'round') + bwaSvg(1, 'round');
-    [0,1].forEach(i => { const el = $('#bw' + i); el.animate([
-      { transform:'translate(0,0) rotate(0)' }, { transform:`translate(${(i?1:-1)*10}px,-150px) rotate(${i ? 540 : -500}deg)`, offset:0.45 },
-      { transform:`translate(${(i?1:-1)*18}px,0) rotate(${i ? 1080 : -1000}deg)`, offset:0.85 }, { transform:`translate(${(i?1:-1)*20}px,-8px) rotate(${i ? 1080 : -1000}deg)`, offset:0.92 },
-      { transform:`translate(${(i?1:-1)*20}px,0) rotate(${i ? 1080 : -1000}deg)` } ], { duration:1100, easing:'ease-in-out', fill:'forwards' }); });
-    A.clack(0.92); A.clack(1.0);
-    setTimeout(() => { area.innerHTML = bwaSvg(0, faces[0]).replace(/translate\(0/, '') + bwaSvg(1, faces[1]);
-      [0,1].forEach(i => $('#bw' + i).style.transform = `translate(${(i?1:-1)*20}px,0)`);
-      cb(res); }, 1120);
-  }
-  const BWA_TXT = {
-    holy:'<b style="color:#c13f2e">聖筊</b>：一平一凸，代表「好喔，可以」。',
-    laugh:'<b style="color:#c9853d">笑筊</b>：兩個平面朝上，神明在笑，<br>答案也許你心裡早就知道，或把問題想清楚再問。',
-    yin:'<b style="color:#6a5040">陰筊</b>：兩個凸面朝上，代表「不太適合」，<br>換個方式或時間再問問看。'
-  };
-  $('#bBwa').onclick = () => busyWrap(done => {
-    if (lotState && lotState.need) { confirmLot(done); return; }
-    $('#tMsg').textContent = '筊杯丟出去了…';
-    tossBwa(res => {
-      bwaStreak = res === 'holy' ? bwaStreak + 1 : 0;
-      let msg = BWA_TXT[res];
-      if (bwaStreak >= 3) { msg += '<br>✦ 連續三個聖筊！今天運氣真的很好 ✦'; A.chime(); const r = $('#bBwa').getBoundingClientRect(); sparks(r.left + r.width/2, r.top - 60, 20); bwaStreak = 0; }
-      else if (res === 'holy') A.sparkle();
-      $('#tMsg').innerHTML = msg; done();
-    });
-  });
-  $('#bLot').onclick = () => busyWrap(done => {
-    A.unlock();
-    if (lotState && lotState.need) { $('#tMsg').innerHTML = `已經抽到第 ${lotState.no + 1} 支，<br>先擲筊問問是不是這支。`; done(); return; }
-    $('#tMsg').textContent = '搖啊搖…';
-    const tube = $('#tubeInner'); tube.classList.remove('shake'); void tube.offsetWidth; tube.classList.add('shake'); A.rattle();
-    setTimeout(() => {
-      const no = Math.floor(Math.random() * SX.FORTUNES.length);
-      lotState = { no, need:true, tries:(lotState ? lotState.tries : 0) };
-      $('#tubeInner').insertAdjacentHTML('beforeend', `<g id="stick"><rect x="-2.5" y="-60" width="5" height="40" rx="2" fill="#f2d28d" stroke="#8a5a2a" stroke-width="1.2"/><text x="0" y="-66" text-anchor="middle" font-size="11" fill="#a8362a">${no + 1}</text></g>`);
-      $('#tMsg').innerHTML = `掉出一支籤：<b>${SX.FORTUNES[no].no}</b><br>按「擲筊」問問是不是這支。`;
-      tube.classList.remove('shake'); done();
-    }, 1300);
-  });
-  function confirmLot(done){
-    $('#tMsg').textContent = '請問是這一支嗎？';
-    tossBwa(res => {
-      lotState.tries++;
-      if (res === 'holy' || lotState.tries >= 3) {
-        const f = SX.FORTUNES[lotState.no]; lotState = null; const s = $('#stick'); if (s) s.remove();
-        if (!SV.lots.includes(SX.FORTUNES.indexOf(f))) SV.lots.push(SX.FORTUNES.indexOf(f)); save();
-        A.chime();
-        $('#tMsg').innerHTML = res === 'holy' ? '聖筊！就是這支籤。' : '神明說：就這支吧，好好收著。';
-        setTimeout(() => showLot(f), 500);
-      } else {
-        lotState.need = false; const s = $('#stick'); if (s) s.remove();
-        $('#tMsg').innerHTML = BWA_TXT[res] + '<br>不是這支，再求一次籤吧。';
-      }
-      done();
-    });
-  }
-  function lotHtml(f){ return `<div class="lotCard"><div class="no">${f.no}</div><div class="rk">${f.rank}</div>
-    <div class="poem">${f.poem.join('<br>')}</div><div class="say">${f.say}</div><div class="tw">「${f.tw}」</div></div>`; }
-  function showLot(f){ modal(`<h3>你的籤詩</h3>${lotHtml(f)}<div class="mBtns"><button class="cbtn go" id="lOk">收進籤詩冊</button></div>`); $('#lOk').onclick = () => { A.pop(); $('#modal').classList.remove('on'); }; }
-
   // 每座山自己的插圖（登頂、集印章）還沒畫的話，先用山群主峰的那張
   const groupArt = (pre, id) => SX.art.has(pre + id) ? pre + id : pre + (SX.GROUP[SX.groupOf(id)] ? SX.GROUP[SX.groupOf(id)].lead : id);
   function stampSvg(id, date){
@@ -1576,16 +1442,6 @@
       <text x="50" y="80" text-anchor="middle" font-size="15" fill="#c8402f" style="font-family:var(--fontB)">${m.name}</text>
       <text x="50" y="25" text-anchor="middle" font-size="8.5" fill="#c8402f">${(date || '').replace(/\//g,'.')}</text></g></svg>`;
   }
-  $('#bStamp').onclick = () => busyWrap(done => {
-    A.unlock(); A.stamp();
-    const id = 'xiangshan', date = SV.stamps[id] || new Date().toLocaleDateString('zh-TW');
-    SV.stamps[id] = date; save();
-    modal(`<h3>集印帳</h3><div style="width:190px;margin:0 auto 14px;animation:pop .4s cubic-bezier(.34,1.8,.5,1)">${stampSvg(id, date)}</div>
-      <p class="summitBig">蓋好了！到集印帳看看。</p><div class="mBtns"><button class="cbtn go" id="sOk">好</button></div>`);
-    $('#sOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };   // 蓋到章：集印帳徽章馬上算
-    done();
-  });
-
   // ───────── 相簿 ─────────
   let albumTab = 'photos';
   $$('#scrAlbum .tab').forEach(b => b.onclick = () => { A.pop(); albumTab = b.dataset.tab; $$('#scrAlbum .tab').forEach(x => x.classList.toggle('on', x === b)); renderAlbum(); });
@@ -1619,12 +1475,8 @@
       selM.onchange = reset; inAlt.oninput = upd; reset();
       $('#upGo').onclick = () => { A.pop(); pickUpload(selM.value, mOf()); };
       $$('#albumBody [data-up]').forEach(el => el.onclick = () => { if (confirm('要把這張照片從照片牆拿下來嗎？')) { SV.userPhotos = SV.userPhotos.filter(p => p.id !== el.dataset.up); imgDirty = true; save(); renderAlbum(); } });
-    } else if (albumTab === 'stamps') {
-      body.innerHTML = '<div class="stamps">' + SX.MOUNTAINS.map(m => `<div class="stampSlot">${SV.stamps[m.id] ? stampSvg(m.id, SV.stamps[m.id]) : m.name}</div>`).join('') + '</div>'; stagger(body, '.stampSlot');
     } else {
-      if (!SV.lots.length) { body.innerHTML = '<div class="empty">還沒有籤詩。<br>爬完象山，到福德祠求一支吧。</div>'; return; }
-      body.innerHTML = SV.lots.map(i => { const f = SX.FORTUNES[i]; return f ? `<div class="lotItem" data-lot="${i}"><span><b>${f.no}</b>　${f.poem[0]}</span><span>${f.rank}</span></div>` : ''; }).join(''); stagger(body, '.lotItem');
-      $$('.lotItem').forEach(el => el.onclick = () => { A.pop(); const f = SX.FORTUNES[+el.dataset.lot]; modal(`${lotHtml(f)}<div class="mBtns"><button class="cbtn" id="lOk2">← 返回</button></div>`); $('#lOk2').onclick = () => closeModal(); });
+      body.innerHTML = '<div class="stamps">' + SX.MOUNTAINS.map(m => `<div class="stampSlot">${SV.stamps[m.id] ? stampSvg(m.id, SV.stamps[m.id]) : m.name}</div>`).join('') + '</div>'; stagger(body, '.stampSlot');
     }
   }
 
@@ -1794,7 +1646,7 @@
     const s = SV.set;
     $('#setBody').innerHTML = `
       <div class="setRow"><h4>音效<button class="tgl ${s.sound ? 'on' : ''}" id="sSound"></button></h4>
-        <input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.vol}"><p>腳步聲、鳥叫、雨聲和廟裡的鐘聲。</p></div>
+        <input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.vol}"><p>腳步聲、鳥叫和雨聲。</p></div>
       <div class="setRow"><h4>人在山上，定位加速<button class="tgl ${s.gps ? 'on' : ''}" id="sGps"></button></h4>
         <p>開啟後用手機定位：人在這座山附近（約 3 公里內）時，真的走一公尺，步道上就多走三公尺。不在山上沒有作用；只在畫面開著時計算，比較耗電。</p></div>
       <div class="setRow"><h4>通知<button class="tgl ${SX.social && SX.social.pushOn ? 'on' : ''}" id="sPush"></button></h4>
@@ -1811,7 +1663,6 @@
           <button class="cbtn sm" id="dTr">給寶物</button>
           <button class="cbtn sm" id="dUnlock">${SV.unlockAll ? '恢復解鎖規則' : '解鎖全部山'}</button>
           <button class="cbtn sm" id="dWx">換天氣</button>
-          <button class="cbtn sm" id="dTemple">直接去福德祠</button>
           <button class="cbtn sm" id="dReview">照片審核</button>
           <button class="cbtn sm" id="dReset">清除存檔</button>
           <button class="cbtn sm" id="dLock">鎖回去</button></div>`
@@ -1838,7 +1689,6 @@
       $('#dTr').onclick = () => gainTreasure(rollTreasure(M ? M.id : 'xiangshan'), 'show');
       $('#dUnlock').onclick = () => { SV.unlockAll = !SV.unlockAll; save(); renderSettings(); toast(SV.unlockAll ? '全部的山都開放了' : '恢復原本的解鎖規則'); };
       $('#dWx').onclick = () => cycleWx();
-      $('#dTemple').onclick = () => openTemple();
       $('#dReview').onclick = () => { if (SX.social) SX.social.review(); };
       $('#dReset').onclick = () => { if (confirm('確定要清除所有存檔嗎？')) { resetting = true; localStorage.removeItem(KEY); localStorage.removeItem(KEY_IMG); location.reload(); } };
       $('#dLock').onclick = () => { s.dev = false; s.devOn = false; s.fast = false; save(); renderSettings(); };
@@ -1923,7 +1773,7 @@
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
   purgeBlackPhotos();
-  window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests, checkBadges,
+  window.SXG = { go, startClimb, openBag, openDaily, checkQuests, checkBadges,
     tick:(n = 30) => { for (let i=0;i<n;i++) frame(0.033); },
     encounter:id => { if (!st) return null; const e = id ? SX.ENCOUNTERS.find(x => x.id === id) : null; openEncounter(e); return lastEnc; },
     treasure:id => { const tr = id ? SX.TREASURES.find(x => x.id === id) : rollTreasure(M ? M.id : 'xiangshan'); gainTreasure(tr, 'show'); return tr && tr.id; },

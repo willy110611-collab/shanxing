@@ -4,7 +4,7 @@
   const A = SX.audio = { on:true, vol:0.5 };
   const BASE = 'audio/';
   const BUF = {}, LOADING = {};
-  const ONESHOT = ['sfx_bell','sfx_clack','sfx_rattle','sfx_shutter','sfx_stamp','sfx_sparkle','sfx_pop','sfx_win','sfx_paper','sfx_chime','sfx_yawn'];
+  const ONESHOT = ['sfx_shutter','sfx_sparkle','sfx_pop','sfx_win','sfx_paper','sfx_chime','sfx_yawn'];
 
   function ensure(){
     if (!A.on) return null;
@@ -80,7 +80,7 @@
     if (screen === 'climb') {
       bgm = wx.time === 'night' ? 'bgm_night' : wx.kind === 'rain' || wx.kind === 'fog' ? 'bgm_rain' : dayPick;
       amb = wx.kind === 'rain' ? 'amb_rain' : wx.time === 'night' ? 'amb_night' : m.water ? 'amb_stream' : 'amb_forest';
-    } else if (screen === 'temple') { bgm = 'bgm_temple'; amb = 'amb_forest'; }
+    }
     track('bgm', bgm, screen === 'climb' ? 0.2 : 0.26);   // 背景音樂有點大聲（原本 0.32／0.4）
     track('amb', amb, wx && wx.kind === 'rain' ? 0.5 : 0.35);
     if (screen !== 'climb') track('step', null, 0);
@@ -113,10 +113,6 @@
   A.sparkle = () => play('sfx_sparkle', { g:0.6 }) || [1318,1568,2093].forEach((f,i) => tone(f, 0.25, 0.05, i*0.06));
   A.chime   = () => play('sfx_chime', { g:0.55, dur:3 }) || [784,988,1175,1568].forEach((f,i) => tone(f, 0.9, 0.06, i*0.12));
   A.shutter = () => play('sfx_shutter', { g:0.8, dur:1.2 }) || noiseBurst(0.05, 2500, 1, 0.2);
-  A.bell    = () => play('sfx_bell', { g:0.9 }) || [262,524,786].forEach((f,i) => tone(f, 3, 0.1/(i+1)));
-  A.clack   = (at = 0) => play('sfx_clack', { g:0.9, at, rate:0.9 + Math.random()*0.2 }) || noiseBurst(0.05, 900, 3, 0.3, at);
-  A.rattle  = () => play('sfx_rattle', { g:0.8, dur:1.3, off:0.3 }) || [...Array(10)].forEach((_,i) => noiseBurst(0.04, 1800, 3, 0.1, i*0.09));
-  A.stamp   = () => play('sfx_stamp', { g:0.9 }) || noiseBurst(0.12, 500, 0.8, 0.4);
   A.yay     = () => play('sfx_win', { g:0.6 }) || [523,659,784,1047].forEach((f,i) => tone(f, 0.35, 0.07, i*0.09, 'triangle'));
   A.paper   = () => play('sfx_paper', { g:0.7 });
   A.yawn    = () => play('sfx_yawn', { g:0.5 });
