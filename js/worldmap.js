@@ -493,7 +493,10 @@ function drawPinArt(c, g, gray){
   }
 }
 // 木牌外框（本地座標，未含偏移），用來避免名字互相重疊
-function pinBox(c, m){ const g = pinGeom(c, m); return { w:g.bw, x0:g.x0, x1:g.x1, y0:g.y0, y1:g.y1 }; }
+function pinBox(c, m){ const g = pinGeom(c, m), rec = isRec(m.id); return { w:g.bw, x0:g.x0 - (rec ? REC_W : 0), x1:g.x1, y0:g.y0, y1:g.y1 }; }   // 推薦小金牌掛在木牌左邊，也算進框裡
+const REC_W = 22;   // 「推薦」小金牌的寬（地圖單位）
+const isRec = id => { const D = S.data; return D.rec === id && D.current !== id && !D.locked[id]; };
+const WALKER_BOX = { x0:-1, x1:25, y0:-MAP_HIKER_H - 2, y1:3 };   // 目前在爬的山腳下：登山客和寵物站的地方（drawWalkers），別的木牌要讓開
 // 讓位的候選位置：[x 偏幾個半寬, y 偏幾個木牌框高]
 const PIN_OFFS = [[0,0],[1,-.125],[-1,-.125],[1.9,-.125],[-1.9,-.125],[0,-.625],[1,-.75],[-1,-.75],[1.9,-.75],[-1.9,-.75],[0,-1.25],[1,-1.375],[-1,-1.375]];
 function layoutPins(c, order, ps){
@@ -510,11 +513,12 @@ function layoutPins(c, order, ps){
     }
     if (!best){ const b0 = b; best = { ox:0, oy:0, r:{ x0:o.q.x + b0.x0 * s, x1:o.q.x + b0.x1 * s, y0:o.q.y + b0.y0 * s, y1:o.q.y + b0.y1 * s } }; }
     placed.push(best.r); out[o.m.id] = best;
+    if (pri(o) === 0) { const k = ps, W = WALKER_BOX; placed.push({ x0:o.q.x + W.x0 * k, x1:o.q.x + W.x1 * k, y0:o.q.y + W.y0 * k, y1:o.q.y + W.y1 * k }); }   // 登山客小人不蓋到別座山的名字
   }
   return out;
 }
 function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
-  const D = S.data, id = m.id, done = D.done[id] || 0, locked = !!D.locked[id], cur = D.current === id, rec = D.rec === id && !cur && !locked;   // rec：建議下一座（game.js recommendNext）
+  const D = S.data, id = m.id, done = D.done[id] || 0, locked = !!D.locked[id], cur = D.current === id, rec = isRec(id);   // rec：建議下一座（game.js recommendNext）
   const a = S.anim[id] || (S.anim[id] = 1), want = (S.hover === id || S.sel === id) ? 1.14 : 1; S.anim[id] = a + (want - a) * .2;
   ps *= S.anim[id];
   c.save(); c.translate(x, y); c.scale(ps, ps);
@@ -554,8 +558,8 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, py + .6);
   if (done) drawCrown(c, 0, py - ph / 2 + .6);
   }
-  if (rec){ const tx = G.cx - w / 2 + 12, ty = py - ph / 2 - 6;   // 「推薦」小金牌：木牌左上角
-    c.font = `bold 7px ${FONT}`; const tw2 = c.measureText('推薦').width + 8;
+  if (rec){ const tw2 = REC_W - 2, tx = G.cx - w / 2 - tw2 / 2 + 3, ty = py + Math.tan(G.tilt) * -w / 2;   // 「推薦」小金牌：黏在木牌左端、跟名字同一高度（放在木牌上方會像是上面那座山的）
+    c.font = `bold 7px ${FONT}`;
     c.fillStyle = '#f6c945'; irr(c, tx - tw2 / 2, ty - 5, tw2, 10, 3, 91); c.fill(); c.lineWidth = .8; c.strokeStyle = INK; c.stroke();
     c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('推薦', tx, ty + .4); }
   const bx = G.cx + w / 2 - 1, byT = py - ph / 2 + Math.tan(G.tilt) * w / 2;   // 照片數徽章：木牌右上角

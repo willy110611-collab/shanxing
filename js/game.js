@@ -163,7 +163,7 @@
     const d = new Date(ts), h = d.getHours() + d.getMinutes()/60;
     const time = h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 17 ? 'day' : h >= 17 && h < 18.6 ? 'dusk' : 'night';
     id = id || SV.cur || 'x';
-    const R = C.rng(C.hash(id + Math.floor(ts / 1200000))), rr = R(), rs = R();
+    const R = C.rng(C.hash(SX.groupOf(id) + Math.floor(ts / 1200000))), rr = R(), rs = R();   // 同一個山群是同一片天空：群峰卡片和每座山的卡片天氣一樣
     const fogBias = SX.M[id] && SX.M[id].theme.fog ? 0.15 : 0;
     let kind = rr < 0.16 ? 'rain' : rr < 0.3 + fogBias ? 'fog' : rr < 0.52 + fogBias ? 'cloudy' : 'sunny';
     if (f >= SNOW_LINE && (kind === 'rain' || ((kind === 'fog' || kind === 'cloudy') && rs < SNOW_P)) && snowSeasonAt(id, ts)) kind = 'snow';
@@ -266,6 +266,7 @@
     WM.onSelect(id => { A.unlock(); A.pop(); if (SX.GROUP[id]) showGroup(id); else showRoute(id); });   // 旗子是山群：先開群峰卡片
     WM.onBackground(hideRoute);
   } catch(e){ console.error('worldmap', e); }
+  $('#mapWrap').addEventListener('pointerdown', () => $('#scrMap .mapHint').classList.add('off'), { once:true });   // 知道怎麼操作了，提示就收起來
 
   const PET_NONE = { id:'', name:'自己走', desc:'一個人慢慢走，聽自己的腳步聲。', unlocked:true };
   const hasPet = p => !p.id || p.unlocked || SV.pets.includes(p.id);

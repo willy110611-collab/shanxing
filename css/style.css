@@ -62,7 +62,9 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .logo.artLogo{padding:0;background:none;border:0;box-shadow:none}
 .logo.artLogo img{height:46px;width:auto;display:block;filter:drop-shadow(0 2px 2px rgba(58,42,32,.35))}
 .topBtns{display:flex;gap:8px}
-.mapHint{position:absolute;left:50%;transform:translateX(-50%);top:calc(88px + env(safe-area-inset-top));z-index:4;font-size:13px;color:#fff7e4;text-shadow:var(--txo);pointer-events:none;white-space:nowrap}
+/* 操作提示放在地圖最下面（海面上，不會蓋到山的木牌）；第一次摸地圖之後就收起來 */
+.mapHint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:4;font-size:13px;color:#fff7e4;text-shadow:var(--txo);pointer-events:none;white-space:nowrap;transition:opacity .4s}
+.mapHint.off{opacity:0}
 #mapWrap{position:absolute;inset:0;z-index:2;min-height:0;overflow:hidden}
 #mapWrap canvas,#mapWrap svg{width:100%;height:100%;display:block}
 #mapWrap canvas{touch-action:none}
@@ -295,7 +297,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .mCard .pol{margin:4px 8px 16px;transform:rotate(-2deg)}
 .mCard .pol p{font-size:13px}
 .mBtns{display:flex;gap:10px;margin-top:4px}
-.mBtns .cbtn{flex:1}
+.mBtns .cbtn{flex:1 1 auto;white-space:nowrap}   /* 先照字的寬度分，再平分剩下的空間：「一鍵領取（2）」這種長一點的字不會擠成兩行 */
 .noteP{background:#fff3c8;color:var(--ink);text-shadow:none;border:2px solid var(--ink);border-radius:3px;padding:16px 16px 18px;line-height:1.8;font-size:16px;box-shadow:0 3px 0 rgba(58,42,32,.5);transform:rotate(-1deg);margin:0 6px 14px;position:relative;background-image:repeating-linear-gradient(transparent 0 28px,rgba(180,130,80,.28) 28px 29px)}
 .noteP::before{content:"";position:absolute;left:50%;top:-8px;width:13px;height:13px;margin-left:-6px;border-radius:50%;background:#e8574a;border:2px solid var(--ink)}
 .noteP small{display:block;text-align:right;color:#8a6a50;font-size:12px;margin-top:4px}
@@ -451,6 +453,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .tzFirst{text-align:center;font-size:13px;margin-top:8px;opacity:.75}
 .tzBtns{margin-top:14px;align-items:stretch}
 .tzBtns #tzBack{flex:1;white-space:nowrap}
+.tzBtns .tzArr{flex:none}   /* 左右箭頭固定寬，不跟「回背包」平分（平分會把「回背包」擠到被切掉） */
 .tzArr{width:48px;padding:6px 0;font-size:24px;line-height:1}
 @media (prefers-reduced-motion:reduce){ .tzSheen,.tzWrap.inR,.tzWrap.inL{animation:none} .tzStage{transition:none} }
 /* ───────── 離開時的日記＋路上的包裹 ───────── */
@@ -600,7 +603,12 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .lbWelcome .pw{margin-top:4px}
 .lbWelcome .tiny{margin-top:12px}
 /* 讀取畫面收起時：字和進度條先藏起來，背景再慢慢淡掉，不會跟後面畫面的字疊在一起 */
-.loading.done .ldBox{opacity:0;transition:opacity .12s}
+.loading.done .ldBox{visibility:hidden}
+/* 相簿（百岳帳、徽章…內容很長）：紙張跟著內容一路捲到底，不會捲到一半就露出底下的木桌 */
+#scrAlbum .pBody{margin:0 8px calc(8px + env(safe-area-inset-bottom));padding-bottom:20px;background:linear-gradient(180deg,rgba(252,245,226,.97),rgba(243,229,196,.97)) local;border:1.5px solid rgba(106,78,58,.35);border-radius:6px 9px 7px 8px;box-shadow:0 4px 12px rgba(40,25,10,.28)}
+/* 說明文字換行時不要只剩一個字孤單掉到最後一行（寶物說明、卡片、日記…全部適用） */
+p,li,small,.rc-feat,.summitBig{text-wrap:pretty}
+.tzDesc{text-wrap:balance}
 
 /* 標題用霞鶩文楷（字型定義在 :root --fontT） */
 h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family:var(--fontT)}
