@@ -409,7 +409,8 @@ function drawShiba(c, x, y, t){
   c.beginPath(); c.moveTo(x - 2, y - 1 - b); c.lineTo(x - 2, y); c.moveTo(x + 2, y - 1 - b); c.lineTo(x + 2, y); c.stroke();
 }
 // 目前挑戰的山旁邊：登山客和帶著的寵物（有美術圖就用背影走路圖，沒有就用程式畫的）
-const MAP_HIKER_H = 22, MAP_PET_H = 10;   // 地圖上登山客、寵物的高度（地圖單位）
+const MAP_HIKER_H = 48, MAP_PET_H = 20;   // 地圖上登山客、寵物的高度（地圖單位）：放大到一眼看得出正在爬哪座山
+const MAP_TAG_H = 16;                     // 登山客頭上「登山中」小木牌的高度（地圖單位）
 const MAP_WALK_FPS = 4;                   // 走路圖每秒換幾格（慢慢走）
 let contactSp = null;
 function contactShadow(c, x, y, w){       // 腳底接觸影子：柔邊深色橢圓
@@ -423,13 +424,24 @@ function petWalkArt(pet){
   return A.get('pet_' + pet + '_walk') ? 'pet_' + pet + '_walk' : pet === 'shiba' && A.get('shiba_walk') ? 'shiba_walk' : null;
 }
 function drawWalkers(c, t){
-  const A = SX.art, fr = Math.floor(t * MAP_WALK_FPS), pet = S.data.pet, hx = 8, px = 18, y = 1;
+  const A = SX.art, fr = Math.floor(t * MAP_WALK_FPS), pet = S.data.pet, hx = 50, px = 64, y = 1;   // 站在木牌右邊，不被牌子擋住
   if (A && A.get('hiker_walk')){ contactShadow(c, hx, y, MAP_HIKER_H * .55); A.drawFrame(c, 'hiker_walk', fr, hx, y, MAP_HIKER_H); }
   else drawHiker(c, hx, y, t);
+  drawClimbTag(c, hx, y - MAP_HIKER_H - 4 + Math.sin(t * 2.4) * 1.5);
   if (!pet) return;
   const pa = petWalkArt(pet);
   if (pa){ contactShadow(c, px, y, MAP_PET_H * 1.1); A.drawFrame(c, pa, fr, px, y, MAP_PET_H); }
   else drawShiba(c, px, y, t);
+}
+// 正在爬的山：登山客頭上一塊會輕輕上下浮動的羊皮紙小牌「登山中」，下面一個小三角指著人
+function drawClimbTag(c, x, by){
+  const h = MAP_TAG_H; c.font = `${h * .62}px ${FONT}`; const w = c.measureText('登山中').width + h * .9;
+  c.save(); c.translate(x, by);
+  c.fillStyle = '#fbf1da'; c.strokeStyle = INK; c.lineWidth = 1.3; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(-w / 2, -h); c.lineTo(w / 2, -h); c.lineTo(w / 2, -4); c.lineTo(3.5, -4); c.lineTo(0, 0); c.lineTo(-3.5, -4); c.lineTo(-w / 2, -4); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#e8574a'; c.beginPath(); c.arc(-w / 2 + h * .42, -h / 2 - 2, h * .14, 0, TAU); c.fill();
+  c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('登山中', h * .12, -h / 2 - 1.6);
+  c.restore();
 }
 function drawCrown(c, x, y){
   c.save(); c.lineWidth = .9; c.strokeStyle = INK; c.lineJoin = 'round';
@@ -496,7 +508,7 @@ function drawPinArt(c, g, gray){
 function pinBox(c, m){ const g = pinGeom(c, m), rec = isRec(m.id); return { w:g.bw, x0:g.x0 - (rec ? REC_W : 0), x1:g.x1, y0:g.y0, y1:g.y1 }; }   // 推薦小金牌掛在木牌左邊，也算進框裡
 const REC_W = 22;   // 「推薦」小金牌的寬（地圖單位）
 const isRec = id => { const D = S.data; return D.rec === id && D.current !== id && !D.locked[id]; };
-const WALKER_BOX = { x0:-1, x1:25, y0:-MAP_HIKER_H - 2, y1:3 };   // 目前在爬的山腳下：登山客和寵物站的地方（drawWalkers），別的木牌要讓開
+const WALKER_BOX = { x0:22, x1:78, y0:-MAP_HIKER_H - MAP_TAG_H - 8, y1:3 };   // 目前在爬的山：木牌右邊登山客、寵物和頭上「登山中」小牌站的地方（drawWalkers），別的木牌要讓開
 // 讓位的候選位置：[x 偏幾個半寬, y 偏幾個木牌框高]
 const PIN_OFFS = [[0,0],[1,-.125],[-1,-.125],[1.9,-.125],[-1.9,-.125],[0,-.625],[1,-.75],[-1,-.75],[1.9,-.75],[-1.9,-.75],[0,-1.25],[1,-1.375],[-1,-1.375]];
 function layoutPins(c, order, ps){
