@@ -373,6 +373,13 @@
   const PUSH_DENIED_HELP = (ios, home) => ios
     ? '通知被關掉了，手機不會再問。要打開：iPhone「設定」→「通知」→ 找到「山行小日子」→ 允許通知，再回來打開這個開關'
     : '通知被封鎖了，手機不會再問。要打開：點網址列左邊的鎖頭（或「⋮」→ 網站設定）→ 通知 → 允許，再回來打開這個開關';
+  // 允許視窗被關掉、沒有選（permission 還是 default）：手機下次還會再問，不是被封鎖
+  const PUSH_DISMISSED = '這次沒有允許，下次打開開關時還會再問一次';
+  // 跳出允許視窗：新版瀏覽器回傳 Promise，舊版 Safari 只會呼叫 callback，兩種都接
+  const askPermission = () => new Promise(res => {
+    const p = Notification.requestPermission(res);
+    if (p && p.then) p.then(res, () => res(Notification.permission));
+  });
   async function pushSet(on){
     if (!acct) throw new Error('先到山友大廳取個暱稱建帳號，才能收通知');
     const ios = /iPhone|iPad|iPod/.test(navigator.userAgent), home = window.matchMedia && matchMedia('(display-mode: standalone)').matches;
@@ -381,7 +388,7 @@
     // 要開：先在按下的這一刻跳出允許視窗（iPhone 規定要緊接著點擊；先等別的東西會卡住）
     // 之前按過「不允許」，手機不會再問，只能到設定裡打開：直接說明步驟
     if (on && Notification.permission === 'denied') throw new Error(PUSH_DENIED_HELP(ios, home));
-    const asked = on ? Notification.requestPermission() : null;
+    const asked = on ? askPermission() : null;
     // 用 getRegistration（馬上回答），不用 serviceWorker.ready（背景程式沒裝好時會永遠等下去）
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg) throw new Error('遊戲還在準備背景程式，關掉重開一次再試');
@@ -390,7 +397,9 @@
       if (sub) { await api('/push/sub', { method: 'DELETE', json: { endpoint: sub.endpoint } }).catch(() => {}); await sub.unsubscribe().catch(() => {}); }
       pushOn = false; store(KEY_PUSH, false); return false;
     }
-    if (await asked !== 'granted') throw new Error(PUSH_DENIED_HELP(ios, home));
+    const ans = await asked;
+    if (ans === 'denied') throw new Error(PUSH_DENIED_HELP(ios, home));
+    if (ans !== 'granted') throw new Error(PUSH_DISMISSED);
     const key = await api('/push/key').then(d => d.key).catch(() => null); if (!key) throw new Error('通知服務還沒準備好，晚點再試');
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(key) });
     await api('/push/sub', { json: { endpoint: sub.endpoint } });
