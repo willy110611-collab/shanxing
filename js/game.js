@@ -816,20 +816,26 @@
   // after：按「收進背包」之後要做的事（例如回到每日畫面、領下一件）
   function gainTreasure(tr, mode, after){
     if (!tr) return;
+    putInBag(tr);
+    if (mode === 'show') { daily('treasure'); showTreasure(tr, after); }
+    else if (mode === 'toast') toast(`得到「${tr.name}」`);
+  }
+  // 收進背包並馬上存檔。卡片只是事後顯示：卡片還沒看完就關掉 App，東西也已經在背包裡
+  function putInBag(tr){
     const had = SV.bag[tr.id] > 0;   // 舊存檔：這個功能出來前就拿過的寶物，不知道第一次是哪天，不要記成今天
     SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1;
     if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = had ? {} : { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
     SV.bagLog[tr.id].last = today();
     if (M && tr.name.includes('紀念章')) SV.stats.magpie[M.id] = 1;
-    if (mode === 'show' && !rewarding) daily('treasure');
     save();
-    if (mode === 'show') {
-      A.sparkle(); if (tr.rarity === '傳說') { confetti(30); A.chime(); }
-      modal(`<div class="encounter${tr.rarity !== '普通' ? ' rare' : ''}"><div class="ec-pic" style="animation:pop .5s cubic-bezier(.34,1.8,.5,1)">${trSvg(tr)}</div>
-        <h3>${tr.name}</h3><p><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span>${tr.season ? ` <span class="chip" style="background:#ffd9e4">季節限定・${SX.SEASON[tr.season].name}</span>` : ''}</p><p>${tr.desc}</p></div>
-        <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="trOk">${after && after.label ? after.label : '收進背包'}</button></div>`);
-      $('#trOk').onclick = () => { A.pop(); closeModal(); checkQuests(); if (after) after(); };
-    } else if (mode === 'toast') toast(`得到「${tr.name}」`);
+  }
+  // 寶物卡（寶物已經在背包裡了，這裡只負責給玩家看）
+  function showTreasure(tr, after){
+    A.sparkle(); if (tr.rarity === '傳說') { confetti(30); A.chime(); }
+    modal(`<div class="encounter${tr.rarity !== '普通' ? ' rare' : ''}"><div class="ec-pic" style="animation:pop .5s cubic-bezier(.34,1.8,.5,1)">${trSvg(tr)}</div>
+      <h3>${tr.name}</h3><p><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span>${tr.season ? ` <span class="chip" style="background:#ffd9e4">季節限定・${SX.SEASON[tr.season].name}</span>` : ''}</p><p>${tr.desc}</p></div>
+      <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="trOk">${after && after.label ? after.label : '收進背包'}</button></div>`);
+    $('#trOk').onclick = () => { A.pop(); closeModal(); checkQuests(); if (after) after(); };
   }
   function pickTreasure(o, cx, cy){
     const k = 't' + Math.round(o.m);
@@ -1206,21 +1212,26 @@
   }
   // 開始登山的頭三天：每日的一般獎勵先給還沒有的一般寶物（稀有、傳說的機率不變）
   const newbie = () => dayNo(dayKey()) - dayNo(dayKey(new Date(SV.born).getTime())) < 3;
-  let rewarding = false;
   // kind：'rare'（連續第 7 天）、'common'，或新手禮物的代號（第一次領獎不管哪一種，都先送 daily 新手禮物）
-  function giveReward(kind, after){
+  function giveReward(kind){
     const mid = M ? M.id : 'any';
     let tr = giftTreasure(FIRST_GIFTS[kind] ? kind : kind === 'rare' ? null : 'daily', mid);
     if (!tr && kind === 'rare') { const pool = SX.TREASURES.filter(x => x.rarity !== '普通' && !x.season); tr = pool[Math.floor(Math.random() * pool.length)]; }   // 季節限定只能在當季的山上找到
     if (!tr && newbie()) tr = rollTreasure(mid, freshFor('普通')) || rollTreasure(null, freshFor('普通'));   // 這座山的挑完了，就從別座山的一般寶物挑
-    rewarding = true; gainTreasure(tr || rollTreasure(mid), 'show', after); rewarding = false;
+    return tr || rollTreasure(mid);
   }
-  // 每日獎勵一件一件打開，最後回到每日畫面（list：每件的 kind，見 giveReward）
-  function claimSeq(list){
-    if (!list.length) { openDaily(); return; }
-    const kind = list.shift(), next = () => claimSeq(list);
-    next.label = list.length ? `下一件（還有 ${list.length} 件）` : '收進背包';
-    giveReward(kind, next);
+  // 領每日獎勵（單領、一鍵領取都走這裡）：呼叫前先把簽到／任務標成已領。
+  // 所有寶物一次全部收進背包、跟「已領」一起存檔，之後才一張一張顯示卡片，最後回到每日畫面
+  function claimRewards(kinds){
+    const trs = kinds.map(k => { const tr = giveReward(k); putInBag(tr); return tr; });   // 一件一件挑：新手禮物才不會挑到同一件
+    save(); updateDailyBadge(); closeModal();
+    showSeq(trs);
+  }
+  function showSeq(trs){
+    if (!trs.length) { openDaily(); return; }
+    const tr = trs.shift(), next = () => showSeq(trs);
+    next.label = trs.length ? `下一件（還有 ${trs.length} 件）` : '收進背包';
+    showTreasure(tr, next);
   }
   function openDaily(){
     const D = dailyState(), s = D.streak, wk = ((s - 1) % 7) + 1;
@@ -1239,14 +1250,14 @@
       <p class="summitBig" style="font-size:12px">每天半夜十二點換新任務。完成後領取，會拿到一件寶物。</p>
       <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">← 返回</button></div>`);
     // 領完都回到每日畫面
-    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; save(); updateDailyBadge(); closeModal(); claimSeq([signKind]); };
-    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; save(); updateDailyBadge(); closeModal(); claimSeq(['common']); });
-    // 一鍵領取：簽到＋所有完成的任務，一件一件打開
+    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; claimRewards([signKind]); };
+    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; claimRewards(['common']); });
+    // 一鍵領取：簽到＋所有完成的任務，一次收進背包，卡片一張一張看
     if (nClaim) $('#dyAll').onclick = () => {
       const list = [];
       if (!D.streakGot) { D.streakGot = true; list.push(signKind); }
       D.tasks.forEach(tk => { if (tk.done && !tk.got) { tk.got = true; list.push('common'); } });
-      save(); updateDailyBadge(); closeModal(); claimSeq(list);
+      claimRewards(list);
     };
     $('#dyX').onclick = () => { A.pop(); closeModal(); };
   }
