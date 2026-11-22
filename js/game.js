@@ -1383,10 +1383,15 @@
   }
 
   // ───────── 主迴圈 ─────────
-  let lastT = performance.now(), hudT = 0, wxT = 0;
+  // 每秒最多畫幾格：走路 60；休息、睡覺、暫停、開著視窗、到山頂 30（畫面幾乎不動，省電、手機不會熱）。120 Hz 的手機也最多 60 格
+  const FPS = { walk:60, idle:30 };
+  let lastT = performance.now(), hudT = 0, wxT = 0, ftNow = 0, fpsNow = FPS.walk;
   function loop(now){
     requestAnimationFrame(loop);
-    const dt = Math.min(0.05, Math.max(0, (now - lastT) / 1000)); lastT = now;
+    fpsNow = !st || paused || arrived || st.rest || st.sleep ? FPS.idle : FPS.walk;
+    if (now - lastT < 1000 / fpsNow - 3) return;   // 還沒到下一格：這次跳過（差 3 毫秒內就畫，螢幕每格的時間本來就有一點誤差）
+    ftNow = now - lastT;
+    const dt = Math.min(0.05, Math.max(0, ftNow / 1000)); lastT = now;
     frame(dt);
   }
   function frame(dt){
@@ -1419,7 +1424,7 @@
     if (lineT <= 0 && moving && !paused) { lineT = 18 + Math.random()*16;
       say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'snow' ? SX.LINES.snow : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
     wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
-    SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam });
+    SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam, ft:ftNow, fps:fpsNow });   // ft、fps：給自動畫質量真正每格花多久
     if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
     updTag();
     hudT -= dt; if (hudT <= 0) { hudT = 0.2; hudTick(); }
