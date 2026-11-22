@@ -231,6 +231,7 @@ function mirTex(id, m, r, mx, my, px){
 }
 // 階梯立面（面對鏡頭那一面）的貼圖：石階用花崗岩石塊（約 5 排石頭）、土路和木棧道的陡段用木頭階梯（約 3 根橫木）
 // m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
+const RISER_J = 40;
 const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95] } };
 function buildTex(){
   const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
@@ -1620,11 +1621,11 @@ function railArt(i, j, fade, fq){
     proj(j, 0, false); const xa = gx + side * RAIL_D * gs, ya = gy - terrH(i, side, RAIL_D) * gs, sa = gs;
     if (side < 0 ? Math.max(xa, xb) < -4 : Math.min(xa, xb) > W + 4) continue;
     const th = SCALE.railBar * (sa + sb) * 0.5, len = Math.hypot(xb - xa, yb - ya);
-    for (let q = 0; q < 2; q++) {               // 扶手＋中間橫木
-      const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb;
+    for (let q = 0; q < 2; q++) {               // 扶手＋中間橫木（中間橫木遠處只剩一條線，30 段以外慢慢淡掉，省效能）
+      const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb, qa = q ? A * farA(j, 30, 6) : A;
       for (let hz = 0; hz < 2; hz++) {          // 原色＋霧化剪影（遠處融進霧裡）
         if (hz ? fq <= 0.04 : fq >= 0.96) continue;
-        const a = hz ? A * fq : A; if (a < 0.01) continue;
+        const a = hz ? qa * fq : qa; if (a < 0.01) continue;
         const img = mip(hz ? B.h : B.c, len * 2 * DPR), sw = img.width / 2, sh = img.height;
         ctx.globalAlpha = a;
         ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa, DPR * (ha - th * 0.5));
@@ -1632,8 +1633,9 @@ function railArt(i, j, fade, fq){
       }
     }
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    if (!railOn(i + 1)) { proj(j + 1, 0, false); drawSpr(P, xb, yb, sb, fq, 0.5, A); }        // 欄杆終點
-    if (!railOn(i - 1) || !half) { proj(j, 0, false); drawSpr(P, xa, ya, sa, fq, 0.5, A); }   // 每兩段一根；欄杆起點一定有
+    const ps = 0.5 * farA(j, 24, 6);   // 柱子的影子只畫近處（遠處柱子細到看不出影子）
+    if (!railOn(i + 1)) { proj(j + 1, 0, false); drawSpr(P, xb, yb, sb, fq, ps, A); }        // 欄杆終點
+    if (!railOn(i - 1) || !half) { proj(j, 0, false); drawSpr(P, xa, ya, sa, fq, ps, A); }   // 每兩段一根；欄杆起點一定有
   }
   ctx.globalAlpha = fade;
 }
@@ -1758,7 +1760,7 @@ function drawWorld(b, t){
         // 壓到 0 時跟「整段一階」長得一模一樣，才換成只畫一階
         const rise = pW[j + 1] - pW[j], nMax = clamp(Math.ceil(rise / STEP_H), 1, 4), tm = nMax > 1 ? clamp((rise * s2 / nMax - 3) / 2, 0, 1) : 0, n = tm > 0 ? nMax : 1;   // tm：一階立面 3 像素以下開始壓扁、5 像素以上完整
         const ST = snowAmt > 0.5 ? RT : (TH.trail === 'scree' || TH.trail === 'stairs' ? RT : (TEX.steps || RT));   // 石階、碎石用路面貼圖；土路、木棧道用木頭階梯
-        const RS = snowAmt > 0.5 ? null : TEX.riser;   // 立面貼圖：積雪時不用
+        const RS = snowAmt > 0.5 ? null : TEX.riser, ra = RS ? ta * farA(j, RISER_J, 8) : 0;   // 立面貼圖：積雪時不用；RISER_J 段以外立面只剩幾像素，不貼（最後 8 段淡出，省效能）
         const at = f => { const dz = pZ[j] + f * (pZ[j + 1] - pZ[j]), s = F / dz; return [W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * s, s]; };
         const sd = farA(j, 70, 10);   // 遠處只剩幾像素的階梯：每塊深淺、陰影這些細節慢慢淡掉、最後不畫（省效能），階梯本身照畫
         for (let q = n - 1; q >= 0; q--) {
@@ -1768,7 +1770,8 @@ function drawWorld(b, t){
           const wa = RW * sa, wb = RW * sb;
           // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊
           ctx.fillStyle = LUT[(15 + (lvL ? 1 : 0)) * FOGN + fi]; quad(xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7);
-          if (RS && ta > 0.03 && yt - yr > 0.6) { riserFill(RS, xb - wb * 1.04, yr, sb, i * 8 + (q + 1) % n, ta * mid); quad(xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7); ctx.globalAlpha = fade; }   // 立面貼圖（石塊或橫木），下面照舊壓暗、加唇下陰影
+          const rA = ra * mid * clamp((yt - yr - 1.5) / 2, 0, 1);   // 立面矮到兩三像素時慢慢淡掉
+          if (rA > 0.03) { riserFill(RS, xb - wb * 1.04, yr, sb, i * 8 + (q + 1) % n, rA); quad(xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7); ctx.globalAlpha = fade; }   // 立面貼圖（石塊或橫木），下面照舊壓暗、加唇下陰影
           if (sd > 0) {
             ctx.globalAlpha = fade * sd; ctx.fillStyle = 'rgba(30,22,30,0.22)'; quad(xb - wb * 1.04, yt - (yt - yr) * 0.35, xb + wb * 1.04, yt - (yt - yr) * 0.35, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7);
             ctx.globalAlpha = fade; woodTint(i * 8 + (q + 1) % n, 0, xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt, xb - wb * 1.04, yt, sd);
