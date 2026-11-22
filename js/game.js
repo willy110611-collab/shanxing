@@ -602,8 +602,9 @@
   // mode: 'show' 開寶物卡、'toast' 只跳提示、'quiet' 不提示
   function gainTreasure(tr, mode){
     if (!tr) return;
+    const had = SV.bag[tr.id] > 0;   // 舊存檔：這個功能出來前就拿過的寶物，不知道第一次是哪天，不要記成今天
     SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1;
-    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
+    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = had ? {} : { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
     SV.bagLog[tr.id].last = today();
     if (M && tr.name.includes('紀念章')) SV.stats.magpie[M.id] = 1;
     if (mode === 'show' && !rewarding) daily('treasure');
