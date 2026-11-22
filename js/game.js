@@ -22,7 +22,7 @@
   const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[],
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{} },
-    set:{ sound:true, vol:0.7, gps:false, dev:false, devOn:false, fast:false } });
+    set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false } });
   let SV = blank();
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
   let imgDirty = false;
@@ -435,6 +435,20 @@
     for (const [sel, id] of [['#rsPhoto', 'icon_camera'], ['#rsUp', 'icon_upload'], ['#rsStone', 'cairn']]) if (u(id)) css.push(`${sel}::before{content:"";width:30px;height:30px;background:url("${u(id)}") center/contain no-repeat}`);
     // 完成的隱藏任務：打勾換成任務徽章
     if (u('badge_quest')) css.push(`.quest li.done::before{width:30px;height:30px;border:0;border-radius:0;background:url("${u('badge_quest')}") center/contain no-repeat!important}`);
+    // 木框介面（第六、九批）：面板用羊皮紙木框、分頁和開關用木牌、標題用緞帶、對話框用手繪泡泡、選單頁用木桌背景
+    // 數字是各張圖裁掉透明邊後量的邊框寬度（像素），換圖要重量
+    if (u('ui_panel')) css.push(`.mCard,.infoCard,#restSheet{background:none!important;border-style:solid!important;border-width:18px!important;border-color:transparent!important;border-image:url("${u('ui_panel')}") 50 fill / 18px stretch!important;box-shadow:0 8px 20px rgba(40,25,10,.35)!important;color:var(--ink)!important;text-shadow:none!important}
+      .mCard::before,.mCard::after,.infoCard::before,.infoCard::after,#restSheet::before,#restSheet::after{display:none!important}
+      .mCard .summitBig,.mCard .tiny,.mCard p,.infoCard .ic-h b,.infoCard .rc-h b,.mCard .grp,.mCard .empty{color:var(--ink)!important;text-shadow:none!important}
+      .mCard .stoneGame .sg-top{color:#fff7e4!important;text-shadow:var(--txo)!important}`);
+    if (u('ui_ribbon')) css.push(`.mCard h3{display:block;width:fit-content;max-width:100%;margin:0 auto 12px!important;padding:8px 4px 12px;border-style:solid;border-width:0 34px;border-color:transparent;border-image:url("${u('ui_ribbon')}") 0 130 fill / 0 34px stretch;color:var(--ink)!important;text-shadow:none!important;font-size:18px!important}`);
+    if (u('ui_tab') && u('ui_tab_on')) css.push(`.tab{background:url("${u('ui_tab')}") center/100% 100% no-repeat!important;border:0!important;box-shadow:none!important;color:var(--ink)!important;text-shadow:0 1px 0 rgba(255,240,210,.6)!important}
+      .tab.on{background-image:url("${u('ui_tab_on')}")!important;color:#fff7e4!important;text-shadow:var(--txo)!important}`);
+    if (u('ui_toggle_on') && u('ui_toggle_off')) css.push(`.tgl{width:62px!important;height:30px!important;border:0!important;box-shadow:none!important;background:url("${u('ui_toggle_off')}") center/contain no-repeat!important}
+      .tgl.on{background-image:url("${u('ui_toggle_on')}")!important}.tgl::after{display:none!important}`);
+    if (u('ui_close')) css.push(`.rc-x{background:url("${u('ui_close')}") center/contain no-repeat!important;border:0!important;box-shadow:none!important;color:transparent!important;font-size:0!important}`);
+    if (u('ui_bubble')) css.push(`.bubble{background:none!important;border-style:solid!important;border-width:12px 16px 20px!important;border-color:transparent!important;border-image:url("${u('ui_bubble')}") 60 70 90 70 fill / 12px 16px 20px stretch!important;box-shadow:none!important;padding:0 2px!important}.bubble::after{display:none!important}`);
+    if (u('ui_page')) css.push(`#scrAlbum,#scrSettings,#scrLobby{background:url("${u('ui_page')}") center/cover no-repeat!important}`);
     for (const k of ['common', 'rare', 'legend']) if (u('rarity_' + k)) css.push(`.bag .slot.rar-${k}{background:url("${u('rarity_' + k)}") center/100% 100% no-repeat!important;border-color:transparent!important;box-shadow:none!important}`);
     if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
     if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }
@@ -533,6 +547,16 @@
   function wallHtml(list){
     if (!list.length) return '<p class="summitBig">這一段還沒有山友照片，休息時可以上傳一張。</p>';
     return '<div class="grid">' + list.map((p, i) => `<div class="pol" style="margin:4px 0 12px;transform:rotate(${(i % 3 - 1) * 1.5}deg)"><img src="${p.img}"><p>${p.by}・${Math.round(p.alt).toLocaleString('en-US')} m</p></div>`).join('') + '</div>';
+  }
+  // 清掉以前存到的全黑照片（舊版在畫面還沒畫出來時拍照，會存成整張黑的）；開遊戲時檢查一次
+  function purgeBlackPhotos(){
+    let left = SV.photos.length; if (!left) return;
+    const done = () => { if (--left) return; const n = SV.photos.length; SV.photos = SV.photos.filter(p => !p.black); if (SV.photos.length !== n) { imgDirty = true; save(); } };
+    SV.photos.forEach(p => {
+      const im = new Image();
+      im.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 16; const g = c.getContext('2d'); g.drawImage(im, 0, 0, 16, 16); const d = g.getImageData(0, 0, 16, 16).data; let mx = 0; for (let i = 0; i < d.length; i += 4) mx = Math.max(mx, d[i], d[i + 1], d[i + 2]); if (mx < 24) p.black = true; done(); };
+      im.onerror = done; im.src = p.img;
+    });
   }
   function takePhoto(m, quiet, label, mark){
     const img = SC.snapshot(m);
@@ -1152,6 +1176,7 @@
   SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
+  purgeBlackPhotos();
   window.SXG = { go, startClimb, openTemple, openBag, openDaily, checkQuests,
     tick:(n = 30) => { for (let i=0;i<n;i++) frame(0.033); },
     encounter:id => { if (!st) return null; const e = id ? SX.ENCOUNTERS.find(x => x.id === id) : null; openEncounter(e); return lastEnc; },

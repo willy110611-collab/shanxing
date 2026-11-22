@@ -1,7 +1,7 @@
 // 山行小日子 — 聲音：Pixabay 音樂與音效（來源見 audio/SOURCES.txt），載入失敗時用合成音補上
 (function(){
   let ctx = null, master = null;
-  const A = SX.audio = { on:true, vol:0.7 };
+  const A = SX.audio = { on:true, vol:0.5 };
   const BASE = 'audio/';
   const BUF = {}, LOADING = {};
   const ONESHOT = ['sfx_bell','sfx_clack','sfx_rattle','sfx_shutter','sfx_stamp','sfx_sparkle','sfx_pop','sfx_win','sfx_paper','sfx_chime','sfx_yawn'];
@@ -63,12 +63,12 @@
   A.mood = m => {
     A._mood = m;
     const { screen, wx } = m;
-    let bgm = 'bgm_map', amb = null;
+    let bgm = 'bgm_day', amb = null;   // 地圖也用預設的木吉他長曲（玩家意見選定）
     if (screen === 'climb') {
       bgm = wx.time === 'night' ? 'bgm_night' : wx.kind === 'rain' || wx.kind === 'fog' ? 'bgm_rain' : dayPick;
       amb = wx.kind === 'rain' ? 'amb_rain' : wx.time === 'night' ? 'amb_night' : m.water ? 'amb_stream' : 'amb_forest';
     } else if (screen === 'temple') { bgm = 'bgm_temple'; amb = 'amb_forest'; }
-    track('bgm', bgm, screen === 'climb' ? 0.32 : 0.4);
+    track('bgm', bgm, screen === 'climb' ? 0.2 : 0.26);   // 背景音樂有點大聲（原本 0.32／0.4）
     track('amb', amb, wx && wx.kind === 'rain' ? 0.5 : 0.35);
     if (screen !== 'climb') track('step', null, 0);
   };

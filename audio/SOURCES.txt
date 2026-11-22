@@ -1,6 +1,5 @@
-bgm_map "duration":"PT1M34S" 3012864B https://pixabay.com/zh/music/acoustic-group-warm-acoustic-guitar-232912/
-bgm_day "duration":"PT2M53S" 5537123B https://pixabay.com/zh/music/folk-autumn-acoustic-guitar-music-597402/
-bgm_day2 "duration":"PT1M27S" 2796982B https://pixabay.com/zh/music/island-happy-ukulele-in-nature-510767/
+bgm_day "duration":"PT10M1S" 6007808B https://pixabay.com/music/solo-guitar-relaxing-amp-calming-acoustic-guitar-174642/ （2026-11-22 選定：預設＋地圖，重壓 80kbps）
+bgm_day2 "duration":"PT3M" 2160640B https://pixabay.com/music/solo-piano-nature-piano-519619/ （2026-11-22 選定：白天第二首，重壓 96kbps）
 bgm_night "duration":"PT1M48S" 3454464B https://pixabay.com/zh/music/lofi-lofi-calm-583391/
 bgm_rain "duration":"PT2M4S" 3968940B https://pixabay.com/zh/music/modern-classical-nature-piano-628034/
 bgm_temple "duration":"PT2M43S" 5206272B https://pixabay.com/zh/music/meditationspiritual-chinese-576392/
