@@ -25,6 +25,8 @@ const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.
 const DEFWX = { kind:'sunny', time:'day' };
 
 let cv = null, ctx = null, W = 375, H = 812, DPR = 1, F = 450, HOR = 276, CAMH = 5, U = 1;
+let ocv = null, glc = null, c2d = null;   // ocv：真正顯示的畫布（WebGL 時是 gl2d 另外做的那張，Canvas 2D 時就是 #cv）；glc：WebGL 畫筆；c2d：Canvas 2D 畫筆
+let OX = 0, OY = 0;   // 畫進遠景快取時整張往右下挪多少（畫面外多留一圈，跨出畫面邊緣的東西不會被切掉）
 let M = null, TH = {}, seed = 1, N = 0, total = 1;
 let curve = null, elev = null, head = null, stepF = null;
 let props = [], cairns = [], AP = [];
@@ -111,10 +113,12 @@ function qualTick(fps, dt){
 const WARM_MS = 3;
 let warmQ = [];
 function warmBuild(){
-  const q = [], spr = sp => { if (!sp || !sp.c) return; q.push(function(){ mip(sp.c, 1); }); if (sp.h) q.push(function(){ mip(sp.h, 1); }); q.push(function(){ if (!sp.sd) sprShadow(sp); }); };
+  // WebGL：同時把圖先傳上顯示卡（prep），第一次看到時不用等上傳
+  const up = (c, rep) => { if (ctx.gpu && c) ctx.prep(c, rep); };
+  const q = [], spr = sp => { if (!sp || !sp.c) return; q.push(function(){ mip(sp.c, 1); up(sp.c); }); if (sp.h) q.push(function(){ mip(sp.h, 1); up(sp.h); }); q.push(function(){ if (!sp.sd) sprShadow(sp); up(sp.sd.c); }); };
   for (const k in SPR) { const a = SPR[k]; if (Array.isArray(a)) a.forEach(spr); }
   TURF.forEach(function(n){ n.forEach(function(v){ v.forEach(spr); }); });
-  for (const k in TEX) { const T = TEX[k]; if (T && T.lv) for (let nx = 0; nx <= 3; nx++) for (let ny = nx; ny <= 6; ny++) if (nx || ny) q.push(function(){ texLevel(T, nx, ny); }); }
+  for (const k in TEX) { const T = TEX[k]; if (T && T.lv) { q.push(function(){ up(T.c, true); }); for (let nx = 0; nx <= 3; nx++) for (let ny = nx; ny <= 6; ny++) if (nx || ny) q.push(function(){ up(texLevel(T, nx, ny).c, true); }); } }
   props.forEach(function(o){ if (o.type === 'sign') q.push(function(){ getSign(o.text); }); });
   warmQ = q.reverse();
 }
@@ -163,6 +167,7 @@ function mk(w, h){ const c = document.createElement('canvas'); c.width = Math.ma
 // 縮圖鏈：大圖要縮很小畫的時候，改用預先縮成一半、四分之一…的版本（第一次用到才做），最後一步最多只縮兩倍
 // 手機每格要畫上千張貼圖，直接把幾百像素的原圖縮成幾十像素會大量跳著讀記憶體，是步道畫面最慢的地方
 function mip(c, px){
+  if (ctx.gpu) return c;   // WebGL：顯示卡自己有縮小版（mipmap）
   const L = c._mip || (c._mip = [c]);
   let k = 0;
   while (L[k].width >= 16 && L[k].width * 0.5 >= px) {
@@ -220,7 +225,7 @@ const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame
 const KEEP = {};
 function keep(key, make){ let v = KEEP[key]; if (!v) { v = make(); if (v) KEEP[key] = v; } return v; }
 // 不再用的畫布馬上釋放（連同縮圖鏈）：iPhone 的畫布記憶體有上限，等自動回收太慢
-function free(c){ if (!c || !c.getContext) return; if (c._mip) for (let i = 1; i < c._mip.length; i++) c._mip[i].width = c._mip[i].height = 0; c._mip = null; c.width = c.height = 0; }
+function free(c){ if (!c || !c.getContext) return; if (glc) glc.drop(c); if (c._mip) for (let i = 1; i < c._mip.length; i++) c._mip[i].width = c._mip[i].height = 0; c._mip = null; c.width = c.height = 0; }   // WebGL 的貼圖一起刪
 // 霧化剪影：跟著這座山的霧色，霧色換了才重做（舊的那張釋放）
 function hazed(o){
   if (o.hk !== hazeCss) {
@@ -277,8 +282,8 @@ const TRAIL_TEX = { dirt:'ground_dirt', stairs:'ground_stone', scree:'ground_scr
 let TEX = {};
 function mkTex(id, m){
   if (!ctx) return null;
-  const T = keep('tex:' + id, function(){ const c = ART.crop(id); if (!c) return null; const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, c:c, lv:{} } : null; });
-  return T ? { p:T.p, w:T.w, m:m, c:T.c, lv:T.lv } : null;
+  const T = keep('tex:' + id, function(){ const c = ART.crop(id); if (!c) return null; return patOK() ? { w:c.width, c:c, lv:{} } : null; });
+  return T ? { T:T, w:T.w, m:m, c:T.c, lv:T.lv } : null;
 }
 // 貼圖的縮小版（橫、直各自縮 2^nx、2^ny 倍；用重複貼圖去縮，接縫才接得起來）：遠處的路面、草地一個像素蓋好幾個貼圖點時用
 function texLevel(T, nx, ny){
@@ -288,11 +293,16 @@ function texLevel(T, nx, ny){
     const px = nx > 0 ? nx - 1 : 0, py = nx > 0 ? ny : ny - 1, src = px || py ? texLevel(T, px, py).c : T.c, c = T.c;
     const w = Math.max(1, Math.round(c.width / (1 << nx))), h = Math.max(1, Math.round(c.height / (1 << ny))), d = mk(w, h), g = d.getContext('2d');
     g.scale(w / src.width, h / src.height); g.fillStyle = g.createPattern(src, 'repeat'); g.fillRect(0, 0, src.width, src.height);
-    L = T.lv[key] = { p:ctx.createPattern(d, 'repeat'), sx:c.width / w, sy:c.height / h, c:d };
+    L = T.lv[key] = { sx:c.width / w, sy:c.height / h, c:d };
   }
   return L;
 }
-const TEX_MTX = typeof DOMMatrix === 'function' ? new DOMMatrix() : null;   // 每段路都要對一次貼圖，重複用同一個矩陣不另外配置
+const TEX_MTX = typeof DOMMatrix === 'function' ? new DOMMatrix() : null;
+// 重複貼圖的「圖案」跟著畫筆走：WebGL 畫筆和 Canvas 2D 各存一份（換畫筆時不會拿到另一邊的）。o 是有 c（畫布）的貼圖或縮小版
+function patOf(o){ return ctx.gpu ? (o.pg || (o.pg = ctx.createPattern(o.c, 'repeat'))) : (o.p2 || (o.p2 = ctx.createPattern(o.c, 'repeat'))); }
+// 圖案能不能自己設變換（很舊的瀏覽器不行，地面就不貼圖）；WebGL 畫筆一定可以
+let patOk = null;
+function patOK(){ if (patOk == null) { const p = mk(1, 1).getContext('2d').createPattern(mk(1, 1), 'repeat'); patOk = !!(p && p.setTransform); } return patOk; }   // 每段路都要對一次貼圖，重複用同一個矩陣不另外配置
 // 不能無縫拼接的圖（例如苔蘚石板、木頭階梯）先鏡射拼成可以無縫重複的一張（只做一次，換山時重複用）
 // r：要用的那一塊（佔原圖的比例 [x0, y0, x1, y1]）；mx、my：左右、上下要不要鏡射；px：每一塊縮成多寬（像素，省記憶體）
 function mirTex(id, m, r, mx, my, px){
@@ -304,9 +314,9 @@ function mirTex(id, m, r, mx, my, px){
     for (let a = 0; a < (mx ? 2 : 1); a++) for (let b = 0; b < (my ? 2 : 1); b++) {
       g.save(); g.translate(a ? w * 2 : 0, b ? h * 2 : 0); g.scale(a ? -1 : 1, b ? -1 : 1); g.drawImage(e.img, sx, sy, sw, sh, 0, 0, w, h); g.restore();
     }
-    const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, c:c, lv:{} } : null;
+    return patOK() ? { w:c.width, c:c, lv:{} } : null;
   });
-  return T ? { p:T.p, w:T.w, m:m, c:T.c, lv:T.lv } : null;
+  return T ? { T:T, w:T.w, m:m, c:T.c, lv:T.lv } : null;
 }
 // 階梯立面（面對鏡頭那一面）的貼圖：石階用花崗岩石塊（約 5 排石頭）、土路和木棧道的陡段用木頭階梯（約 3 根橫木）
 // m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
@@ -329,7 +339,7 @@ function bankFill(T, side, z0, bh, a){
   const ux = (tX2[1] - tX1[1]) / SEG, uy = (tY2[1] - tY1[1]) / SEG, vx = (tX1[0] - tX1[1]) / bh, vy = (tY1[0] - tY1[1]) / bh;
   const kx = BANK_M / T.w, ky = BANK_H / T.c.height;
   const nx = Math.min(6, Math.max(0, Math.floor(-Math.log2(Math.hypot(ux, uy) * kx * DPR)))), ny = Math.min(6, Math.max(0, Math.floor(-Math.log2(Math.hypot(vx, vy) * ky * DPR))));
-  const L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1, ph = (z0 % BANK_M) / BANK_M * T.w;
+  const L = nx || ny ? texLevel(T, nx, ny) : null, p = patOf(L || T.T || T), sx = L ? L.sx : 1, sy = L ? L.sy : 1, ph = (z0 % BANK_M) / BANK_M * T.w;
   const m = TEX_MTX || new DOMMatrix();
   m.a = ux * kx * sx; m.b = uy * kx * sx; m.c = vx * ky * sy; m.d = vy * ky * sy; m.e = tX1[1] - ph * ux * kx; m.f = tY1[1] - ph * uy * kx;
   p.setTransform(m);
@@ -338,7 +348,7 @@ function bankFill(T, side, z0, bh, a){
 // 立面貼圖：xl 左緣、yt 上緣（螢幕座標）、s 這個深度每公尺幾像素；k 決定這一階對齊圖裡第幾排、左右錯開多少
 function riserFill(T, xl, yt, s, k, a){
   const kx = s * T.m / T.w, n = Math.min(6, Math.max(0, Math.floor(-Math.log2(kx * DPR))));
-  const L = n ? texLevel(T, n, n) : null, p = L ? L.p : T.p, ax = L ? kx * L.sx : kx, ay = L ? kx * L.sy : kx;
+  const L = n ? texLevel(T, n, n) : null, p = patOf(L || T.T || T), ax = L ? kx * L.sx : kx, ay = L ? kx * L.sy : kx;
   const rowPx = T.c.height / T.rows, row = (Hh(k, 181) * T.rows) | 0, u = Hh(k, 182) * T.w;
   const m = TEX_MTX || new DOMMatrix();
   m.a = ax; m.b = 0; m.c = 0; m.d = ay; m.e = xl - u * kx; m.f = yt - row * rowPx * kx;
@@ -385,7 +395,7 @@ function roadShade(){
     gr.addColorStop(0, 'rgba(46,30,24,0.2)'); gr.addColorStop(0.12, 'rgba(46,30,24,0.04)'); gr.addColorStop(0.3, 'rgba(255,240,205,0)'); gr.addColorStop(0.45, 'rgba(255,240,205,0.1)');
     gr.addColorStop(0.62, 'rgba(255,240,205,0.06)'); gr.addColorStop(0.76, 'rgba(46,30,48,0)'); gr.addColorStop(0.9, 'rgba(46,30,48,0.2)'); gr.addColorStop(1, 'rgba(46,30,48,0.3)');
     g.fillStyle = gr; g.fillRect(0, 0, 128, 2);
-    const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:128, c:c, lv:{}, m:RW * 2 } : null;
+    return patOK() ? { w:128, c:c, lv:{}, m:RW * 2 } : null;
   });
 }
 const mipN = k =>Math.min(6, Math.max(0, Math.floor(-Math.log2(k * DPR))));
@@ -394,7 +404,7 @@ const mipN = k =>Math.min(6, Math.max(0, Math.floor(-Math.log2(k * DPR))));
 function texAff(T, uc, xn, yn, sn, xf, yf, sf, zn, zf, a, step){
   const r = T.w / T.m, dv = Math.max(1e-4, (zf - zn) * r), kx = (sn + sf) * 0.5 / r, d = -(yn - yf) / dv, c = (xf - xn) / dv;
   const fy = clamp(-Math.log2(-d * DPR), 0, 6), ny0 = Math.floor(fy), w = ny0 === 0 ? clamp((fy - 0.8) / 0.2, 0, 1) : 0;   // 只有最近那一次換級（原圖→縮一半）交叉淡換：那條分界在登山客腳邊最明顯，更遠的換級只剩幾像素看不出來（省效能）
-  const nx = mipN(kx), ny = ny0 + (step ? 1 : 0), L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1;
+  const nx = mipN(kx), ny = ny0 + (step ? 1 : 0), L = nx || ny ? texLevel(T, nx, ny) : null, p = patOf(L || T.T || T), sx = L ? L.sx : 1, sy = L ? L.sy : 1;
   const v0 = (((zn % T.m) + T.m) % T.m) * r, u0 = uc * r, m = TEX_MTX || new DOMMatrix();
   m.a = kx * sx; m.b = 0; m.c = c * sy; m.d = d * sy; m.e = xn - kx * u0 - c * v0; m.f = yn - d * v0;
   p.setTransform(m);
@@ -500,16 +510,17 @@ function drawTurf(i, j, y1, y2, s1, fq, fade, DS, gw){
         if (aN < 0.01 && !far) continue;
         proj(j, (q + 0.1 + 0.8 * Hh(i * 3 + q, n + side * 50)) / TURF_R, false);
         const d = d0 + (n ? (Hh(i * 5 + q, n + side * 40) - 0.5) * step : 0), x = gx + side * d * gs, dwN = spN.w * gs * sc, dwF = far ? spF.w * gs * sc : 0;
-        if (side < 0 ? x + Math.max(dwN * 0.5, dwF * 0.5 - step * gs) < 0 : x - Math.max(dwN * 0.5, dwF * 0.5 + step * gs) > W) break;
+        const tm = cullPad(Math.max(dwN, dwF), Math.max(spN.hm, spF.hm) * gs * sc);   // 往外整排都出了畫面（含安全邊）才停
+        if (side < 0 ? x + Math.max(dwN * 0.5, dwF * 0.5 - step * gs) + tm < 0 : x - Math.max(dwN * 0.5, dwF * 0.5 + step * gs) - tm > W) break;
         while (k < nS - 2 && d >= DS[k + 1]) k++;
         const lv = tLvS[(side + 1) * 4 + k], y = gy - terrH(i, side, d) * gs;
         if (aN >= 0.01) {
           const dh = spN.hm * gs * sc, v = TN[lv], sp = v[(Hh(i * 7 + q, n) * v.length) | 0];
-          if (y - dh < H && y > 0) { ctx.globalAlpha = aN; ctx.drawImage(mip(sp.c, dwN * DPR), x - dwN * 0.5, y - dh, dwN, dh); }
+          if (!offView(x - dwN * 0.5, y - dh, dwN, dh)) { ctx.globalAlpha = aN; ctx.drawImage(mip(sp.c, dwN * DPR), x - dwN * 0.5, y - dh, dwN, dh); }
         }
         if (far) {
           const dF = d + step, xF = gx + side * dF * gs, yF = gy - terrH(i, side, dF) * gs, dh = spF.hm * gs * sc, v = TF[lv], sp = v[(Hh(i * 7 + q, n) * v.length) | 0];
-          if (yF - dh < H && yF > 0) { ctx.globalAlpha = aF; ctx.drawImage(mip(sp.c, dwF * DPR), xF - dwF * 0.5, yF - dh, dwF, dh); }
+          if (!offView(xF - dwF * 0.5, yF - dh, dwF, dh)) { ctx.globalAlpha = aF; ctx.drawImage(mip(sp.c, dwF * DPR), xF - dwF * 0.5, yF - dh, dwF, dh); }
         }
       }
     }
@@ -1186,14 +1197,32 @@ function drawFG(t){
 }
 
 // ═════════ 對外：初始化／尺寸／換山 ═════════
-S.init = function(canvas){ cv = canvas; ctx = cv.getContext('2d'); if (!SHADOW) buildStatic(); S.resize(); };
+// 畫筆：能用 WebGL 就用（js/gl2d.js，一格幾十批送顯示卡），不支援或建立失敗就用 Canvas 2D（跟以前一樣）
+// 網址加 ?gl=0（或 localStorage sx_gl = '0'）強制用 Canvas 2D：開發者測試、比對兩邊畫面用，玩家看不到
+const GL_OFF = /[?&]gl=0\b/.test(location.search) || (function(){ try { return localStorage.getItem('sx_gl') === '0'; } catch (e) { return false; } })();
+S.init = function(canvas){
+  cv = canvas; if (!SHADOW) buildStatic();
+  glc = !GL_OFF && SX.gl2d ? SX.gl2d.create(cv) : null;
+  if (glc) { glc.onLost = function(){ useGL(false); }; glc.onRestored = function(){ useGL(true); }; }   // 顯示卡掉了：馬上換 Canvas 2D 接著畫；恢復了再換回來
+  useGL(!!glc);
+};
+// 換畫筆：顯示哪一張畫布、ctx 指向誰；漸層、遠景快取跟著重做
+function useGL(on){
+  on = !!(on && glc && !glc.lost);
+  ctx = on ? glc : (c2d || (c2d = cv.getContext('2d')));
+  ocv = on ? glc.canvas : cv;
+  if (glc) glc.canvas.style.display = on ? '' : 'none';
+  FGRIM = {}; RAYS = null; farReset(); S.resize();
+}
+S.gl = function(on){ if (on != null) useGL(on); return { on:!!(ctx && ctx.gpu), ok:!!glc, stats:ctx && ctx.gpu ? ctx.stats() : null }; };   // 測試掛鉤：現在用哪一種畫筆、這一格送了幾批（給 true／false 直接換）
 S.resize = function(){
-  if (!cv) return;
+  if (!cv || !ocv) return;
   const p = cv.parentElement, bw = p ? p.clientWidth : 0, bh = p ? p.clientHeight : 0, rc = (bw && bh) ? null : cv.getBoundingClientRect();
   const w = Math.max(1, Math.round(bw || (rc && rc.width) || 375)), h = Math.max(1, Math.round(bh || (rc && rc.height) || 812));
   const d = Math.min(Math.max(QUAL.dpr[qs.lvl], snapDpr), window.devicePixelRatio || 1);   // 解析度：自動畫質那一級的上限（最高 2 倍）；拍照那一格至少 snapDpr
-  if (w === W && h === H && d === DPR && RAYS && cv.width === Math.round(w * d)) return;
-  W = w; H = h; DPR = d; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  if (w === W && h === H && d === DPR && RAYS && ocv.width === Math.round(w * d)) return;
+  W = w; H = h; DPR = d; ocv.width = Math.round(W * DPR); ocv.height = Math.round(H * DPR);
+  if (ocv !== cv && cv.width > 1) cv.width = cv.height = 1;   // 用 WebGL 時 #cv 只接點擊，不佔記憶體
   F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * HORF); CAMH = FOOTF * H * HZ / F; U = H / 812;   // 鏡頭高度由「登山客腳底在畫面的位置」反推
   buildRays(); if (SHOW_FG) buildFG(); FGRIM = {}; farReset();   // 尺寸變了：遠景快取重做
   // 暗角：中心放在登山客和前方步道之間，四角壓暗一點，視線自然落在人和路上
@@ -1536,7 +1565,7 @@ function drawMate(mt, j, f, t, fade){
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
     const drawn = heroArt(ctx, { rest:mt.rest }, t, tintFilter(hashStr(mt.name)));
-    if (!drawn) { if (mt.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
+    if (!drawn) on2D(function(c){ if (mt.rest) heroRest(c, t); else heroWalk(c, t); });
   } finally {
     ctx.restore();
     [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols; Object.assign(hero, sv);
@@ -1572,12 +1601,28 @@ function petArt(s, x, y, u, t){
 function drawPet(s, x, y, u, t){
   if (!s.pet) return;
   if (petArt(s, x, y, u, t)) return;
-  if (s.pet === 'shiba') { drawDog(x, y, u * 0.98, s, t); return; }
-  if (s.pet === 'magpie') { drawBird(x, y, u, s, t); return; }
+  if (s.pet === 'shiba') { on2D(function(){ drawDog(x, y, u * 0.98, s, t); }); return; }
+  if (s.pet === 'magpie') { on2D(function(){ drawBird(x, y, u, s, t); }); return; }
   const pc = PET_COL[s.pet]; if (!pc) return;
   const keep = [DOG_L, DOG_S, CRM_L, CRM_S];
   [DOG_L, DOG_S, CRM_L, CRM_S] = pc;
-  try { drawDog(x, y, u * (s.pet === 'bear' ? 1.12 : 0.92), s, t); } finally { [DOG_L, DOG_S, CRM_L, CRM_S] = keep; }
+  try { on2D(function(){ drawDog(x, y, u * (s.pet === 'bear' ? 1.12 : 0.92), s, t); }); } finally { [DOG_L, DOG_S, CRM_L, CRM_S] = keep; }
+}
+// 沒有美術圖時程式畫的角色（備用畫法）用到 Path2D、clip，WebGL 畫筆不做這些：
+// 先畫在一張跟畫面一樣大的 2D 畫布（變換、不透明度照 WebGL 畫筆現在的），再整張貼上。Canvas 2D 時直接畫
+let SCR = null;
+function on2D(fn){
+  if (!ctx.gpu) return fn(ctx);
+  const gc = ctx, w = ocv.width, h = ocv.height, m = gc.m;
+  if (!SCR || SCR.width !== w || SCR.height !== h) { free(SCR); SCR = mk(w, h); }
+  const g = SCR.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); g.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.lineJoin = g.lineCap = 'round';
+  let r; ctx = g;
+  try { r = fn(g); } finally { ctx = gc; }
+  gc.drop(SCR);   // 內容每次都不一樣：重新傳
+  gc.save(); gc.setTransform(1, 0, 0, 1, 0, 0); gc.drawImage(SCR, 0, 0); gc.restore();
+  return r;
 }
 function drawBird(x, y, u, s, t){
   const c = ctx, mv = hero.mv, hop = mv > 0.3 ? Math.abs(Math.sin(hero.ph * 1.5)) * 9 : Math.abs(Math.sin(t * 1.7)) * 2;
@@ -1642,7 +1687,7 @@ function drawHero(s, t, bx, by, bs){
   else ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
   ctx.save(); ctx.translate(X, Y); if (tn) ctx.rotate(tn * TURN_A); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 轉彎往內側傾（以腳底為軸）；爬階梯：身體往前傾，從背後看起來矮一點點
-  if (!heroArt(ctx, s, t, undefined, true)) { if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
+  if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
   ctx.restore();
 }
 
@@ -1751,8 +1796,9 @@ function sprShadow(sp){
   return (sp.sd = { c:c, x:x0, y:y0, w:x1 - x0, h:y1 - y0 });
 }
 function drawSpr(sp, x, y, sc, fq, sh, a){
-  const dw = sp.w * sc, dh = sp.hm * sc, k = a * clamp((dh - 2) / 2.5, 0, 1) * clamp(gz - 0.5, 0, 1); if (k < 0.01) return;
-  const x0 = x - dw * 0.5; if (x0 > W || x0 + dw < 0 || y - dh > H || y < 0) return;
+  // 只有在鏡頭後面（真正的距離被 proj 壓到下限）才不畫；鏡頭前再近都照原本大小畫，自己滑出畫面（以前離鏡頭 1.5 公尺內慢慢變透明，畫面邊緣的東西會提早不見）
+  const dw = sp.w * sc, dh = sp.hm * sc, k = a * clamp((dh - 2) / 2.5, 0, 1) * (gz > NEAR_GZ ? 1 : 0); if (k < 0.01) return;
+  const x0 = x - dw * 0.5; if (offView(x0, y - dh, dw, dh)) return;
   sh *= 1 - qs.light;
   if (sh > 0.01) {   // 地面影子＋接觸陰影：每種東西先合成一張（sprShadow），一次畫完（以前每棵樹、每叢草都要畫兩次）
     const d = sp.sd || sprShadow(sp);
@@ -1765,6 +1811,10 @@ function drawSpr(sp, x, y, sc, fq, sh, a){
 }
 // 遠端淡入：離鏡頭 J 段以外看不到，往內 n 段慢慢出現。用連續的距離（pZ）算，不是用段號：段號每走 1.6 公尺跳一格，淡入也會一格一格跳
 // 階梯：第 j 段 f 處的比例（每公尺幾像素）和畫面 x
+// 畫面外判斷：用畫出來的整個範圍（含影子）外面再多留 寬高較大者 × 0.6 + 120 像素，整個東西都在那之外才不畫（check 會檢查）
+const CULL_K = 0.6, CULL_PAD = 120, NEAR_GZ = 0.06;
+function cullPad(w, h){ return Math.max(w, h) * CULL_K + CULL_PAD; }
+function offView(x0, y0, w, h){ const m = cullPad(w, h); return x0 - m > W || x0 + w + m < 0 || y0 - m > H || y0 + h + m < 0; }
 function stepS(j, f){ return F / (pZ[j] + f * (pZ[j + 1] - pZ[j])); }
 function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * s; }
 function farA(j, J, n){ return clamp((J * SEG - pZ[j]) / (n * SEG), 0, 1); }
@@ -1843,7 +1893,8 @@ function drawRail(i, j, fi, fade, fq){
   for (let side = -1; side <= 1; side += 2) {
     proj(j + 1, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + 1, side, RAIL_D) * gs, sb = gs;
     proj(j, 0, false); const xa = gx + side * RAIL_D * gs, ya = gy - terrH(i, side, RAIL_D) * gs, sa = gs;
-    if (side < 0 ? Math.max(xa, xb) < -4 : Math.min(xa, xb) > W + 4) continue;
+    const rm = cullPad(RAIL_H * Math.max(sa, sb), RAIL_H * Math.max(sa, sb));
+    if (side < 0 ? Math.max(xa, xb) < -rm : Math.min(xa, xb) > W + rm) continue;
     const ta = Math.max(1, 0.07 * sa), tb = Math.max(0.8, 0.07 * sb);
     for (let q = 0; q < 2; q++) {               // 扶手（亮）＋中間橫木（暗）
       const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb;
@@ -1864,7 +1915,8 @@ function railArt(i, j, fade, fq){
   for (let side = -1; side <= 1; side += 2) {
     proj(j + 1, 0, false); const x1 = gx + side * RAIL_D * gs, y1 = gy - terrH(i + 1, side, RAIL_D) * gs, s1 = gs;
     proj(j, 0, false); const xa = gx + side * RAIL_D * gs, ya = gy - terrH(i, side, RAIL_D) * gs, sa = gs;
-    if (side < 0 ? Math.max(xa, x1) < -4 : Math.min(xa, x1) > W + 4) continue;
+    const rm = cullPad(RAIL_H * Math.max(sa, s1), RAIL_H * Math.max(sa, s1));
+    if (side < 0 ? Math.max(xa, x1) < -rm : Math.min(xa, x1) > W + rm) continue;
     if (post) {   // 從這根柱子拉一整根橫木到下一根柱子（一根圖畫一次，柱子之間是直的）
       const sp = !half && railOn(i + 1) ? 2 : 1;
       proj(j + sp, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + sp, side, RAIL_D) * gs, sb = gs;
@@ -1876,11 +1928,11 @@ function railArt(i, j, fade, fq){
           const a = hz ? qa * fq : qa; if (a < 0.01) continue;
           const img = mip(hz ? B.h : B.c, len * DPR), sw = img.width, sh = img.height;
           ctx.globalAlpha = a;
-          ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa, DPR * (ha - th * 0.5));
+          ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa + OX, DPR * (ha - th * 0.5) + OY);
           ctx.drawImage(img, 0, 0);
         }
       }
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.setTransform(DPR, 0, 0, DPR, OX, OY);
     }
     const ps = 0.5 * farA(j, 24, 6);   // 柱子的影子只畫近處（遠處柱子細到看不出影子）
     if (!railOn(i + 1)) { proj(j + 1, 0, false); drawSpr(P, x1, y1, s1, fq, ps, A); }   // 欄杆終點
@@ -1942,7 +1994,7 @@ function drawWorld(b, t, jHi, jLo, far){
     const lod = j > jLo && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1;
     if (lod) { lodSave(j); lodSkip = true; }
     // 整段地面都在畫面下緣以外：不畫地面，但路旁的樹、草叢照畫（高的樹根部在畫面外、樹冠還看得到），讓它們自己滑出畫面邊緣
-    const y2 = pY[j + 1], below = y2 > H + 80;
+    const y2 = pY[j + 1], below = y2 - 0.6 * pS[j + 1] > H + 80;   // 遠端往上 0.6 公尺（路邊的草叢、土坎）也在畫面下緣以外才算
     if (!heroDone && !benchO && j < jhG) { drawHero(s, t); heroDone = true; }
     const i = b + j, y1 = pY[j], s1 = pS[j], s2 = pS[j + 1], x1 = pX[j], x2 = pX[j + 1], z0 = i * SEG, zj = pZ[j] / SEG;   // zj：這段離鏡頭幾段（連續的，給淡入淡出用）
     const fx = clamp((pZ[j] - fogD0) / (fogD - fogD0), 0, 1), fq = fx * (2 - fx), fi = (fq * (FOGN - 1)) | 0;   // 空氣透視：中景就開始變淡（先快後慢），山坡才會融進遠山
@@ -2164,7 +2216,7 @@ function drawWorld(b, t, jHi, jLo, far){
       const sc = gs * (0.9 + 0.25 * Hh(i, 234)), y = gy - terrH(i, side, xo) * gs, ta = clamp((sp.hm * sc - y) / (90 * U), 0, 1);
       if (ta > 0.01) drawSpr(sp, gx + side * xo * gs, y, sc, fq, farA(j, 50, 8), hA * ta);
     }
-    if (!below && farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq);
+    if (farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq);   // 欄杆有一公尺多高：這段地面在畫面下面時欄杆可能還看得到，照畫（畫面外判斷在 drawRail 裡）
     // 路緣的草叢／蕨類：故意往路面內側蓋過路緣 15～25% 的寬度，路邊才不會是一條筆直的線
     const eA = cleared(i, 0) && z0 > total ? 0 : fade * farA(j, EDGE_J, 8);   // 路緣草叢：最遠 8 段慢慢淡入；山頂再過去沒有
     if (eA > 0.005) for (let side = -1; side <= 1; side += 2) {
@@ -2212,7 +2264,10 @@ function farCopy(d, s){ d.pC.set(s.pC); d.pW.set(s.pW); d.pZ.set(s.pZ); d.pS.set
 const LIVE = { get pC(){ return pC; }, get pW(){ return pW; }, get pZ(){ return pZ; }, get pS(){ return pS; }, get pX(){ return pX; }, get pY(){ return pY; }, get b(){ return bG; }, get off(){ return offG; }, get camX(){ return camX; }, get camY(){ return camY; } };
 function farUse(S0){ pC.set(S0.pC); pW.set(S0.pW); pZ.set(S0.pZ); pS.set(S0.pS); pX.set(S0.pX); pY.set(S0.pY); bG = S0.b; offG = S0.off; camX = S0.camX; camY = S0.camY; }
 function farReset(){ FAR.cur = -1; FAR.ok = false; }
-function farCanvas(c){ if (!c || c.width !== cv.width || c.height !== cv.height) { free(c); c = mk(cv.width, cv.height); } return c; }
+// 遠景快取的畫布比畫面四邊各大 FAR_PAD（CSS 像素）：跨出畫面邊緣的樹、草不會在快取的邊上被切掉，鏡頭移動後貼上去也不會露出切口
+const FAR_PAD = 48;
+function farPadPx(){ return Math.round(FAR_PAD * DPR); }
+function farCanvas(c){ const p = farPadPx() * 2; if (!c || c.width !== cv.width + p || c.height !== cv.height + p) { free(c); c = mk(cv.width + p, cv.height + p); } return c; }
 // 舊鏡頭的一點 (x0,y0) 對到新鏡頭 (x1,y1)：三組點解出 a b c d e f（x' = a x + c y + e、y' = b x + d y + f）
 function farFit(){
   const F0 = FAR.front, jo = F0.iK - F0.b, jc = F0.iK - bG;
@@ -2233,9 +2288,9 @@ function farFit(){
 }
 // 這一格：貼上遠景快取，回傳現場要從第幾段開始畫（沒有可用的快取就回 DRAW - 1，整段現場畫）
 function farBlit(){
-  if (!FAR.on || !FAR.ok || !FAR.fc || FAR.fc.width !== cv.width || FAR.fc.height !== cv.height || !farFit()) return DRAW - 1;
+  if (ctx.gpu || !FAR.on || !FAR.ok || !FAR.fc || FAR.fc.width !== cv.width + farPadPx() * 2 || FAR.fc.height !== cv.height + farPadPx() * 2 || !farFit()) return DRAW - 1;   // WebGL 一格整段現場畫就夠快，不用快取（也沒有快取的位移誤差）
   const A = FAR.A, F0 = FAR.front;
-  ctx.globalAlpha = 1; ctx.transform(A[0], A[1], A[2], A[3], A[4], A[5]); ctx.drawImage(FAR.fc, 0, 0, W, H); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalAlpha = 1; ctx.transform(A[0], A[1], A[2], A[3], A[4], A[5]); ctx.drawImage(FAR.fc, -FAR_PAD, -FAR_PAD, W + FAR_PAD * 2, H + FAR_PAD * 2); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   for (let k = 0; k < F0.hits.length; k++) {   // 遠處道具的點擊範圍跟著位移
     const o = F0.hits[k], h = hits[hitN] || (hits[hitN] = { o:{ type:'', m:0 }, x:0, y:0, w:0, h:0, cx:0, top:0 }); hitN++;
     h.o.type = o.type; h.o.m = o.m; h.x = A[0] * o.x + A[2] * o.y + A[4]; h.y = A[3] * o.y + A[5]; h.w = o.w * A[0]; h.h = o.h * A[3]; h.cx = A[0] * o.cx + A[2] * o.top + A[4]; h.top = A[3] * o.top + A[5];
@@ -2244,7 +2299,7 @@ function farBlit(){
 }
 // 畫完這一格之後：後台那張再畫一截（鏡頭有動、或這張太舊才開始做新的）
 function farStep(t, dt){
-  if (!FAR.on || !cv) return;
+  if (ctx.gpu || !FAR.on || !cv) return;
   FAR.age += dt;
   if (FAR.cur < 0) {
     const F0 = FAR.front, moved = !FAR.ok || F0.b !== bG || Math.abs(F0.off - offG) > 1e-4 || Math.abs(F0.camX - camX) > 1e-4 || Math.abs(F0.camY - camY) > 1e-4;
@@ -2258,10 +2313,11 @@ function farStep(t, dt){
   farCopy(FAR.live, LIVE); farUse(B);
   ctx = FAR.bc.getContext('2d');
   try {
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
+    OX = OY = farPadPx();
+    ctx.setTransform(DPR, 0, 0, DPR, OX, OY); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
     drawWorld(B.b, B.t, FAR.cur, jLo, true);
     for (let k = h0; k < hitN; k++) { const h = hits[k]; B.hits.push({ type:h.o.type, m:h.o.m, x:h.x, y:h.y, w:h.w, h:h.h, cx:h.cx, top:h.top }); }
-  } finally { ctx = mainCtx; hitN = h0; farUse(FAR.live); }
+  } finally { ctx = mainCtx; hitN = h0; OX = OY = 0; farUse(FAR.live); }
   FAR.cur = jLo - 1;
   if (FAR.cur < FAR.jK) {   // 這張畫完了：換上去
     const c = FAR.fc; FAR.fc = FAR.bc; FAR.bc = c;
@@ -2334,8 +2390,9 @@ function drawSnow(t, a){
   }
   ctx.globalAlpha = 1;
 }
+const FOG_TINT = 'rgb(232,238,238)', FOG_TA = 0.2;   // 霧天整片蓋一層灰白（WebGL 時併進最後的整體調色，少畫一次全螢幕）
 function fogBands(t, dist){
-  ctx.fillStyle = 'rgba(232,238,238,0.2)'; ctx.fillRect(0, 0, W, H);
+  if (!ctx.gpu) { ctx.globalAlpha = FOG_TA; ctx.fillStyle = FOG_TINT; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   const T = tileSets[palA]; if (!T) return;
   for (let k = 0; k < 3; k++) tile(T.c[0], t * (6 + k * 4) + k * 211 + headAt(dist) * F, HOR - 70 * U + k * 95 * U, 200 * U, 0.3);
 }
@@ -2386,6 +2443,7 @@ S.render = function(s){
   curS = s; curT = t;
   if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
   updPalette(wx, frac, dt); updHero(s, t, dt, dist, sp); stepMates(dt);
+  if (ctx.gpu) ctx.begin();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
   const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b; offG = off; bG = b;
@@ -2409,15 +2467,19 @@ S.render = function(s){
   if (isFog) fogBands(t, dist);
   if (SHOW_FG) drawFG(t);
   // 整體調色（時間／天氣），之後再疊發光的東西
-  if (cGrade[0] < 250 || cGrade[1] < 250 || cGrade[2] < 250) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = css(cGrade); ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   // 午後暖光濾鏡：整個世界（含前景框）蓋一層從右上來的暖金柔光，不同批美術圖才會在同一個色溫裡；晚上、雨天不加
   const wa = isNight ? 0 : WARM_A * sunVis;
-  if (wa > 0.01 && WARM) { ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = wa; ctx.fillStyle = WARM; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+  if (ctx.gpu) ctx.grade(cGrade, isFog ? FOG_TA : 0, FOG_TINT, wa, WARM, DPR);   // WebGL：霧的灰白、時間天氣調色、暖光一次全螢幕處理
+  else {
+    if (cGrade[0] < 250 || cGrade[1] < 250 || cGrade[2] < 250) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = css(cGrade); ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+    if (wa > 0.01 && WARM) { ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = wa; ctx.fillStyle = WARM; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+  }
   drawLights(t);
   if (isRain) drawRain(t);
   if (snowFall > 0.02) drawSnow(t, snowFall);
   drawParts(dt);
   if (vig) { ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H); }
+  if (ctx.gpu) ctx.flush();   // WebGL：這一格剩下的一次送出去
   if (s.dt > 0) { farStep(t, dt); warmStep(); }   // 畫完這一格：遠景快取再畫一截、剩下的時間慢慢預先做之後會用到的圖
 };
 
@@ -2451,7 +2513,7 @@ const PHOTO_COMPS = [
 const SNAP_DPR = 1.5;   // 拍照那一格的解析度至少這麼多倍（自動畫質把畫面降到 1 倍以下時，照片才不會糊）
 let snapDpr = 0;
 S.snapshot = function(dist){
-  if (!cv || !curS) return '';
+  if (!ocv || !curS) return '';
   const F0 = F;
   try {
     if (DPR < SNAP_DPR) { snapDpr = SNAP_DPR; S.resize(); }
@@ -2460,13 +2522,13 @@ S.snapshot = function(dist){
     F = F0 * comp.lens;   // 只為這張照片換鏡頭，下面 finally 一定換回來，下一格畫面照舊
     S.render(Object.assign({}, curS, { dt:0, dist:d, frac:d / total }));
     // 照片比例跟相簿拍立得框（css .pol img 的 aspect-ratio）一樣，框裡才不會再被裁掉、只剩頭和背包
-    const sw = cv.width, sh = cv.height;
+    const sw = ocv.width, sh = ocv.height;
     const fx = hero.sx * DPR, fy = hero.sy * DPR, hh = (hero.sy - hero.top) * DPR;   // 腳底位置、身高（畫布像素）
     const need = hh * PHOTO_AR / (sw * (comp.fy - 0.08));                              // 整個人（頭頂留 8%）放得進去的最小寬度比例
     const cw = Math.round(sw * clamp(Math.max(comp.zw, need), 0.4, 1)), ch = Math.min(sh, Math.round(cw / PHOTO_AR));
     const left = clamp(Math.round(fx - comp.fx * cw), 0, sw - cw), top = clamp(Math.round(fy - comp.fy * ch), 0, sh - ch);
     const ow = Math.min(600, cw), oh = Math.round(ow / PHOTO_AR), c = mk(ow, oh), g = c.getContext('2d');
-    g.drawImage(cv, left, top, cw, ch, 0, 0, ow, oh);
+    g.drawImage(ocv, left, top, cw, ch, 0, 0, ow, oh);   // WebGL 畫布：同一段程式裡剛畫完、還沒交給螢幕，讀得到這一格
     // 檢查有沒有畫出東西改讀這張小照片，不讀登山畫面本身：一直從主畫布讀像素，瀏覽器可能把它改成較慢的繪製方式
     const px = g.getImageData(ow >> 1, oh >> 2, 1, 1).data;
     const url = px[3] === 0 ? '' : c.toDataURL('image/jpeg', 0.74);   // 還是沒畫出東西：不要存一張黑照片
