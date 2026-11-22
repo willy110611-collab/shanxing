@@ -309,7 +309,10 @@ P.gradTex = function(gd, unpre){
 // 這一筆的填法：純色回 null（顏色寫在 this.fc），貼圖或漸層回貼圖、並把「畫面像素 → 貼圖 uv」寫進 TU
 P.style = function(s){
   const ga = this.globalAlpha;
-  if (typeof s === 'string') { const c = parseColor(s); this.fc = pack(c[0], c[1], c[2], c[3] * ga, this.add); return null; }
+  if (typeof s === 'string') {   // 同一個顏色、同樣的不透明度（地面一段一段常常連續好幾筆一樣）不重算
+    if (s !== this.ls || ga !== this.lga || this.add !== this.la) { const c = parseColor(s); this.lc = pack(c[0], c[1], c[2], c[3] * ga, this.add); this.ls = s; this.lga = ga; this.la = this.add; }
+    this.fc = this.lc; return null;
+  }
   this.fc = pack(1, 1, 1, ga, this.add);
   if (s instanceof Pattern) {
     const t = this.tex(s.img, 'p'); if (!t) return null;
@@ -342,14 +345,19 @@ P.fillRect = function(x, y, w, h){
   const x0 = m[0] * x + m[2] * y + m[4], y0 = m[1] * x + m[3] * y + m[5], ax = m[0] * w, ay = m[1] * w, bx = m[2] * h, by = m[3] * h;
   this.quad(x0, y0, x0 + ax, y0 + ay, x0 + ax + bx, y0 + ay + by, x0 + bx, y0 + by, t);
 };
-// 四個畫面像素角（依序）畫成兩個三角形，t 有的話 uv 用 TU 算
+// 要寫 k 個頂點：先確定這一批放得下（放不下先送出），再決定用第幾張貼圖（t 沒有＝純色）
+P.open = function(k, t){ if (this.n + k > CAP) this.flush(); this.ts = t ? this.slot(t) : SOLID; };
+// 寫一個頂點：顏色 this.fc；有貼圖時 uv 用 TU 從畫面像素算
+P.pv = function(x, y){
+  const f = (this.n++) * 6, f32 = this.f32, s = this.ts;
+  f32[f] = x; f32[f + 1] = y;
+  if (s === SOLID) { f32[f + 2] = 0; f32[f + 3] = 0; } else { f32[f + 2] = TU[0] * x + TU[2] * y + TU[4]; f32[f + 3] = TU[1] * x + TU[3] * y + TU[5]; }
+  this.u32[f + 4] = this.fc; this.u32[f + 5] = s;
+};
+// 四個畫面像素角（依序）畫成兩個三角形
 P.quad = function(x0, y0, x1, y1, x2, y2, x3, y3, t){
-  this.room(6);
-  const c = this.fc;
-  if (!t) { this.v(x0, y0, 0, 0, c, SOLID); this.v(x1, y1, 0, 0, c, SOLID); this.v(x2, y2, 0, 0, c, SOLID); this.v(x0, y0, 0, 0, c, SOLID); this.v(x2, y2, 0, 0, c, SOLID); this.v(x3, y3, 0, 0, c, SOLID); return; }
-  const s = this.slot(t), U = TU;
-  const u = (x, y) => this.v(x, y, U[0] * x + U[2] * y + U[4], U[1] * x + U[3] * y + U[5], c, s);
-  u(x0, y0); u(x1, y1); u(x2, y2); u(x0, y0); u(x2, y2); u(x3, y3);
+  this.open(6, t);
+  this.pv(x0, y0); this.pv(x1, y1); this.pv(x2, y2); this.pv(x0, y0); this.pv(x2, y2); this.pv(x3, y3);
 };
 P.drawImage = function(img, a, b, c, d, e, f, g, h){
   if (!img) return;
@@ -361,7 +369,7 @@ P.drawImage = function(img, a, b, c, d, e, f, g, h){
   else { dx = a; dy = b; dw = iw; dh = ih; }
   if (!(this.globalAlpha > 0)) return;
   const add = this.blendFor(), t = this.tex(img, 's'); if (!t) return;
-  this.room(6);
+  if (this.n + 6 > CAP) this.flush();
   const col = pack(1, 1, 1, this.globalAlpha, add), s = this.slot(t), m = this.m;
   const u0 = sx / iw, v0 = sy / ih, u1 = (sx + sw) / iw, v1 = (sy + sh) / ih;
   const x0 = m[0] * dx + m[2] * dy + m[4], y0 = m[1] * dx + m[3] * dy + m[5], ax = m[0] * dw, ay = m[1] * dw, bx = m[2] * dh, by = m[3] * dh;
@@ -425,18 +433,16 @@ P.roundRect = function(x, y, w, h, r){
 P.fill = function(){
   this.st.calls++; this.st.frameCalls++;
   this.add = this.blendFor();
-  const t = this.style(this.fillStyle), px = this.px, subs = this.subs, c = this.fc, s = t ? this.slot(t) : SOLID, U = TU;
-  const V = t ? (x, y) => this.v(x, y, U[0] * x + U[2] * y + U[4], U[1] * x + U[3] * y + U[5], c, s) : (x, y) => this.v(x, y, 0, 0, c, SOLID);
+  const t = this.style(this.fillStyle), px = this.px, subs = this.subs;
   for (let k = 0; k < subs.length; k++) {
     const a = subs[k], b = k + 1 < subs.length ? subs[k + 1] : this.pn, n = (b - a) >> 1;
     if (n < 3) continue;
-    this.room(n * 3 + 3);
-    if (t && this.slots[s] !== t) { this.slot(t); }
+    this.open(n * 3 + 3, t);
     if (n <= 4) {
-      for (let i = 1; i < n - 1; i++) { V(px[a], px[a + 1]); V(px[a + i * 2], px[a + i * 2 + 1]); V(px[a + i * 2 + 2], px[a + i * 2 + 3]); }
+      for (let i = 1; i < n - 1; i++) { this.pv(px[a], px[a + 1]); this.pv(px[a + i * 2], px[a + i * 2 + 1]); this.pv(px[a + i * 2 + 2], px[a + i * 2 + 3]); }
     } else {
       let mx = 0, my = 0; for (let i = a; i < b; i += 2) { mx += px[i]; my += px[i + 1]; } mx /= n; my /= n;
-      for (let i = 0; i < n; i++) { const p = a + i * 2, q = a + ((i + 1) % n) * 2; V(mx, my); V(px[p], px[p + 1]); V(px[q], px[q + 1]); }
+      for (let i = 0; i < n; i++) { const p = a + i * 2, q = a + ((i + 1) % n) * 2; this.pv(mx, my); this.pv(px[p], px[p + 1]); this.pv(px[q], px[q + 1]); }
     }
   }
 };
@@ -460,10 +466,9 @@ P.stroke = function(){
   }
 };
 P.disc = function(x, y, r, t){
-  const n = Math.max(6, Math.min(24, Math.ceil(Math.sqrt(r) * 4))), c = this.fc, s = t ? this.slot(t) : SOLID, U = TU;
-  this.room(n * 3);
-  const V = t ? (X, Y) => this.v(X, Y, U[0] * X + U[2] * Y + U[4], U[1] * X + U[3] * Y + U[5], c, s) : (X, Y) => this.v(X, Y, 0, 0, c, SOLID);
-  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, b = (i + 1) / n * Math.PI * 2; V(x, y); V(x + Math.cos(a) * r, y + Math.sin(a) * r); V(x + Math.cos(b) * r, y + Math.sin(b) * r); }
+  const n = Math.max(6, Math.min(24, Math.ceil(Math.sqrt(r) * 4)));
+  this.open(n * 3, t);
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, b = (i + 1) / n * Math.PI * 2; this.pv(x, y); this.pv(x + Math.cos(a) * r, y + Math.sin(a) * r); this.pv(x + Math.cos(b) * r, y + Math.sin(b) * r); }
 };
 P.strokeRect = function(x, y, w, h){ this.beginPath(); this.rect(x, y, w, h); this.stroke(); this.beginPath(); };
 
