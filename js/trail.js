@@ -508,6 +508,7 @@ function buildSprites(){
 }
 
 // ═════════ 世界生成：彎道、坡度、道具位置（每座山固定） ═════════
+const SWAY = 0.022;      // 平緩左右擺動的強度（每段轉向量；約 50 公尺換一次方向，不會暈）
 function buildCurves(m){
   const r = mkrng(seed ^ 0x9e3779b9), rt = m.route; let i;
   if (rt && rt.length >= 3) {
@@ -522,13 +523,13 @@ function buildCurves(m){
       const c = clamp(ang / lenB * SEG * SEG, -0.03, 0.03), s0 = Math.floor((cum[i] * mpu - lenB / 2) / SEG), cnt = Math.ceil(lenB / SEG);
       for (let k = 0; k < cnt; k++) { const j = s0 + k; if (j >= 0 && j < N) curve[j] += c * 1.57 * Math.sin((k + 0.5) / cnt * Math.PI); }
     }
-    for (i = 0; i < N; i++) curve[i] = clamp(curve[i] + (vn(i * 0.045, 91) - 0.5) * 0.006, -0.032, 0.032);
+    for (i = 0; i < N; i++) curve[i] = clamp(curve[i] + (vn(i * 0.045, 91) - 0.5) * 0.006 + SWAY * (vn(i * 0.022, 92) - 0.5), -0.032, 0.032);   // 加上平緩的左右擺動：直線段也會慢慢彎，路不會一直是畫面正中間一條直地毯
   } else {
     // 沒有路線資料：固定亂數的 S 彎
     i = 8; let sign = r() < 0.5 ? -1 : 1;
     while (i < N) {
       const len = 20 + Math.floor(r() * 45), amp = sign * (0.004 + r() * 0.016);
-      for (let k = 0; k < len && i < N; k++, i++) curve[i] = amp * Math.sin((k + 0.5) / len * Math.PI);
+      for (let k = 0; k < len && i < N; k++, i++) curve[i] = amp * Math.sin((k + 0.5) / len * Math.PI) + SWAY * (vn(i * 0.022, 92) - 0.5);
       i += Math.floor(r() * 14); sign = r() < 0.78 ? -sign : sign;
     }
   }
@@ -547,6 +548,8 @@ function buildElev(m){
   for (let i = 0; i <= N; i++) {
     const stairy = vn(i * 0.028, 11) > STAIR_RUN[tr];          // 約 30～90 公尺一段的連續階梯
     let tg = stairy ? lerp(STAIR_SL[0], STAIR_SL[1], vn(i * 0.05, 12)) : clamp(base * (0.3 + 1.4 * vn(i * 0.035, 7)) + 0.05 * (vn(i * 0.21, 8) - 0.3), 0.04, 0.4);
+    const dip = !stairy && i > 20 ? clamp((vn(i * 0.017, 13) - 0.74) * 5, 0, 1) : 0;   // 偶爾一小段往下（約 30～60 公尺）：先下坡再爬，路才有起伏
+    if (dip > 0) tg = lerp(tg, -0.09, dip);
     if (i >= e) tg *= Math.max(0, 1 - (i - e) / 12);
     sl += (tg - sl) * 0.3;                                       // 坡度慢慢變，階梯段的起訖才不會折成一個尖角
     elev[i + 1] = elev[i] + sl * SEG;
@@ -913,7 +916,7 @@ S.setMountain = function(m){
   const mid = TH.mid || '#5a8a5f', near = TH.near || '#86c06a';
   setHaze();
   VG = { treeL:mixs(mid, '#4f9060', 0.35), treeS:mixs(mid, '#243f4a', 0.55), bushL:mixs(near, '#4f9a58', 0.5), bushS:mixs(mid, '#28484a', 0.45), grassL:mixs(near, '#d8e07a', 0.25), grassS:mixs(near, '#3f6f50', 0.5) };
-  buildCurves(m); buildElev(m); cairns = []; buildProps(); buildPalettes(); buildSprites();
+  buildCurves(m); buildElev(m); buildSlopes(); cairns = []; buildProps(); buildPalettes(); buildSprites();
   for (const k in tileSets) freeTiles(tileSets[k]);
   freePlx();
   tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers();
@@ -941,6 +944,7 @@ S.props = function(fromM, toM){
 };
 S.allProps = function(){ return AP.map(function(o){ return { type:o.type, m:o.m, side:o.side, text:o.text }; }); };   // 測試用：目前這座山所有路旁道具
 S.stepAt = function(){ const out = []; for (let i = 0; i < N; i++) if (stepF[i] && !stepF[i - 1]) out.push(i * SEG); return out; };   // 測試用：階梯段起點（公尺）
+S.edgeAt = function(){ const out = []; for (let i = 1; i <= N; i++) if (edgeK[i] > 0.5 && !(edgeK[i - 1] > 0.5)) out.push({ m:i * SEG, side:dropS[i] }); return out; };   // 測試用：貼著稜線邊緣那幾段的起點（公尺）與往下掉的那一邊
 S.addCairn = function(m, side){ cairns.push({ type:'mycairn', m:Math.max(0, +m || 0), side:side < 0 ? -1 : 1, text:'' }); mergeProps(); };
 S.setCairns = function(list){
   cairns = [];
@@ -1288,8 +1292,22 @@ function terrH(i, side, d){
   if (d <= RW) return 0;
   const bh = bankH(i, side);
   if (d < RW + BANKW) return bh * (d - RW) / BANKW;
-  const u = clamp((d - RW - BANKW) / 9, 0, 1), sm = u * u * (3 - 2 * u);
-  return bh + terrAmp(i, side) * sm + (vn(i * 0.09 + d * 0.21, side > 0 ? 43 : 47) - 0.5) * 0.9 * Math.min(1, (d - RW) / 2);
+  const u = clamp((d - RW - BANKW) / 9, 0, 1), sm = u * u * (3 - 2 * u), q = i < 0 ? 0 : i > N ? N : i, dd = Math.min(d - RW - BANKW, 14);
+  // 橫坡：一邊往上是山壁、一邊往下是山谷；貼著稜線邊緣那幾段，掉下去的那一側離路一公尺外就陡降
+  const cr = side * xSlope[q] * dd * Math.min(1, dd / 1.5), dr = side === dropS[q] ? -edgeK[q] * Math.max(0, dd - 0.8) * 1.1 : 0;
+  return bh + terrAmp(i, side) * sm + cr + dr + (vn(i * 0.09 + d * 0.21, side > 0 ? 43 : 47) - 0.5) * 0.9 * Math.min(1, (d - RW) / 2);
+}
+// 每段的橫坡（正的＝右邊往上）、稜線邊緣程度（0～1）、往下掉的是哪一邊：每座山算一次存起來，畫的時候直接查
+let xSlope = new Float32Array(1), edgeK = new Float32Array(1), dropS = new Int8Array(1);
+function buildSlopes(){
+  xSlope = new Float32Array(N + 1); edgeK = new Float32Array(N + 1); dropS = new Int8Array(N + 1);
+  const al = !!TH.alpine;
+  for (let i = 0; i <= N; i++) {
+    xSlope[i] = (vn(i * 0.011, 33) * 2 - 1) * (al ? 0.32 : 0.5);
+    edgeK[i] = clamp((vn(i * 0.006, 34) - (al ? 0.6 : 0.72)) * 6, 0, 1);       // 高山稜線比較常走在邊緣上
+    dropS[i] = vn(i * 0.003, 35) < 0.5 ? -1 : 1;
+    if (edgeK[i] > 0 && Math.sign(xSlope[i]) === dropS[i]) xSlope[i] *= 1 - edgeK[i];   // 掉下去那一側不會同時是往上的山壁
+  }
 }
 const TDN = [RW, RW + BANKW, RW + 0.6, RW + 1.8, RW + 4.5, RW + 10, 0], TDF = [RW, RW + BANKW, RW + 3, RW + 10, 0];   // 第一格＝土坎切面；近處切細、遠處切粗（最後一格＝稜線邊緣）
 const tX1 = new Float32Array(8), tY1 = new Float32Array(8), tX2 = new Float32Array(8), tY2 = new Float32Array(8), tLv = new Int8Array(8), tSh = new Float32Array(8);
