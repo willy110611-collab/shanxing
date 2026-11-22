@@ -39,8 +39,7 @@
       ['prog','done','stamps','bag','bagLog','quests','cairns','badges','encSeen'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
       if (!SV.stats.magpie || typeof SV.stats.magpie !== 'object') SV.stats.magpie = {};
       if (!SV.pets.includes('shiba')) SV.pets.unshift('shiba');
-      if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
-    }
+      if (SV.cur && !SX.M[SV.cur]) SV.cur = null;    }
   } catch(e){ SV = blank(); }
   let saveWarned = false;
   const skipImg = function(k, v){ return (this === SV && (k === 'photos' || k === 'userPhotos')) ? undefined : v; };
@@ -145,7 +144,8 @@
   // ───────── 季節限定（真實日期，台灣時間；資料在 SX.SEASONS）─────────
   let testDate = null;   // 只給測試掛鉤 SXG.date() 用
   const seasonNow = (date = testDate || new Date()) => SX.seasonsAt(date);
-  const seasonOk = (sid, mid) => { const s = seasonNow().find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(wx.time)); };
+  // w、date：要判斷的天氣時段和日期（離開時的日記用「當時」的），不給就是現在
+  const seasonOk = (sid, mid, w = wx, date) => { const s = seasonNow(date).find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(w.time)); };
   const seasonEnd = s => `${+s.to.slice(0, 2)}/${+s.to.slice(3)}`;
   const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
   function cycleWx(){
@@ -371,7 +371,8 @@
     for (let k = Math.floor(from / 500) * 500 + 500; k <= p.dist && k < m.dist; k += 500) if (!a.marks.includes(k)) a.marks.push(k);
     if (a.marks.length) p.ms = Math.max(p.ms || 0, a.marks[a.marks.length - 1]);   // 回來時不要再跳一次「走了 X 公里，拍一張」
   }
-  // 登山畫面畫好之後才整理日記（要用到這座山的路旁道具和拍照）；奇遇、補拍、包裹只做一次，重開也一樣
+  // 登山畫面畫好之後才整理日記（要用到這座山的路旁道具和拍照）；每次打開日記都跑一次：
+  // 奇遇只抽一次；補拍、包裹只補「還沒做過的」（日記看到一半又併進新的一段，新經過的路標和寶物也要算到）
   function composeAway(a){
     const m = M;
     if (!a.enc) {
@@ -379,7 +380,7 @@
       const n = a.sec >= 4 * 3600 ? 2 : 1;
       for (let i = 0; i < n; i++) {
         const ts = a.t0 + Math.random() * (a.t1 - a.t0), f = (a.from + Math.random() * (a.to - a.from)) / m.dist;
-        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts), a.enc);
+        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts), a.enc, new Date(ts));   // 季節、時段照「當時」算，不是現在
         if (e) { a.enc.push(e.id); noteEncounterSeen(e.id); }
       }
     }
@@ -389,6 +390,8 @@
   }
   const awIco = (id, cls) => `<span class="awI${cls ? ' ' + cls : ''}">${SX.art.img(id, `<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="#f2c35a" stroke="${INK}" stroke-width="1.8"/></svg>`)}</span>`;
   const WX_ART = { sunny:'wx_sun', cloudy:'wx_cloud', fog:'wx_fog', rain:'wx_rain' };
+  // 奇遇的第一句：句號可能落在「」引號裡面，切開後要把引號補回來
+  const firstSentence = s => { const x = s.split('。')[0], open = (x.match(/「/g) || []).length - (x.match(/」/g) || []).length; return x + '」'.repeat(Math.max(0, open)); };
   function awayLines(a){
     const m = M, L = [], km = x => (x / 1000).toFixed(1);
     const up = Math.round(altAt(m, a.to / m.dist) - altAt(m, a.from / m.dist)), summit = a.to >= m.dist - 2.5;
@@ -401,17 +404,17 @@
     for (let ts = a.t0; ts <= a.t1; ts += 1200000) { const w = calcWx(m.id, ts), s = wxText(w) || '晴'; if (!seq.length || seq[seq.length - 1].s !== s) seq.push({ s, w }); }
     const sh = (seq.length > 3 ? [seq[0], seq[seq.length >> 1], seq[seq.length - 1]] : seq).filter((x, i, l) => !i || l[i - 1].s !== x.s);   // 變很多次：只寫開頭、中間、現在
     if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ w.time === 'night' ? 'wx_night' : WX_ART[w.kind], `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
-    (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${e.text.split('。')[0]}。` ]); });
+    (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${firstSentence(e.text)}。` ]); });
     if (summit) L.push([ 'emo_cheer', '已經走到山頂前面了，就等你一起踏上山頂！' ]);
     // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲（登頂那行一定留著）
     for (const id of ['note_post', 'face_happy']) { const i = L.map(x => x[0]).lastIndexOf(id); if (L.length > 6 && i >= 0) L.splice(i, 1); }
     return L;
   }
-  let awayShownV = 0;
+  let awayShown = null;   // 打開日記那一刻的內容（v 版本、走到哪、多久），收起時拿來判斷有沒有又併進新的一段
   function showAway(){
     const a = st.away; if (!a) return;
-    if (!a.enc) composeAway(a);
-    awayShownV = a.v; A.paper();
+    composeAway(a);
+    awayShown = { v:a.v, to:a.to, t1:a.t1, sec:a.sec, naps:a.naps, rests:a.rests }; A.paper();
     const left = a.parcel.filter(k => !st.got['t' + k]), h = Math.floor(a.sec / 3600), mi = Math.round(a.sec % 3600 / 60);
     const pics = a.pics ? SV.photos.filter(p => p.id === M.id && a.shot.includes(p.m)).slice(-3) : [];
     modal(`<h3>你不在的時候</h3><div class="awayD">
@@ -433,7 +436,10 @@
     b.onclick = () => { A.pop(); if (last) { closeModal(); endAway(); } else openParcel(list, i + 1); };
   }
   function endAway(){
-    if (st.away && st.away.v === awayShownV) st.away = null;   // 看日記時又補走了一段：留著，等一下再寫一篇
+    const a = st.away, s = awayShown; awayShown = null;
+    if (a && s && a.v !== s.v) {   // 看日記時又補走了一段：看過的部分拿掉，只留新的那段，等一下再寫一篇
+      Object.assign(a, { from:s.to, t0:s.t1, sec:a.sec - s.sec, naps:a.naps - s.naps, rests:a.rests - s.rests, marks:a.marks.filter(k => k > s.to), shot:[], parcel:a.parcel.filter(k => !st.got['t' + k]), enc:null, pics:0, v:1 });
+    } else if (a) st.away = null;
     closeModal(); save(); checkQuests();
   }
 
@@ -628,11 +634,11 @@
     return SX.art.img('enc_' + e.id, `<svg viewBox="0 0 120 120"><path d="M120 0L70 0 20 120 80 120z" fill="rgba(255,220,130,.3)"/>${g}</svg>`, 'artImg encArt');
   }
   const pickEncounter = () => pickEncounterAt(M.id, st.dist / M.dist, wx, [lastEnc]);
-  // 依山、走到幾成、天氣時段挑一個奇遇（skip：這次不要重複的）
-  function pickEncounterAt(mid, f, wx, skip){
+  // 依山、走到幾成、天氣時段挑一個奇遇（skip：這次不要重複的；date：哪一天，不給就是今天）
+  function pickEncounterAt(mid, f, wx, skip, date){
     const k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     let sum = 0; pool.forEach(e => { sum += encWeight(e); });
@@ -1224,7 +1230,7 @@
     SV.stamps[id] = date; save();
     modal(`<h3>集印帳</h3><div style="width:190px;margin:0 auto 14px;animation:pop .4s cubic-bezier(.34,1.8,.5,1)">${stampSvg(id, date)}</div>
       <p class="summitBig">蓋好了！集印帳裡可以看到。</p><div class="mBtns"><button class="cbtn go" id="sOk">好</button></div>`);
-    $('#sOk').onclick = () => { A.pop(); $('#modal').classList.remove('on'); };
+    $('#sOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };   // 蓋到章：集印帳徽章馬上算
     done();
   });
 
