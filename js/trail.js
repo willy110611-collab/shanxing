@@ -102,9 +102,16 @@ function sprite(wm, hm, ppm, fn){
 const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, onLoad(){} };
 function artSpr(id, hm){
   const c = ART.crop(id); if (!c) return null;
+  groundShade(c);
   const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
   hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
   return { c:c, h:h, w:hm * c.width / c.height, hm:hm, ax:0.5 };
+}
+// 底部壓暗：物件靠近地面的地方比較暗（環境遮蔽），才不會像貼在地上的紙片
+function groundShade(c){
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, c.height, 0, c.height * 0.78);
+  gr.addColorStop(0, 'rgba(40,30,46,0.42)'); gr.addColorStop(1, 'rgba(40,30,46,0)');
+  g.save(); g.globalCompositeOperation = 'source-atop'; g.fillStyle = gr; g.fillRect(0, c.height * 0.78, c.width, c.height * 0.22); g.restore();
 }
 // 有美術圖就用圖（一張），沒有就用程式畫的那組
 function artOr(id, hm, list){ const a = artSpr(id, hm); return a ? [a] : list; }
@@ -279,6 +286,7 @@ function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) ||
 const SIGN_BOARD = { x:0.54, y:0.175, w:0.62, h:0.075, rot:-0.07 };
 function artSignSpr(txt){
   const c0 = ART.crop('sign_wood'); if (!c0) return null;
+  groundShade(c0);
   const c = mk(c0.width, c0.height), g = c.getContext('2d'), B = SIGN_BOARD; g.drawImage(c0, 0, 0);
   g.save(); g.translate(c.width * B.x, c.height * B.y); g.rotate(B.rot);
   let fs = c.height * B.h; g.font = '700 ' + fs + 'px ' + FONT; const tw = g.measureText(txt).width; if (tw > c.width * B.w) { fs *= c.width * B.w / tw; g.font = '700 ' + fs + 'px ' + FONT; }
@@ -293,15 +301,15 @@ function buildSprites(){
   const tL = VG.treeL, tS = VG.treeS;
   SPR.conifer = artOr('tree_pine', 6.8, [0, 1, 2].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, tL, tS); }); }));
   buildTex();
-  if (th.snow && !ART.get('tree_pine')) SPR.coniferS = [0, 1].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }); });
-  SPR.broad = [0, 1].map(function(){ return sprite(4.2, 4.8, 44, function(g){ pBroad(g, r); }); });
-  if (th.bigtree) SPR.bigtree = [sprite(7.2, 10.6, 30, function(g){ pBigTree(g, r); })];
-  if (th.sakura) SPR.sakura = [sprite(4.6, 4.4, 44, function(g){ pSakura(g, r); })];
+  if (th.snow) SPR.coniferS = artOr('tree_pine_snow', 6.8, ART.get('tree_pine') ? null : [0, 1].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }); }));
+  SPR.broad = artOr('tree_broad', 4.8, [0, 1].map(function(){ return sprite(4.2, 4.8, 44, function(g){ pBroad(g, r); }); }));
+  if (th.bigtree) SPR.bigtree = artOr('tree_big', 10.6, [sprite(7.2, 10.6, 30, function(g){ pBigTree(g, r); })]);
+  if (th.sakura) SPR.sakura = artOr('tree_sakura', 4.4, [sprite(4.6, 4.4, 44, function(g){ pSakura(g, r); })]);
   SPR.rhodo = artOr('bush_rhodo', 1.4, ['#f08fb0', '#f7b4c8', '#e9769e'].map(function(col){ return sprite(2.3, 1.4, 80, function(g){ pRhodo(g, r, col); }); }));
   SPR.rock = artOr('rock_moss', 0.8, [0, 1, 2].map(function(){ return sprite(1.7, 0.8, 80, function(g){ pRock(g, r); }); }));
   SPR.bamboo = artOr('bamboo_dwarf', 1.2, [0, 1].map(function(){ return sprite(1.5, 1.2, 80, function(g){ pTuft(g, r, 13, 1.05, 2.0, 0.03, mixs(VG.grassL, '#e4dc7a', 0.3), VG.grassS); }); }));
   SPR.fern = artOr('fern', 0.9, [0, 1].map(function(){ return sprite(1.7, 0.9, 80, function(g){ pFern(g, r); }); }));
-  SPR.grass = [0, 1].map(function(){ return sprite(0.9, 0.55, 80, function(g){ pTuft(g, r, 7, 0.45, 1.7, 0.024, VG.grassL, VG.grassS); }); });
+  SPR.grass = artOr('grass_tuft', 0.55, [0, 1].map(function(){ return sprite(0.9, 0.55, 80, function(g){ pTuft(g, r, 7, 0.45, 1.7, 0.024, VG.grassL, VG.grassS); }); }));
   SPR.flower = artOr('flowers', 0.5, ['#ffe07a', '#ffffff', '#b99ae6'].map(function(col){ return sprite(0.8, 0.5, 80, function(g){ pFlowers(g, r, col); }); }));
   SPR.silver = artOr('grass_silver', 1.9, [0, 1].map(function(){ return sprite(1.9, 1.9, 80, function(g){ pSilver(g, r); }); }));
   SPR.note = artOr('note_post', 1.5, [sprite(0.9, 1.5, 80, pNote)]);
@@ -312,12 +320,13 @@ function buildSprites(){
   SPR.view = artOr('deck_view', 1.75, [sprite(3.7, 1.75, 70, pView)]);
   SPR.rail = artOr('railing', 1.0, []);        // 只有美術圖：路旁的木欄杆
   SPR.fall = artOr('waterfall', 4.2, []);      // 只有美術圖：路旁小瀑布
-  SPR.treasure = [sprite(0.7, 0.55, 80, pTreasure)];
+  SPR.treasure = artOr('treasure_box', 0.6, [sprite(0.7, 0.55, 80, pTreasure)]);
   SPR.summit = [sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
   const al = th.alpine;
   smallTab = mkTab([[SPR.rhodo, al ? 3 : 1.4], [SPR.rock, (al || th.rocks || th.trail === 'scree') ? 3 : 1], [SPR.bamboo, al ? 3 : 0.5], [SPR.fern, al ? 0.3 : 2.5], [SPR.grass, 3], [SPR.flower, 1.5], [SPR.silver, th.grass ? 3 : 0.3]]);
-  a.push([SPR.conifer, al ? 3 : 1.6], [SPR.broad, al ? 0.01 : 2.4]);
+  const paintedPine = !!ART.get('tree_pine') && !ART.get('tree_broad');   // 手繪松樹旁邊放太多卡通圓樹會很不搭
+  a.push([SPR.conifer, al ? 3 : (paintedPine ? 3 : 1.6)], [SPR.broad, al ? 0.01 : (paintedPine ? 0.5 : 2.4)]);
   if (SPR.bigtree) a.push([SPR.bigtree, 0.5]);
   if (SPR.sakura) a.push([SPR.sakura, 1.3]);
   treeTab = mkTab(a);
@@ -988,11 +997,23 @@ function proj(j, f, flat){
 }
 function quad(x1, y1, x2, y2, x3, y3, x4, y4){ ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3); ctx.lineTo(x4, y4); ctx.fill(); }
 function gwAt(dz){ return GW * (1 - 0.6 * clamp((dz - 40) / 120, 0, 1)); }   // 稜線越遠越窄，兩側露出山谷與雲海
+// 兩側地形（每座山固定）：路邊一圈微微高起的土肩，讓步道像踩出來的凹槽；離路越遠起伏越大
+// 振幅負的＝往下掉的山坡、正的＝靠著山壁；高山稜線大多往兩邊掉
+function terrAmp(i, side){ const v = vn(i * 0.016 + (side > 0 ? 71.3 : 13.7), 29); return TH.alpine ? clamp((v - 0.66) * 16, -9, 2.5) : clamp((v - 0.45) * 13, -7, 4.5); }
+function terrH(i, side, d){
+  if (d <= RW) return 0;
+  if (d < RW + 0.45) return 0.16 * (d - RW) / 0.45;
+  const u = clamp((d - RW - 0.45) / 9, 0, 1), sm = u * u * (3 - 2 * u);
+  return 0.16 + terrAmp(i, side) * sm + (vn(i * 0.09 + d * 0.21, side > 0 ? 43 : 47) - 0.5) * 0.9 * Math.min(1, (d - RW) / 2);
+}
+const TDN = [RW, RW + 0.45, RW + 1.8, RW + 4.5, RW + 10, 0], TDF = [RW, RW + 3, RW + 10, 0];   // 近處切細、遠處切粗（最後一格＝稜線邊緣）
+const tX1 = new Float32Array(6), tY1 = new Float32Array(6), tX2 = new Float32Array(6), tY2 = new Float32Array(6), tLv = new Int8Array(6), tSh = new Float32Array(6);
+const SHADE = [[-1, -0.35, 'rgba(34,40,70,0.26)'], [-0.35, -0.12, 'rgba(34,40,70,0.12)'], [0.12, 0.35, 'rgba(255,236,186,0.12)'], [0.35, 1.01, 'rgba(255,236,186,0.22)']];   // 坡面陰影（偏藍紫）與受光（暖黃）
 function lvl(i, side){ const v = vn(i * 0.11 + side * 37.7, 21); return v < 0.36 ? 0 : v > 0.64 ? 2 : 1; }   // 世界固定的光影斑塊
 function drawSpr(sp, x, y, sc, fq, shadow){
   const dw = sp.w * sc, dh = sp.hm * sc; if (dh < 2.5) return;
   const x0 = x - dw * 0.5; if (x0 > W || x0 + dw < 0 || y - dh > H || y < 0) return;
-  if (shadow) { const sw = dw * 0.85, shh = Math.min(sw * 0.34, dh * 0.5); ctx.drawImage(SHADOW, x - sw * 0.58, y - shh * 0.5, sw, shh); }
+  if (shadow) { const sw = dw * 1.05, shh = Math.min(sw * 0.36, dh * 0.5); ctx.drawImage(SHADOW, x - sw * 0.62, y - shh * 0.55, sw, shh); ctx.drawImage(SHADOW, x - sw * 0.3, y - shh * 0.3, sw * 0.6, shh * 0.6); }   // 地面影子＋腳底接觸陰影
   if (fq < 0.96) ctx.drawImage(sp.c, x0, y - dh, dw, dh);
   if (fq > 0.04) { const a = ctx.globalAlpha; ctx.globalAlpha = a * fq; ctx.drawImage(sp.h, x0, y - dh, dw, dh); ctx.globalAlpha = a; }
 }
@@ -1002,10 +1023,10 @@ function sparkle(x, y, sc, t, m){
   ctx.strokeStyle = 'rgba(255,246,200,0.9)'; ctx.lineWidth = Math.max(1, r * 0.08);
   ctx.beginPath(); ctx.moveTo(x - r * 0.9, y); ctx.lineTo(x + r * 0.9, y); ctx.moveTo(x, y - r * 0.9); ctx.lineTo(x, y + r * 0.9); ctx.stroke(); ctx.restore();
 }
-function drawProp(o, j, f, fq, t){
+function drawProp(o, i, j, f, fq, t){
   const sp = o.type === 'sign' ? getSign(o.text) : (SPR[o.type] && SPR[o.type][0]); if (!sp) return;
   proj(j, f, false);
-  const x = gx + o.side * PXO[o.type] * gs, y = gy, dw = sp.w * gs, dh = sp.hm * gs; if (dh < 3) return;
+  const x = gx + o.side * PXO[o.type] * gs, y = gy - terrH(i, o.side, PXO[o.type]) * gs, dw = sp.w * gs, dh = sp.hm * gs; if (dh < 3) return;
   drawSpr(sp, x, y, gs, fq, true);
   if (o.type === 'treasure') sparkle(x, y - dh * 0.6, gs, t, o.m);
   if (HIT[o.type] && dh > 14 && x > -dw && x < W + dw && y > 0 && y - dh < H) {
@@ -1029,15 +1050,49 @@ function drawWorld(b, t){
     if (y1 - y2 > 0.2) {
       const yb = y1 + 0.7, lvL = lvl(i, 0), lvR = lvl(i, 1), gk = (i >> 1) & 1;
       const g1 = gwAt(pZ[j]) * s1, g2 = gwAt(pZ[j + 1]) * s2, gl1 = x1 - g1, gl2 = x2 - g2, gr1 = x1 + g1, gr2 = x2 + g2;
-      // 稜線兩側往下掉的暗坡
-      ctx.fillStyle = LUT[19 * FOGN + fi];
-      if (gl1 > -10) quad(gl1, yb, gl1 - 10 * s1, yb + 16 * s1, gl2 - 10 * s2, y2 + 16 * s2, gl2, y2);
-      if (gr1 < W + 10) quad(gr1, yb, gr1 + 10 * s1, yb + 16 * s1, gr2 + 10 * s2, y2 + 16 * s2, gr2, y2);
-      // 草地（左右各一塊，各自的光影）
-      ctx.fillStyle = LUT[(gk * 3 + lvL) * FOGN + fi]; quad(gl1, yb, x1 + 1, yb, x2 + 1, y2, gl2, y2);
-      ctx.fillStyle = LUT[(gk * 3 + lvR) * FOGN + fi]; quad(x1, yb, gr1, yb, gr2, y2, x2, y2);
-      const ta = fade * (1 - fq) * 0.85;
-      if (TEX.grass && ta > 0.03) { texFill(TEX.grass, x1, s1, yb, y2, z0, ta); quad(gl1, yb, gr1, yb, gr2, y2, gl2, y2); ctx.globalAlpha = fade; }
+      // 兩側山坡：沿著離路的距離切幾條帶子，每條依地形高度抬升或下降，依坡向（光從右上來）分亮暗
+      const ta = fade * (1 - fq) * 0.85, DS = j < 60 ? TDN : TDF, nS = DS.length, gw1 = gwAt(pZ[j]), gw2 = gwAt(pZ[j + 1]);
+      for (let side = -1; side <= 1; side += 2) {
+        const lvS = side < 0 ? lvL : lvR;
+        for (k = 0; k < nS; k++) {
+          const d1 = k === nS - 1 ? gw1 : DS[k], d2 = k === nS - 1 ? gw2 : DS[k];
+          tX1[k] = x1 + side * d1 * s1; tY1[k] = yb - terrH(i, side, d1) * s1;
+          tX2[k] = x2 + side * d2 * s2; tY2[k] = y2 - terrH(i + 1, side, d2) * s2;
+        }
+        for (k = 0; k < nS - 1; k++) {           // 坡向：往外升高的那一面朝向哪裡
+          const g = (terrH(i, side, k === nS - 2 ? gw1 : DS[k + 1]) - terrH(i, side, DS[k])) / Math.max(0.3, (k === nS - 2 ? gw1 : DS[k + 1]) - DS[k]);
+          tLv[k] = clamp(Math.round(1 + (lvS - 1) * 0.5 - side * g * 2.4 + (k === 0 ? -0.6 : 0)), 0, 2);
+          tSh[k] = clamp(-side * g * 1.8 + (lvS - 1) * 0.15 + (k === 0 ? -0.5 : 0), -1, 1);
+        }
+        // 稜線外緣往下掉的暗坡
+        const n1 = nS - 1;
+        if (side < 0 ? tX1[n1] > -10 : tX1[n1] < W + 10) { ctx.fillStyle = LUT[19 * FOGN + fi]; quad(tX1[n1], tY1[n1], tX1[n1] + side * 10 * s1, tY1[n1] + 16 * s1, tX2[n1] + side * 10 * s2, tY2[n1] + 16 * s2, tX2[n1], tY2[n1]); }
+        for (let lv = 0; lv < 3; lv++) {
+          ctx.beginPath(); let any = false;
+          for (k = 0; k < nS - 1; k++) if (tLv[k] === lv) { any = true; const e = side * 0.8;
+            ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1]); ctx.lineTo(tX2[k] - e, tY2[k]); ctx.closePath(); }
+          if (any) { ctx.fillStyle = LUT[(gk * 3 + lv) * FOGN + fi]; ctx.fill(); }
+        }
+        if (TEX.grass && ta > 0.03) {
+          texFill(TEX.grass, x1, s1, yb, y2, z0, ta * 0.62); ctx.beginPath();
+          for (k = 0; k < nS - 1; k++) { ctx.moveTo(tX1[k], tY1[k]); ctx.lineTo(tX1[k + 1], tY1[k + 1]); ctx.lineTo(tX2[k + 1], tY2[k + 1]); ctx.lineTo(tX2[k], tY2[k]); ctx.closePath(); }
+          ctx.fill(); ctx.globalAlpha = fade;
+        }
+        // 坡面明暗：背光面壓暗、向陽面提亮（蓋在貼圖上，遠處跟著霧變淡）
+        ctx.globalAlpha = fade * (1 - fq * 0.8);
+        for (let q = 0; q < 4; q++) {
+          ctx.beginPath(); let any = false;
+          for (k = 0; k < nS - 1; k++) if (tSh[k] >= SHADE[q][0] && tSh[k] < SHADE[q][1]) { any = true; ctx.moveTo(tX1[k], tY1[k]); ctx.lineTo(tX1[k + 1], tY1[k + 1]); ctx.lineTo(tX2[k + 1], tY2[k + 1]); ctx.lineTo(tX2[k], tY2[k]); ctx.closePath(); }
+          if (any) { ctx.fillStyle = SHADE[q][2]; ctx.fill(); }
+        }
+        ctx.globalAlpha = fade;
+        // 陡坡上的手繪等高線（斷斷續續、只畫在很陡的地方）
+        if (j < 44 && i % 4 === 0) {
+          ctx.strokeStyle = INK; ctx.lineWidth = clamp(s1 * 0.011, 0.4, 1.2); ctx.globalAlpha = fade * 0.16 * (1 - j / 44); ctx.beginPath();
+          for (k = 1; k < nS - 1; k++) if (Math.abs(tY1[k + 1] - tY1[k]) > 0.35 * s1 && Hh(i, 70 + k) < 0.6) { const mx = (tX1[k] + tX1[k + 1]) / 2, my = (tY1[k] + tY1[k + 1]) / 2; ctx.moveTo(lerp(tX1[k], mx, 0.25), lerp(tY1[k], my, 0.25)); ctx.lineTo(lerp(tX1[k + 1], mx, 0.2), lerp(tY1[k + 1], my, 0.2)); }
+          ctx.stroke(); ctx.globalAlpha = fade;
+        }
+      }
       const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road;
       // 步道
       const w1 = RW * s1, w2 = RW * s2, e1 = w1 * 1.07 + 0.6, e2 = w2 * 1.07 + 0.6, rk = 2 + (i & 1), stp = sAt(i) === 1 && j < 70;
@@ -1056,6 +1111,10 @@ function drawWorld(b, t){
         ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2, x2 - e2, y2);
         ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2, x2 - w2, y2);
         if (RT && ta > 0.03) { texFill(RT, x1 - w1, s1, yb, y2, z0, ta); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2, x2 - w2, y2); ctx.globalAlpha = fade; }
+        if (j < 90) {                                  // 路面立體感：兩側被土肩遮暗、中間微微受光（像踩出來的凹槽）
+          ctx.fillStyle = 'rgba(46,30,24,0.2)'; quad(x1 - w1, yb, x1 - w1 * 0.7, yb, x2 - w2 * 0.7, y2, x2 - w2, y2); quad(x1 + w1 * 0.7, yb, x1 + w1, yb, x2 + w2, y2, x2 + w2 * 0.7, y2);
+          ctx.fillStyle = 'rgba(255,240,205,0.08)'; quad(x1 - w1 * 0.3, yb, x1 + w1 * 0.35, yb, x2 + w2 * 0.35, y2, x2 - w2 * 0.3, y2);
+        }
         if (j < 46 && Hh(i, 50) < 0.62) {             // 斷斷續續的手繪墨線路緣
           ctx.globalAlpha = 0.55 * (1 - j / 48); ctx.strokeStyle = INK; ctx.lineWidth = clamp(s1 * 0.02, 0.5, 2);
           ctx.beginPath(); ctx.moveTo(x1 - w1, y1); ctx.lineTo(x2 - w2, y2); ctx.moveTo(x1 + w1, y1); ctx.lineTo(x2 + w2, y2); ctx.stroke(); ctx.globalAlpha = fade;
@@ -1092,10 +1151,10 @@ function drawWorld(b, t){
       const sp = arr[(Hh(i, k * 8 + 7) * arr.length) | 0];
       if (!heroDone && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
       proj(j, f, false);
-      drawSpr(sp, gx + side * xo * gs, gy, gs * (0.8 + 0.45 * Hh(i, k * 8 + 8)), fq, j < 64);
+      drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * (0.8 + 0.45 * Hh(i, k * 8 + 8)), fq, j < 64);   // 種在真正的地面高度
     }
     // 互動道具與路標
-    while (pi >= 0 && AP[pi].m >= z0) { const o = AP[pi--]; if (o.m < z0 + SEG) drawProp(o, j, (o.m - z0) / SEG, fq, t); }
+    while (pi >= 0 && AP[pi].m >= z0) { const o = AP[pi--]; if (o.m < z0 + SEG) drawProp(o, i, j, (o.m - z0) / SEG, fq, t); }
     // 一起爬的隊友（在自己這一段畫）
     for (k = 0; k < mates.length; k++) { const mt = mates[k]; if (mt.d >= z0 && mt.d < z0 + SEG && j > 0) drawMate(mt, j, (mt.d - z0) / SEG, t, fade); }
   }
