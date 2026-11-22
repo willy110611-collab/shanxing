@@ -37,7 +37,7 @@ const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1, TRUNK_P = 0.14;   // TRUNK_P：森
 // 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
 // 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
 const SCALE = {
-  hero:1.76, heroSit:1.0, heroSleep:1.0, heroSummit:1.96,
+  hero:1.76, heroSit:1.0, heroSleep:1.0, heroSummit:1.96, heroBreath:1.5, heroPose:1.74,   // heroBreath：彎腰喘氣比站著矮；heroPose：喝水、擦汗、看風景（站著）
   bench:0.96, benchSeat:0.45, rail:1.1, sign:1.2, summit:1.3, rock:1.1, cairn:0.95, mycairn:0.45, note:1.4, treasure:0.6, view:1.75, fall:4.2,
   pine:8.2, broad:6.4, bigtree:12.5, sakura:5.6, wishtree:4.4,
   rhodo:1.5, bamboo:1.3, fern:0.9, grass:0.55, flower:0.5, silver:1.9,
@@ -64,6 +64,22 @@ const hits = []; let hitN = 0;
 const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_A = 0.09, TURN_X = 0.07;   // 轉彎傾身：看腳下往前幾段的彎度、彎到多少算全傾、最多傾幾弧度（約 5 度）、腳往內側偏幾公尺
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
+// 自己這個登山客走路的樣子（隊友、廣場的山友照舊）：門檻和頻率只寫在這張表。秒數都是「真的在走路」的時間（停下來、長按快走不算）
+const GAIT = {
+  tired:50, veryTired:20,               // 體力低於幾 % 換累的走路圖；再低更慢
+  pace:[1, 0.8, 0.66],                  // 前進速度倍率：正常／累／很累（步伐頻率跟著慢，腳不會在地上滑）
+  stride:[1, 0.92, 0.86],               // 步幅倍率：累的時候步子小一點、拖著走
+  breath:[null, [70, 120], [35, 60]],   // 累的時候隔多久停下來喘口氣（秒，最短～最長）
+  breathDur:[2.2, 3],
+  happy:70, hop:[60, 120], hopDur:1.1,  // 體力 70% 以上：每 1～2 分鐘開心小跳一下（系統設定減少動態就不跳）
+  idle:[100, 180], idleDur:[2, 3],      // 偶爾停下來喝口水或擦汗
+  wipe:[0.35, 0.3, 0.25],               // 停下來時擦汗的機率：基本＋大太陽＋爬坡（其餘是喝水）
+  look:6, lookDur:[2.2, 3],             // 觀景台、路線地標在前面幾公尺內：停下來轉頭看
+  turnIn:0.45, turnOut:0.25,            // 轉彎傾身多大換轉身走路圖（換回來的門檻小一點，不會在邊界來回換）
+  stairIn:0.45, stairOut:0.25,          // 同上，階梯走路圖
+  fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
+};
+const gait = { act:null, at:0, dur:0, aflip:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, onStair:false, onTurn:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
 
@@ -703,6 +719,9 @@ function buildCurves(m){
 // 畫面上的坡度（只影響畫面，不影響海拔數字）：真實平均坡度只有 1～15%，照實畫看起來像平路
 // 所以整體坡度乘上 CLIMB，再穿插一長段一長段的陡階梯（STAIR_SL），從背後看才會一階一階往上疊到天空
 const CLIMB = 1.7;
+// 山頂過後：路再走 road 公尺後花 fade 公尺慢慢長滿草；plat 公尺內是平的山頂，再過去地面往下掉（每公尺掉 drop 公尺），前面只剩天空和遠山
+const TOP = { road:3, fade:8, plat:16, drop:1.4 };
+function endK(i){ return clamp((i * SEG - total - TOP.road) / TOP.fade, 0, 1); }   // 0＝還在路上、1＝山頂過後已經沒有路
 const STAIR_SL = [0.34, 0.6];   // 連續階梯段的坡度範圍（真實石階大約 0.5～0.7）
 const STAIR_RUN = { stairs:0.36, wood:0.56, dirt:0.62, scree:0.66 };   // 長段落雜訊超過這個值就是連續階梯（越小＝階梯越多）
 function buildElev(m){
@@ -713,7 +732,7 @@ function buildElev(m){
     let tg = stairy ? lerp(STAIR_SL[0], STAIR_SL[1], vn(i * 0.05, 12)) : clamp(base * (0.3 + 1.4 * vn(i * 0.035, 7)) + 0.05 * (vn(i * 0.21, 8) - 0.3), 0.04, 0.4);
     const dip = !stairy && i > 20 ? clamp((vn(i * 0.017, 13) - 0.74) * 5, 0, 1) : 0;   // 偶爾一小段往下（約 30～60 公尺）：先下坡再爬，路才有起伏
     if (dip > 0) tg = lerp(tg, -0.09, dip);
-    if (i >= e) tg *= Math.max(0, 1 - (i - e) / 12);
+    if (i >= e) tg = i * SEG < total + TOP.plat ? 0 : -TOP.drop * clamp((i * SEG - total - TOP.plat) / 12, 0, 1);   // 山頂：平平的一小塊，再過去地面圓圓地往下掉，前面只剩天空和遠山
     sl += (tg - sl) * 0.3;                                       // 坡度慢慢變，階梯段的起訖才不會折成一個尖角
     elev[i + 1] = elev[i] + sl * SEG;
     stepF[i] = ((stairy && sl > 0.16) || sl > 0.3) ? 1 : 0;      // 很陡的土坡也做成階梯（真實步道陡處都有木頭或石頭階梯）
@@ -763,7 +782,7 @@ function landmarks(){
     if (L.from) { const m0 = at(L.from); if (m0 != null && L.helmet) helmetFrom = m0; if (m0 != null) for (let m = m0, k = 0; m < total - 8; m += L.every, k++) add(type, m, k & 1 ? 1 : -1, L); }
   }
 }
-function cleared(i, side){ return i >= 0 && i <= N && (clrS[i] & (side < 0 ? 1 : 2)) !== 0; }
+function cleared(i, side){ return i * SEG > total + TOP.plat - 2 || (i >= 0 && i <= N && (clrS[i] & (side < 0 ? 1 : 2)) !== 0); }   // 山頂再過去（往下掉的那面）不種東西
 function mergeProps(){ AP = props.concat(cairns); AP.sort(function(a, b){ return a.m - b.m; }); }
 
 // ═════════ 色盤、地面色表、背景圖塊 ═════════
@@ -1120,7 +1139,7 @@ S.resize = function(){
   for (let i = 0; i < 70; i++) stars.push(r() * W, r() * HOR * 0.95, 1 + r() * 1.6, r() * TAU);
 };
 S.setMountain = function(m){
-  if (M === m && curve && PAL && SPR.conifer) { cairns = []; mergeProps(); hero.st = -1; hitN = 0; return; }   // 同一座山：不重畫貼圖和背景
+  if (M === m && curve && PAL && SPR.conifer) { cairns = []; mergeProps(); hero.st = -1; hitN = 0; gaitReset(); return; }   // 同一座山：不重畫貼圖和背景
   M = m; TH = m.theme || {}; seed = hashStr(String(m.id || m.name || 'x')); total = Math.max(50, m.dist || 1000);
   N = Math.ceil((total + 320) / SEG);
   curve = new Float32Array(N + 1); elev = new Float32Array(N + 2); head = new Float64Array(N + 2); stepF = new Uint8Array(N + 1);
@@ -1130,7 +1149,7 @@ S.setMountain = function(m){
   buildCurves(m); buildElev(m); buildSlopes(); cairns = []; buildProps(); buildPalettes(); buildSprites();
   for (const k in tileSets) freeTiles(tileSets[k]);
   freePlx();
-  tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers();
+  tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers(); gaitReset();
 };
 // 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
 ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); } });
@@ -1178,7 +1197,7 @@ function updHero(s, t, dt, dist, sp){
   hero.mv += (mv - hero.mv) * Math.min(1, dt * 8);
   // 步伐：平路一個循環（兩步）走 STRIDE 公尺；階梯上一步踩一階，步子變短（腳才不會在階梯上滑），身體往前傾一點
   const si = Math.floor(dist / SEG), rise = sAt(si) === 1 ? eAt(si + 1) - eAt(si) : 0, nSt = rise > 0 ? clamp(Math.ceil(rise / STEP_H), 1, 4) : 0;
-  const stride = nSt ? clamp(2 * SEG / nSt, 0.85, STRIDE) : STRIDE, dd = dist - hero.pd;
+  const stride = (nSt ? clamp(2 * SEG / nSt, 0.85, STRIDE) : STRIDE) * GAIT.stride[gait.lvl], dd = dist - hero.pd;
   hero.ph = (Math.abs(dd) < 3 && hero.pd >= 0) ? hero.ph + dd / stride * TAU : dist / STRIDE * TAU; hero.pd = dist;   // 一下子跳很遠（換山、補進度）就直接重算
   hero.stair += ((nSt ? clamp(rise / SEG / 0.45, 0.4, 1) : 0) - hero.stair) * Math.min(1, dt * 3);
   // 背包：阻尼彈簧跟著步伐上下彈
@@ -1195,6 +1214,73 @@ function updHero(s, t, dt, dist, sp){
   // 每次落腳揚起一點塵土
   const st = Math.floor(hero.ph / Math.PI + 0.5);
   if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain && !isSnow) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
+  updGait(s, dt, dist);
+}
+// ───────── 步態：累了慢慢走、偶爾停下來喘氣／喝水／擦汗／看風景、開心時小跳、上階梯和轉彎換圖 ─────────
+function rnd(r){ return r[0] + Math.random() * (r[1] - r[0]); }
+function gaitReset(){ gait.act = null; gait.pace = 1; gait.tB = rnd(GAIT.breath[1]); gait.tH = rnd(GAIT.hop); gait.tI = rnd(GAIT.idle); gait.lookM = -1; gait.cur = ''; gait.prev = ''; gait.k = 1; }
+function gaitStart(id, dur, flip){ if (!ART.get(id)) return; gait.act = id; gait.at = 0; gait.dur = dur; gait.aflip = !!flip; }
+// 前面幾公尺內有沒有觀景台或路線地標（登山口、終點不算）；每個只看一次
+function lookAhead(dist){
+  for (let i = 0; i < AP.length; i++) { const o = AP[i]; if (o.m > dist + GAIT.look) break; if (o.type === 'view' && o.m > dist && o.m > gait.lookM) { gait.lookM = o.m; return o.side; } }
+  const wp = (M && M.waypoints) || [];
+  for (let k = 0; k < wp.length; k++) { const m = wp[k].m; if (m > 30 && m < total - 30 && m > dist && m <= dist + GAIT.look && m > gait.lookM) { gait.lookM = m; return Hh(Math.round(m), 440) < 0.5 ? -1 : 1; } }
+  return 0;
+}
+function updGait(s, dt, dist){
+  const G = GAIT, stam = s.stam == null ? 100 : s.stam, lvl = stam < G.veryTired ? 2 : stam < G.tired ? 1 : 0;
+  if (lvl !== gait.lvl) { gait.tB = lvl ? Math.min(gait.tB, rnd(G.breath[lvl])) : rnd(G.breath[1]); gait.lvl = lvl; }
+  // 長按快走、休息、睡覺、快到山頂、東峰岩溝（戴頭盔那段）都不停下來做動作
+  const free = !s.boost && !s.rest && !s.sleep && (s.frac == null || s.frac < 0.985) && !(helmetFrom != null && dist >= helmetFrom) && dist > 15;
+  if (gait.act) { gait.at += dt; if (!free || gait.at >= gait.dur) gait.act = null; }
+  else if (free && hero.mv > 0.6) {
+    gait.tB -= dt; gait.tH -= dt; gait.tI -= dt;
+    const hot = !isNight && !isRain && !isSnow && !isFog && sunVis > 0.6, side = lookAhead(dist);
+    if (side) gaitStart('hiker_look', rnd(G.lookDur), side < 0);   // 圖是往右看：景在左邊就鏡射
+    else if (lvl && gait.tB <= 0) { gaitStart('hiker_breath', rnd(G.breathDur)); gait.tB = rnd(G.breath[lvl]); }
+    else if (gait.tI <= 0) { gaitStart(Math.random() < G.wipe[0] + (hot ? G.wipe[1] : 0) + (hero.stair > 0.3 ? G.wipe[2] : 0) ? 'hiker_wipe' : 'hiker_drink', rnd(G.idleDur)); gait.tI = rnd(G.idle); }
+    else if (gait.tH <= 0 && stam >= G.happy && hero.stair < 0.2 && Math.abs(hero.turn) < 0.2) { if (!(RMOT && RMOT.matches)) gaitStart('hiker_hop4', G.hopDur); gait.tH = rnd(G.hop); }
+  }
+  // 前進速度：做動作時停下來，累了慢慢走；長按快走照原本的速度。慢慢變，不會一下子停住
+  const tg = gait.act ? 0 : s.boost ? 1 : G.pace[lvl];
+  gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
+  if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
+}
+S.pace = function(){ return gait.pace; };
+S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
+// 現在要用哪一張走路圖、要不要鏡射；換圖時記下上一張，交叉淡換
+function gaitSheet(){
+  const G = GAIT, R = id => { const r = id.replace('hiker_', 'hiker_rain_'); return isRain && ART.get(r) ? r : id; };
+  gait.onStair = hero.stair > (gait.onStair ? G.stairOut : G.stairIn);
+  gait.onTurn = Math.abs(hero.turn) > (gait.onTurn ? G.turnOut : G.turnIn);
+  if (gait.act) return [gait.act, gait.aflip];
+  if (gait.onStair && ART.get('hiker_stairs8')) return [R('hiker_stairs8'), false];
+  if (gait.lvl && ART.get('hiker_tired_walk8')) return [R('hiker_tired_walk8'), gait.onTurn && hero.turn > 0];   // 累的走路圖本來朝左前方：右彎時鏡射
+  if (gait.onTurn && ART.get('hiker_turn_walk8')) return [R('hiker_turn_walk8'), hero.turn < 0];                // 轉身圖朝右前方：左彎時鏡射
+  const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
+  return [isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk'), false];   // 下雨天穿黃色雨衣
+}
+// 某張圖現在畫第幾格、畫多高：走路類跟著步伐相位（換圖時步伐接得上），小跳照動作進度，單張動作只有一格
+function gaitDraw(c, id, flip, fl){
+  const e = ART.get(id); if (!e) return false;
+  let i = 0, h = SCALE.hero * 100, dy = 0;
+  if (id === 'hiker_hop4') i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3;
+  else if (id === 'hiker_breath') h = SCALE.heroBreath * 100;
+  else if (e.frames.length === 1) h = SCALE.heroPose * 100;
+  else { i = walkFrame(e.frames.length); dy = -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv; }
+  return ART.drawFrame(c, id, i, 0, dy, h, flip, fl);
+}
+function heroGait(c, s, t, fl){
+  const p = gaitSheet(), key = p[0] + (p[1] ? '<' : '');
+  if (key !== gait.cur) { if (gait.cur) { gait.prev = gait.cur; gait.k = 0; } gait.cur = key; }
+  const a0 = c.globalAlpha, k = gait.k;
+  if (k < 1 && gait.prev) {   // 上一張慢慢淡掉、這一張很快浮上來（中間不會整個人變半透明）
+    c.globalAlpha = a0 * (1 - k); gaitDraw(c, gait.prev.replace('<', ''), gait.prev.endsWith('<'), fl);
+    c.globalAlpha = a0 * Math.min(1, k * 2);
+  }
+  const ok = gaitDraw(c, p[0], p[1], fl);
+  c.globalAlpha = a0;
+  return ok;
 }
 function limb(c, x1, y1, qx, qy, x2, y2, w, lt, sh){
   c.beginPath(); c.moveTo(x1, y1); c.quadraticCurveTo(qx, qy, x2, y2);
@@ -1389,7 +1475,7 @@ const PET_COL = {
 // 寵物美術圖：pet_<id>_walk（四格）；柴犬也接受第一批的 shiba_walk／shiba_sit。高度單位公分
 const PET_H = { shiba:46, bear:58, leopardcat:40, magpie:34 };
 function petArt(s, x, y, u, t){
-  const id = s.pet, walk = ART.get('pet_' + id + '_walk') ? 'pet_' + id + '_walk' : (id === 'shiba' && ART.get('shiba_walk') ? 'shiba_walk' : null);
+  const id = s.pet, rw = 'pet_' + id + '_rain_walk', walk = isRain && ART.get(rw) ? rw : ART.get('pet_' + id + '_walk') ? 'pet_' + id + '_walk' : (id === 'shiba' && ART.get('shiba_walk') ? 'shiba_walk' : null);   // 下雨天：有穿雨衣的走路圖就用（pet_<id>_rain_walk）
   if (!walk) return false;
   const sitting = hero.mv < 0.3 || s.sleep, h = PET_H[id] || 44;
   const sit = !sitting ? null : ART.get('pet_' + id + '_sit') ? 'pet_' + id + '_sit' : (id === 'shiba' && ART.get('shiba_sit') ? 'shiba_sit' : null);   // 坐姿：pet_<id>_sit，柴犬也接受第一批的 shiba_sit
@@ -1435,6 +1521,7 @@ function heroArt(c, s, t, fl, me){
   if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
   if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
   if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return ART.drawFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
+  if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
   const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
   const walk = isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk');   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
@@ -1518,7 +1605,8 @@ function gwAt(dz){ return GW * (1 - 0.6 * clamp((dz - 40) / 120, 0, 1)); }   // 
 // 森林步道（wallAt 高）兩邊大多是往上長的山壁，步道像走在一條凹下去的綠色走廊裡；高山稜線照舊往兩邊掉
 function terrAmp(i, side){
   const v = vn(i * 0.016 + (side > 0 ? 71.3 : 13.7), 29), a = TH.alpine ? clamp((v - 0.66) * 16, -9, 2.5) : clamp((v - 0.45) * 13, -7, 4.5), w = wallAt(i);
-  return w > 0.6 ? lerp(a, 1.2 + 4 * v, (w - 0.6) / 0.4) : a;
+  const r = w > 0.6 ? lerp(a, 1.2 + 4 * v, (w - 0.6) / 0.4) : a;
+  return r > 0 ? r * (1 - endK(i)) : r;   // 山頂過後兩邊沒有比山頂高的山壁
 }
 // 這一段路兩側被植物包住的程度：theme.wall = [登山口, 山頂]，沿路線性變化
 function wallAt(i){ const wl = TH.wall || (TH.alpine ? [0.5, 0.3] : [1, 1]); return lerp(wl[0], wl[1], clamp(i * SEG / total, 0, 1)); }
@@ -1529,7 +1617,7 @@ const PLANKS = 4;         // 木棧道每段幾片木板
 const RISER_DK = 0.3;     // 階梯立面再壓暗多少（立面面對鏡頭、背光，要明顯比踏面暗，階梯才讀得出一階一階）
 const WOOD_VAR = 0.5;     // 每塊木頭／石階深淺變化的強度
 const WOOD_SH = 0.35;    // 木棧道投在左邊草地上的影子寬（公尺）
-function bankH(i, side){ return TH.trail === 'wood' ? 0.05 : 0.12 + 0.16 * vn(i * 0.13 + (side > 0 ? 5.1 : 0), 53); }
+function bankH(i, side){ return (TH.trail === 'wood' ? 0.05 : 0.12 + 0.16 * vn(i * 0.13 + (side > 0 ? 5.1 : 0), 53)) * (1 - endK(i)); }   // 山頂過後沒有路，路邊的土坎也跟著消失
 function terrH(i, side, d){
   if (d <= RW) return 0;
   const bh = bankH(i, side);
@@ -1644,7 +1732,7 @@ function root(i, j, fade){
   ctx.globalAlpha = fade;
 }
 // 連續欄杆：木棧道整條都有、石階步道在階梯段才有，兩邊都架。每段一根柱子，柱頂之間連扶手＋中間一根橫木，跟著坡度往上斜
-function railOn(i){ return TH.trail === 'wood' || (TH.trail === 'stairs' && (sAt(i) === 1 || sAt(i + 1) === 1)); }
+function railOn(i){ return endK(i) <= 0 && (TH.trail === 'wood' || (TH.trail === 'stairs' && (sAt(i) === 1 || sAt(i + 1) === 1))); }
 function drawRail(i, j, fi, fade, fq){
   if (SPR.railPost && SPR.railBar) { railArt(i, j, fade, fq); return; }
   const lit = LUT[28 * FOGN + fi], dk = LUT[31 * FOGN + fi], ink = farA(j, 30, 6), A = fade * farA(j, RAIL_J, 10), AI = A * ink;   // 遠處整道欄杆慢慢淡入，近處才加的墨線也是淡入
@@ -1882,7 +1970,13 @@ function drawWorld(b, t){
           ctx.beginPath(); ctx.moveTo(x1 - w1, y1); ctx.lineTo(x2 - w2, y2); ctx.moveTo(x1 + w1, y1); ctx.lineTo(x2 + w2, y2); ctx.stroke(); ctx.globalAlpha = fade;
         }
       }
-      const dA = fade * farA(j, 34, 8);   // 路面小細節（石子、落葉、水窪、木板縫）：遠處慢慢淡入
+      const ek = endK(i);
+      if (ek > 0) {   // 山頂過後：路慢慢長滿草，融進山頂的草地（蓋一層跟兩旁一樣的草地底色和貼圖），不會一路通到天邊
+        ctx.globalAlpha = fade * ek; ctx.fillStyle = GRS[fi * 21 + 10]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + 1, x2 - e2, y2 + 1);
+        if (TEX.grass && ta > 0.03) texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * ek * GRASS_A * (1 - snowFall * snowAmt * 0.85), roadPath(x1, y1, s1, x2, y2, s2), SUB_GRASS);
+        ctx.globalAlpha = fade;
+      }
+      const dA = fade * farA(j, 34, 8) * (1 - ek);   // 路面小細節（石子、落葉、水窪、木板縫）：遠處慢慢淡入；山頂過後跟著路一起淡掉
       if (dA > 0.01) {
         ctx.globalAlpha = dA;
         if (isWood && !(stp && TEX.steps)) {          // 木棧道的木板縫（陡的那段換成木頭階梯貼圖時不畫）：上緣一條暗縫、下緣一條受光的板邊
@@ -1955,7 +2049,7 @@ function drawWorld(b, t){
     }
     if (!below && farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq);
     // 路緣的草叢／蕨類：故意往路面內側蓋過路緣 15～25% 的寬度，路邊才不會是一條筆直的線
-    const eA = fade * farA(j, EDGE_J, 8);   // 路緣草叢：最遠 8 段慢慢淡入
+    const eA = cleared(i, 0) && z0 > total ? 0 : fade * farA(j, EDGE_J, 8);   // 路緣草叢：最遠 8 段慢慢淡入；山頂再過去沒有
     if (eA > 0.005) for (let side = -1; side <= 1; side += 2) {
       const h0 = side < 0 ? 120 : 130;
       if (Hh(i, h0) > EDGE_P) continue;
@@ -1967,7 +2061,7 @@ function drawWorld(b, t){
     }
     // 偶爾一叢芒草或蕨類長在路緣、往路面斜：從遠處慢慢靠近，走過時比背景快很多地從畫面邊緣滑出去（離鏡頭很近，大半被畫面切掉）
     const pA = fade * farA(j, 30, 6);
-    if (pA > 0.005 && !railOn(i) && Hh(i, 300) < PASS_P) {
+    if (pA > 0.005 && !railOn(i) && z0 < total && Hh(i, 300) < PASS_P) {
       const side = Hh(i, 301) < 0.5 ? -1 : 1, arr = (TH.alpine || TH.grass || Hh(i, 302) < 0.5) ? SPR.silver : SPR.fern, sp = arr[(Hh(i, 303) * arr.length) | 0];
       const sc = 1.1 + 0.35 * Hh(i, 304), xo = PASS_IN + sp.w * sc * 0.5, f = Hh(i, 305);
       if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
@@ -2102,7 +2196,7 @@ S.render = function(s){
   const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b; offG = off; bG = b;
   // 坐長椅休息：鏡頭慢慢往長椅那邊移一點，看得到人坐在椅子上；走起來再慢慢移回來
   benchO = restBench(s, dist);
-  hero.pan += ((benchO ? benchO.side * PXO.bench * 0.7 : 0) - hero.pan) * Math.min(1, dt * 2);
+  hero.pan += ((benchO ? benchO.side * PXO.bench * 0.7 : 0) - hero.pan) * Math.min(1, dt * 2); if (!benchO && Math.abs(hero.pan) < 0.002) hero.pan = 0;   // 離開長椅後鏡頭回到正中間：剩一點點就直接歸零（不會永遠偏一點點）
   const bob = RMOT && RMOT.matches ? 0 : hero.mv;   // 鏡頭跟著步伐極輕微上下晃（一步一次）；系統設定減少動態就不晃
   let j, x = 0, dx = -off * cAt(b);
   for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc; x += dx; dx += cAt(b + j); }

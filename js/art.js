@@ -1,7 +1,7 @@
 // 山行小日子：Gemini 美術素材載入
 // art/manifest.json 由 art/process.ps1 自動產生，列出已處理好的圖（例如 "tree_pine.png"）。
 // 畫面程式用 SX.art.get('名字') 拿圖；圖還沒到就回 null，畫面照舊用程式畫。
-// 去背的圖會自動裁掉四周透明處；檔名以 _walk 結尾的是四格連續動作，會切成 4 格並對齊腳底。
+// 去背的圖會自動裁掉四周透明處；多格連續動作（走路、爬階梯、小跳）照下面 SHEETS 表切格並對齊腳底。
 (function(){
 'use strict';
 const SX = window.SX = window.SX || {};
@@ -9,6 +9,15 @@ const A = SX.art = {};
 const lib = {};            // 名字 → { img, w, h, frames:[{x,y,w,h}] }
 const listeners = [];
 let loaded = false;
+// 多格動作圖怎麼切：名字符合哪一條就切成 欄 × 列 格（由左到右、上排再下排）。新的動作圖只改這張表
+// air：有跳起來的格子（hiker_hop4）：每格保留離地的高度、不把腳底拉到同一條線；畫的高度以最後一格（站直）為準
+const SHEETS = [
+  [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
+  [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
+  [/_hop4$/, 4, 1, { air:true }]  // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
+];
+const POSE = /^hiker_/;   // 登山客的圖：單張動作也用上半身置中（見 prep）
+function sheetOf(id){ for (let i = 0; i < SHEETS.length; i++) if (SHEETS[i][0].test(id)) return SHEETS[i]; return null; }
 
 // 掃描不透明範圍（alpha > 24）：d 是整張圖（寬 W）的像素，掃 (x0, y0) 起 w×h 這一塊（直接用去背時讀出來的像素，不再讀一次畫布）
 function bounds(d, W, x0, y0, w, h){
@@ -86,16 +95,20 @@ function prep(name, img){
   if (opaque) { const e = { img:c, w:c.width, h:c.height, frames:[{ x:0, y:0, w:c.width, h:c.height }], opaque }; return toBitmap(c).then(b => { e.img = b; return e; }); }
   const e = { img:c, w:c.width, h:c.height, frames:[], opaque };
   const px = despill(g, c.width, c.height);
-  // 走路連續動作：_walk 一排四格；_walk8 兩排、每排四格（共八格，由左到右、上排再下排）
-  const cols = /_walk8?$/.test(name.id) ? 4 : 1, rows = /_walk8$/.test(name.id) ? 2 : 1, n = cols * rows;
+  const sh = sheetOf(name.id), cols = sh ? sh[1] : 1, rows = sh ? sh[2] : 1, n = cols * rows, air = !!(sh && sh[3] && sh[3].air);
   const cw = Math.floor(c.width / cols), ch = Math.floor(c.height / rows), fr = [];
   for (let i = 0; i < n; i++) { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch; fr.push(bounds(px, c.width, x0, y0, cw, ch) || { x:x0, y:y0, w:cw, h:ch }); }
   // 多格動作：每格用同樣的寬高，腳底對齊；左右用「身體（上半身那一段）的重心」對齊，不用整格外框的中心：
   // 外框會跟著登山杖、跨出去的腳變寬變窄，用外框置中的話身體每格左右跳
-  if (n > 1) {
+  // 登山客的單張動作（喘氣、喝水、看風景…）也用身體置中：跟走路圖互換時人不會往旁邊跳（外框被往旁邊伸的登山杖拉偏）
+  if (n > 1 || POSE.test(name.id)) {
     const cxs = fr.map(f => torsoX(px, c.width, f));
-    const W = Math.max.apply(null, fr.map((f, i) => Math.ceil(2 * Math.max(cxs[i] - f.x, f.x + f.w - cxs[i])))), H = Math.max.apply(null, fr.map(f => f.h));
-    fr.forEach((f, i) => { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch, w = Math.min(W, cw), by = f.y + f.h; f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.y = Math.max(y0, by - H); f.w = w; f.h = by - f.y; });
+    // air：地面線取所有格裡腳最低的那個（跳起來那格腳下留空），每格從同一條地面線往上切同樣高度
+    const y0s = fr.map((f, i) => Math.floor(i / cols) * ch), gl = air ? Math.max.apply(null, fr.map((f, i) => f.y + f.h - y0s[i])) : 0;
+    const bys = fr.map((f, i) => air ? y0s[i] + gl : f.y + f.h), stand = fr[n - 1].h;
+    const W = Math.max.apply(null, fr.map((f, i) => Math.ceil(2 * Math.max(cxs[i] - f.x, f.x + f.w - cxs[i])))), H = Math.max.apply(null, fr.map((f, i) => bys[i] - f.y));
+    fr.forEach((f, i) => { const x0 = (i % cols) * cw, w = Math.min(W, cw), by = bys[i]; f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.y = Math.max(y0s[i], by - H); f.w = w; f.h = by - f.y; });
+    if (air) e.hk = fr[0].h / stand;   // 畫的時候給的高度是「人站直多高」：整格要再放大這麼多倍（多出來的是跳起來的空間）
   }
   e.frames = fr;
   return toBitmap(c).then(b => { e.img = b; return e; });
@@ -143,7 +156,8 @@ A.filtered = function(id, fl){ const e = lib[id]; return e && !e.lazy ? filtered
 // 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）；fl：要套的濾鏡（可省略）
 A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
   const e = lib[id]; if (!e) return false;
-  const f = e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length], w = h * f.w / f.h, img = fl ? filtered(e, fl) : e.img;
+  const f = e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length], img = fl ? filtered(e, fl) : e.img;
+  h *= e.hk || 1; const w = h * f.w / f.h;
   if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(img, f.x, f.y, f.w, f.h, -w / 2, by - h, w, h); ctx.restore(); }
   else ctx.drawImage(img, f.x, f.y, f.w, f.h, cx - w / 2, by - h, w, h);
   return true;

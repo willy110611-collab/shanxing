@@ -421,11 +421,13 @@ function contactShadow(c, x, y, w){       // 腳底接觸影子：柔邊深色�
 }
 function petWalkArt(pet){
   const A = SX.art; if (!A || !pet) return null;
-  return A.get('pet_' + pet + '_walk') ? 'pet_' + pet + '_walk' : pet === 'shiba' && A.get('shiba_walk') ? 'shiba_walk' : null;
+  const rw = 'pet_' + pet + '_rain_walk';   // 下雨天：有穿雨衣的走路圖就用
+  return S.data.rain && A.get(rw) ? rw : A.get('pet_' + pet + '_walk') ? 'pet_' + pet + '_walk' : pet === 'shiba' && A.get('shiba_walk') ? 'shiba_walk' : null;
 }
 function drawWalkers(c, t){
   const A = SX.art, fr = Math.floor(t * MAP_WALK_FPS), pet = S.data.pet, hx = 50, px = 64, y = 1;   // 站在木牌右邊，不被牌子擋住
-  if (A && A.get('hiker_walk')){ contactShadow(c, hx, y, MAP_HIKER_H * .55); A.drawFrame(c, 'hiker_walk', fr, hx, y, MAP_HIKER_H); }
+  const hw = S.data.rain && A && A.get('hiker_rain_walk') ? 'hiker_rain_walk' : 'hiker_walk';   // 下雨天穿黃色雨衣
+  if (A && A.get(hw)){ contactShadow(c, hx, y, MAP_HIKER_H * .55); A.drawFrame(c, hw, fr, hx, y, MAP_HIKER_H); }
   else drawHiker(c, hx, y, t);
   drawClimbTag(c, hx, y - MAP_HIKER_H - 4 + Math.sin(t * 2.4) * 1.5);
   if (!pet) return;
@@ -757,7 +759,7 @@ SX.worldmap = {
     const o = S.data, n = d || {};
     if (n.mountains && n.mountains !== o.mountains || n.coast && n.coast !== o.coast || n.ridge && n.ridge !== o.ridge) S.dirty = true;
     S.data = { mountains:n.mountains || o.mountains, coast:n.coast || o.coast, ridge:n.ridge || o.ridge,
-      done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {}, pet:n.pet || null, rec:n.rec || null };
+      done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {}, pet:n.pet || null, rain:!!n.rain, rec:n.rec || null };   // rain：現在下雨（登山口的人和寵物穿雨衣）
     S.tw = {}; ensure();
   },
   onSelect(fn){ S.cb = fn; },

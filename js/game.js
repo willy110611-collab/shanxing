@@ -272,7 +272,7 @@
     });
     const cur = SV.cur && SX.M[SV.cur] ? SX.groupOf(SV.cur) : null, rec = recommendNext();
     try {
-      WM.setData({ mountains:SX.PINS, coast:SX.COAST, ridge:SX.RIDGE, done, prog, current:cur, locked, photos, pet:SV.pet || null, rec:rec ? SX.groupOf(rec.id) : null });
+      WM.setData({ mountains:SX.PINS, coast:SX.COAST, ridge:SX.RIDGE, done, prog, current:cur, locked, photos, pet:SV.pet || null, rain:wx.kind === 'rain', rec:rec ? SX.groupOf(rec.id) : null });
       WM.start(); if (!mapInit) { mapInit = true; WM.reset(); }
     } catch(e){ console.error('worldmap', e); }
   }
@@ -459,11 +459,11 @@
       + (w.kind === 'snow' ? 0.6 : w.kind === 'rain' ? 0.4 : w.kind === 'fog' ? 0.2 : 0) + (m.theme.alpine || m.theme.snow ? 0.2 : 0);
   }
   // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）；dry：只是試算（不記里程、不算每日任務）
-  function simulate(p, m, dt, boost, offline, dry){
+  function simulate(p, m, dt, boost, offline, dry, pace){   // pace：登山畫面的步態給的速度倍率（累了慢走、停下來喝水時 0），離線補走不用
     if (p.sleep) { p.stam = Math.min(100, p.stam + NAP * dt); p.temp = Math.min(100, p.temp + 2 * dt); if (p.stam >= 60 && p.temp >= 50) p.sleep = false; return 0; }
     if (p.rest) { p.stam = Math.min(100, p.stam + REST * dt); p.temp = Math.min(100, p.temp + 4 * dt); if (offline && p.stam >= 100 && p.temp >= 95) p.rest = false; return 0; }
     const dev = devX();
-    let v = baseSpeed(m) * dev; if (p.temp < 25) v *= 0.7; if (boost) v *= BOOST;
+    let v = baseSpeed(m) * dev; if (p.temp < 25) v *= 0.7; if (boost) v *= BOOST; if (pace != null) v *= pace;
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
     if (p.stopAt != null && p.stopAt - 1 - p.dist <= d) { d = Math.max(0, p.stopAt - 1 - p.dist); stop = true; }
@@ -1396,7 +1396,7 @@
     const boost = (ptrHold || keyHold) && !paused && !arrived && !st.sleep && !st.rest;
     if (!paused && !arrived) {
       const wasSleep = st.sleep, wasRest = st.rest;
-      d = simulate(st, M, dt, boost, false);
+      d = simulate(st, M, dt, boost, false, false, SC.pace());
       if (boost) st.fast = true;
       if (!wasSleep && st.sleep) { say(st.temp <= 0 ? '好冷…鑽進睡袋躲一下' : pick(SX.LINES.tired)); A.yawn(); }
       if (wasSleep && !st.sleep) say('睡飽了！繼續走～');
@@ -1419,7 +1419,7 @@
     if (lineT <= 0 && moving && !paused) { lineT = 18 + Math.random()*16;
       say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'snow' ? SX.LINES.snow : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
     wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
-    SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist });
+    SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam });
     if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
     updTag();
     hudT -= dt; if (hudT <= 0) { hudT = 0.2; hudTick(); }
