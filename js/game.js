@@ -62,6 +62,11 @@
 
   const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null });
   const P = id => { const p = SV.prog[id] || (SV.prog[id] = newProg()), d = newProg(); for (const k in d) if (p[k] === undefined) p[k] = d[k]; if (!p.got || typeof p.got !== 'object') p.got = {}; ['dist','stam','temp','ms','last','encT'].forEach(k => { if (typeof p[k] !== 'number' || !isFinite(p[k])) p[k] = d[k]; }); return p; };
+  // 一次只能爬一座山（跟真實一樣）：onTrail＝正在爬、還沒登頂的那座；舊存檔裡同時爬到一半的別座山只留目前這座
+  const onTrail = () => { const id = SV.cur, m = id && SX.M[id], q = m && SV.prog[id]; return q && q.dist > 0 && q.dist < m.dist && !q.fin ? id : null; };
+  for (const k in SV.prog) { const q = SV.prog[k]; if (k !== SV.cur && q && q.dist > 0 && !q.fin) SV.prog[k] = newProg(); }
+  // 下山：這次的進度歸零，下次從登山口重新出發（路上拿到的寶物、照片都留著）
+  function goDown(id){ SV.prog[id] = newProg(); if (SV.cur === id) SV.cur = null; save(); }
 
   // ───────── 畫面切換 ─────────
   let screen = 'map', prevScreen = 'map';
@@ -261,6 +266,7 @@
     const m = SX.M[id]; if (!m) return;
     const p = SV.prog[id], done = SV.done[id] || 0, ok = unlocked(m);
     const going = p && p.dist > 0 && p.dist < m.dist && !p.fin;
+    const tr = onTrail(), busy = ok && tr && tr !== id, trN = tr && SX.M[tr].name;
     const w = wxOverride || calcWx(id), nPh = SV.photos.filter(x => x.id === id).length, nUp = SV.userPhotos.filter(x => x.mountainId === id).length;
     const pet = SX.PETS.find(x => x.id === SV.pet) || PET_NONE;
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
@@ -282,7 +288,10 @@
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
       <div class="rc-feat"><em>終點：</em>${m.end}${m.temple ? '（可以擲筊、求籤）' : ''}</div>
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
-      ${ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button></div>
+      ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。先登頂，或下山再來。</div>
+        <div class="rc-btns"><button class="cbtn sm" id="rcDown">下山（${trN}的進度歸零）</button></div>
+        <div class="rc-btns"><button class="cbtn go" id="rcBackTo">回到${trN}</button></div>`
+      : ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button>${going ? '<button class="cbtn sm" id="rcDown">下山</button>' : ''}</div>
         <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`
       : `<div class="rc-feat"><em>還沒開放：</em>${lockText(m)}</div>
         <div class="rc-btns"><button class="cbtn go" disabled>尚未解鎖</button></div>`}`;
@@ -290,7 +299,10 @@
     wxIcon($('#rcWx'), w.kind, w.time);
     $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
     if (g) $('#rcBack').onclick = e => { e.stopPropagation(); A.pop(); showGroup(g.id); };
-    if (ok) {
+    // 下山要按兩次（第一次換成確認字樣），避免誤按
+    const dn = $('#rcDown'); if (dn) dn.onclick = e => { e.stopPropagation(); A.pop(); if (!dn.dataset.arm) { dn.dataset.arm = 1; dn.textContent = '再按一次確定下山（進度歸零）'; return; } goDown(tr || id); toast('下山了，下次從登山口重新出發'); showRoute(id); };
+    if (busy) $('#rcBackTo').onclick = () => { A.unlock(); A.chime(); startClimb(tr); };
+    else if (ok) {
       $('#rcPet').onclick = () => openPets(id);
       $('#rcGo').onclick = () => { A.unlock(); A.chime(); startClimb(id); };
     }
@@ -342,6 +354,7 @@
   function startClimb(id, force){
     const m = SX.M[id]; if (!m) return;
     if (!force && !unlocked(m)) { toast('這座山還沒開放'); return; }
+    const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const switching = SV.cur !== id;
     M = m; SV.cur = id; st = P(id);
     if (st.fin || st.dist >= M.dist) Object.assign(st, newProg());
