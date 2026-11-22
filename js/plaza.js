@@ -39,26 +39,47 @@ function buildBG(){
     g.drawImage(art.img, f.x, f.y, f.w, f.h, (W - w) / 2, (H - h) / 2, w, h); return;
   }
   g.lineJoin = g.lineCap = 'round';
-  let gr = g.createLinearGradient(0, 0, 0, gT); gr.addColorStop(0, '#a9d4ea'); gr.addColorStop(1, '#f3e6cc');
-  g.fillStyle = gr; g.fillRect(0, 0, W, gT + 4);
-  const ridge = (base, amp, seed, fill) => {
-    g.beginPath(); g.moveTo(0, gT + 4);
-    for (let x = 0; x <= W; x += 8) g.lineTo(x, base - amp * (0.55 + 0.45 * Math.sin(x * 0.011 + seed) * Math.sin(x * 0.027 + seed * 2)));
-    g.lineTo(W, gT + 4); g.closePath(); g.fillStyle = fill; g.fill(); g.strokeStyle = 'rgba(58,42,32,.35)'; g.lineWidth = 1.4; g.stroke();
-  };
-  ridge(gT - 20, gT * 0.5, 1.3, '#a7c3bd'); ridge(gT - 6, gT * 0.32, 4.1, '#7fa58e'); ridge(gT + 2, gT * 0.16, 7.7, '#5f8a66');
-  // 兩側草地
-  g.fillStyle = '#8fbf6a'; g.fillRect(0, gT, W, H - gT);
-  // 石板廣場（梯形）
+  const A = SX.art || { get:() => null };
   const yH = (H - gT) / (gB - gT), a = toScr(0, 0), b = toScr(1, 0), c = toScr(1, yH), d = toScr(0, yH);   // yH：畫面最底下對應的廣場 y（超過 1 的部分是走不到的前景）
-  g.beginPath(); g.moveTo(a.sx, a.sy); g.lineTo(b.sx, b.sy); g.lineTo(c.sx, H); g.lineTo(d.sx, H); g.closePath();
-  gr = g.createLinearGradient(0, gT, 0, H); gr.addColorStop(0, '#cdbb98'); gr.addColorStop(1, '#e4d4b0'); g.fillStyle = gr; g.fill();
-  g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
-  g.save(); g.clip(); g.strokeStyle = 'rgba(58,42,32,.22)'; g.lineWidth = 1;
-  for (let i = 1; i < 16; i++) { const y = (i / 16) ** 1.25 * yH, p = toScr(0, y), q = toScr(1, y); g.beginPath(); g.moveTo(p.sx, p.sy); g.lineTo(q.sx, q.sy); g.stroke(); }
-  for (let i = -3; i <= 13; i++) { const x = i / 10, p = toScr(x, 0), q = toScr(x, yH); g.beginPath(); g.moveTo(p.sx, p.sy); g.lineTo(q.sx, q.sy); g.stroke(); }
-  g.restore();
-  const s = bu;
+  // 遠景：有 sky_day 美術圖就用（底部對齊廣場後緣），沒有就畫三層山
+  const sky = A.get('sky_day');
+  if (sky) { const f = sky.frames[0], s = Math.max(W / f.w, (gT + 30) / f.h); g.drawImage(sky.img, f.x, f.y, f.w, f.h, (W - f.w * s) / 2, gT + 30 - f.h * s, f.w * s, f.h * s); }
+  else {
+    let gr = g.createLinearGradient(0, 0, 0, gT); gr.addColorStop(0, '#a9d4ea'); gr.addColorStop(1, '#f3e6cc');
+    g.fillStyle = gr; g.fillRect(0, 0, W, gT + 4);
+    const ridge = (base, amp, seed, fill) => {
+      g.beginPath(); g.moveTo(0, gT + 4);
+      for (let x = 0; x <= W; x += 8) g.lineTo(x, base - amp * (0.55 + 0.45 * Math.sin(x * 0.011 + seed) * Math.sin(x * 0.027 + seed * 2)));
+      g.lineTo(W, gT + 4); g.closePath(); g.fillStyle = fill; g.fill(); g.strokeStyle = 'rgba(58,42,32,.35)'; g.lineWidth = 1.4; g.stroke();
+    };
+    ridge(gT - 20, gT * 0.5, 1.3, '#a7c3bd'); ridge(gT - 6, gT * 0.32, 4.1, '#7fa58e'); ridge(gT + 2, gT * 0.16, 7.7, '#5f8a66');
+  }
+  // 地面貼圖：一條一條橫帶，每條依遠近縮放，貼圖跟著透視（tiles：廣場寬度放幾片貼圖）
+  const texRows = (id, tiles, clip) => {
+    const e = A.get(id); if (!e) return false;
+    const pat = g.createPattern(e.img, 'repeat'), tw = e.w;
+    g.save(); if (clip) { clip(); g.clip(); }
+    // 直向：整片用同一個縮放（廣場的遠近本來就是直線換算），壓成中段看起來約略方形的石板
+    const sv = W * 0.98 * kAt(0.5) * 0.5 / (tiles * tw);
+    for (let y = gT; y < H; y += 2) {
+      const sc = W * 0.98 * kAt((y - gT) / (gB - gT)) / (tiles * tw);
+      pat.setTransform(new DOMMatrix([sc, 0, 0, sv, W / 2 - sc * tiles * tw / 2, gT]));
+      g.fillStyle = pat; g.fillRect(0, y, W, 2.6);
+    }
+    g.restore(); return true;
+  };
+  const plazaPath = () => { g.beginPath(); g.moveTo(a.sx, a.sy); g.lineTo(b.sx, b.sy); g.lineTo(c.sx, H); g.lineTo(d.sx, H); g.closePath(); };
+  // 兩側草地
+  if (!texRows('ground_grass', 2)) { g.fillStyle = '#8fbf6a'; g.fillRect(0, gT, W, H - gT); }
+  // 石板廣場（梯形）
+  if (!texRows('ground_stone', 1.4, plazaPath)) {
+    plazaPath(); const gr = g.createLinearGradient(0, gT, 0, H); gr.addColorStop(0, '#cdbb98'); gr.addColorStop(1, '#e4d4b0'); g.fillStyle = gr; g.fill();
+    g.save(); g.clip(); g.strokeStyle = 'rgba(58,42,32,.22)'; g.lineWidth = 1;
+    for (let i = 1; i < 16; i++) { const y = (i / 16) ** 1.25 * yH, p = toScr(0, y), q = toScr(1, y); g.beginPath(); g.moveTo(p.sx, p.sy); g.lineTo(q.sx, q.sy); g.stroke(); }
+    for (let i = -3; i <= 13; i++) { const x = i / 10, p = toScr(x, 0), q = toScr(x, yH); g.beginPath(); g.moveTo(p.sx, p.sy); g.lineTo(q.sx, q.sy); g.stroke(); }
+    g.restore();
+  }
+  plazaPath(); g.strokeStyle = INK; g.lineWidth = 2; g.stroke();  const s = bu;
   // 山屋（左後方）
   const hx = toScr(0.12, 0).sx, hy = gT + 6, hw = 92 * s * 1.1, hh = 56 * s * 1.1;
   g.fillStyle = '#c99862'; g.fillRect(hx - hw / 2, hy - hh, hw, hh); g.strokeStyle = INK; g.lineWidth = 2; g.strokeRect(hx - hw / 2, hy - hh, hw, hh);
@@ -81,7 +102,13 @@ function buildBG(){
     g.fillStyle = '#6a4a3c'; g.fillRect(x - h * 0.04, y - h * 0.2, h * 0.08, h * 0.2);
     for (let i = 0; i < 3; i++) { const yy = y - h * (0.18 + i * 0.26), ww = h * (0.36 - i * 0.09); g.beginPath(); g.moveTo(x - ww, yy); g.lineTo(x, yy - h * 0.38); g.lineTo(x + ww, yy); g.closePath(); g.fillStyle = i % 2 ? '#3f7352' : '#2f5a44'; g.fill(); g.strokeStyle = INK; g.lineWidth = 1.6; g.stroke(); }
   };
-  tree(W * 0.03, gT + (gB - gT) * 0.35, 120 * s); tree(W * 0.97, gT + (gB - gT) * 0.25, 110 * s); tree(W * 0.95, gT + (gB - gT) * 0.75, 150 * s);
+  // 兩側的樹、杜鵑、長椅：有美術圖就用美術圖
+  const prop = (id, x, y, h, draw) => { if (A.drawFrame && A.drawFrame(g, id, 0, x, y, h)) return; if (draw) draw(x, y, h); };
+  const sy2 = f => gT + (gB - gT) * f;
+  prop('tree_pine', W * 0.02, sy2(0.3), 330 * s, tree); prop('tree_pine', W * 0.98, sy2(0.18), 300 * s, tree);
+  prop('bush_rhodo', W * 0.05, sy2(0.7), 110 * s); prop('bush_rhodo', W * 0.95, sy2(0.52), 95 * s);
+  prop('bench', toScr(0.03, 0.1).sx, sy2(0.1), 70 * s);
+  prop('tree_pine', W * 0.99, sy2(0.95), 420 * s, tree);
 }
 
 // ───────── 人物 ─────────

@@ -41,7 +41,7 @@ function prep(name, img){
   const opaque = /\.jpg$/i.test(name.file);
   const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
   const g = c.getContext('2d', { willReadFrequently:true }); g.drawImage(img, 0, 0);
-  const e = { img:c, w:c.width, h:c.height, frames:[] };
+  const e = { img:c, w:c.width, h:c.height, frames:[], opaque };
   if (opaque) { e.frames.push({ x:0, y:0, w:c.width, h:c.height }); return e; }
   despill(g, c.width, c.height);
   const n = /_walk$/.test(name.id) ? 4 : 1, cw = Math.floor(c.width / n);
@@ -59,10 +59,17 @@ function clampN(v, a, b){ return b < a ? a : Math.max(a, Math.min(b, v)); }
 
 A.get = function(id){ return lib[id] || null; };
 // 給 HTML 用的圖片網址（背包、寵物選擇等）；沒有這張圖回 null
-const urls = {};
-A.url = function(id){ return urls[id] || null; };
+// 去背圖用「裁掉透明邊、清過洋紅殘邊」的版本（第一次用到才產生），不然格子裡的圖會很小、還帶粉紅邊
+const urls = {}, trimmed = {};
+const OUT = (() => { try { const c = document.createElement('canvas'); c.width = c.height = 1; return c.toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/png'; } catch (e) { return 'image/png'; } })();
+A.url = function(id){
+  const e = lib[id]; if (!e || !urls[id]) return null;
+  if (e.opaque) return urls[id];
+  if (!trimmed[id]) trimmed[id] = A.crop(id, 0).toDataURL(OUT, 0.9);
+  return trimmed[id];
+};
 // 有圖就回 <img>，沒有就回 fallback（原本程式畫的 SVG）
-A.img = function(id, fallback, cls){ const u = urls[id]; return u ? `<img class="${cls || 'artImg'}" src="${u}" alt="" draggable="false">` : fallback; };
+A.img = function(id, fallback, cls){ const u = A.url(id); return u ? `<img class="${cls || 'artImg'}" src="${u}" alt="" draggable="false">` : fallback; };
 A.has = function(id){ return !!lib[id]; };
 A.ready = function(){ return loaded; };
 // 圖到了之後通知畫面重建（例如步道的樹、石頭貼圖）
