@@ -10,13 +10,12 @@ const lib = {};            // 名字 → { img, w, h, frames:[{x,y,w,h}] }
 const listeners = [];
 let loaded = false;
 
-// 掃描不透明範圍（alpha > 24）
-function bounds(g, x0, y0, w, h){
-  const d = g.getImageData(x0, y0, w, h).data;
+// 掃描不透明範圍（alpha > 24）：d 是整張圖（寬 W）的像素，掃 (x0, y0) 起 w×h 這一塊（直接用去背時讀出來的像素，不再讀一次畫布）
+function bounds(d, W, x0, y0, w, h){
   let minX = w, minY = h, maxX = -1, maxY = -1;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    if (d[(y * w + x) * 4 + 3] > 24) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
-  }
+  for (let y = 0; y < h; y++) { const row = ((y0 + y) * W + x0) * 4 + 3; for (let x = 0; x < w; x++) {
+    if (d[row + x * 4] > 24) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  } }
   return maxX < 0 ? null : { x:x0 + minX, y:y0 + minY, w:maxX - minX + 1, h:maxY - minY + 1 };
 }
 // 清掉洋紅殘邊：Gemini 的洋紅底常常不是純 #FF00FF，邊緣會留一圈粉紅
@@ -36,24 +35,32 @@ function despill(g, w, h){
   // 紅藍差不多、明顯高於綠的「洋紅混色」：不管在不在邊緣都清（粉紅杜鵑紅遠大於藍，不會被動到）
   for (let i = 0; i < d.length; i += 4) if (d[i + 3] && Math.abs(d[i] - d[i + 2]) < 50) { const m = mg(i); if (m > 40) despix(i, m); }
   g.putImageData(im, 0, 0);
+  return d;
+}
+// 處理完的圖轉成 ImageBitmap 再拿去畫，處理用的畫布馬上釋放：
+// 去背用的「常常讀像素」畫布放在 CPU 記憶體，直接拿來畫的話，每格都要把整張圖重新傳給顯示晶片（登山客、地圖每格都在畫）
+// 不支援 createImageBitmap 的舊瀏覽器照舊用畫布
+function toBitmap(c){
+  if (typeof createImageBitmap !== 'function') return Promise.resolve(c);
+  return createImageBitmap(c).then(b => { c.width = c.height = 0; return b; }, () => c);
 }
 function prep(name, img){
   const opaque = /\.jpg$/i.test(name.file);
   const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
   const g = c.getContext('2d', { willReadFrequently:true }); g.drawImage(img, 0, 0);
+  if (opaque) { const e = { img:c, w:c.width, h:c.height, frames:[{ x:0, y:0, w:c.width, h:c.height }], opaque }; return toBitmap(c).then(b => { e.img = b; return e; }); }
   const e = { img:c, w:c.width, h:c.height, frames:[], opaque };
-  if (opaque) { e.frames.push({ x:0, y:0, w:c.width, h:c.height }); return e; }
-  despill(g, c.width, c.height);
+  const px = despill(g, c.width, c.height);
   const n = /_walk$/.test(name.id) ? 4 : 1, cw = Math.floor(c.width / n);
   const fr = [];
-  for (let i = 0; i < n; i++) fr.push(bounds(g, i * cw, 0, cw, c.height) || { x:i * cw, y:0, w:cw, h:c.height });
+  for (let i = 0; i < n; i++) fr.push(bounds(px, c.width, i * cw, 0, cw, c.height) || { x:i * cw, y:0, w:cw, h:c.height });
   // 多格動作：每格用同樣的寬高（取最大），以各自的腳底中心對齊，走路時才不會忽大忽小
   if (n > 1) {
     const W = Math.max.apply(null, fr.map(f => f.w)), H = Math.max.apply(null, fr.map(f => f.h));
     fr.forEach((f, i) => { const cx = f.x + f.w / 2, by = f.y + f.h; f.x = Math.round(clampN(cx - W / 2, i * cw, (i + 1) * cw - W)); f.y = Math.max(0, by - H); f.w = W; f.h = by - f.y; });
   }
   e.frames = fr;
-  return e;
+  return toBitmap(c).then(b => { e.img = b; return e; });
 }
 function clampN(v, a, b){ return b < a ? a : Math.max(a, Math.min(b, v)); }
 
@@ -80,12 +87,19 @@ A.whenReady = function(fn){ if (loaded) fn(); else readyFns.push(fn); };
 A.onProgress = function(fn){ progFns.push(fn); fn(prog[0], prog[1]); };
 function setProg(d, t){ prog = [d, t]; progFns.forEach(fn => { try { fn(d, t); } catch (e) {} }); }
 function finish(){ loaded = true; readyFns.splice(0).forEach(fn => { try { fn(); } catch (e) {} }); }
-// 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）
-A.drawFrame = function(ctx, id, i, cx, by, h, flip){
+// 套了濾鏡（例如換衣服色調的 hue-rotate）的整張圖：第一次用到才做一張存起來
+// 每次畫都在畫布上設 ctx.filter 在手機上非常慢（整塊畫面都要多算一次）
+function filtered(e, fl){
+  const fx = e.fx || (e.fx = {});
+  if (!fx[fl]) { const c = document.createElement('canvas'); c.width = e.img.width; c.height = e.img.height; const g = c.getContext('2d'); g.filter = fl; g.drawImage(e.img, 0, 0); fx[fl] = c; }
+  return fx[fl];
+}
+// 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）；fl：要套的濾鏡（可省略）
+A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
   const e = lib[id]; if (!e) return false;
-  const f = e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length], w = h * f.w / f.h;
-  if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(e.img, f.x, f.y, f.w, f.h, -w / 2, by - h, w, h); ctx.restore(); }
-  else ctx.drawImage(e.img, f.x, f.y, f.w, f.h, cx - w / 2, by - h, w, h);
+  const f = e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length], w = h * f.w / f.h, img = fl ? filtered(e, fl) : e.img;
+  if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(img, f.x, f.y, f.w, f.h, -w / 2, by - h, w, h); ctx.restore(); }
+  else ctx.drawImage(img, f.x, f.y, f.w, f.h, cx - w / 2, by - h, w, h);
   return true;
 };
 // 把第一格裁成單獨一張 canvas（給需要整張圖的地方）
@@ -106,7 +120,8 @@ function load(){
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
       const u = 'art/' + file + '?v=' + it.v;      // v 是檔案修改時間：圖換新，網址就變，快取不會卡舊圖
       const end = () => { setProg(++done, todo.length); res(); };
-      img.onload = () => { try { lib[id] = prep({ id, file }, img); lib[id].fit = it.fit || null; urls[id] = u; } catch (e) {} end(); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
+      img.onload = () => { let p; try { p = prep({ id, file }, img); } catch (e) { end(); return; }
+        p.then(e => { lib[id] = e; e.fit = it.fit || null; urls[id] = u; }, () => {}).then(end); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
       img.onerror = end;
       img.src = u;
     }))).then(() => { listeners.forEach(fn => { try { fn(); } catch (e) {} }); finish(); });   // 先讓各畫面換上美術圖，再收起讀取畫面

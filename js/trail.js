@@ -64,6 +64,17 @@ function hashStr(str){ let h = 2166136261; for (let i = 0; i < str.length; i++) 
 function Hh(i, k){ let n = (Math.imul(i, 374761393) + Math.imul(k, 668265263) + seed) | 0; n = Math.imul(n ^ (n >>> 15), 2246822519); n = Math.imul(n ^ (n >>> 13), 3266489917); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
 function vn(x, k){ const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return Hh(i, k) * (1 - u) + Hh(i + 1, k) * u; }
 function mk(w, h){ const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+// 縮圖鏈：大圖要縮很小畫的時候，改用預先縮成一半、四分之一…的版本（第一次用到才做），最後一步最多只縮兩倍
+// 手機每格要畫上千張貼圖，直接把幾百像素的原圖縮成幾十像素會大量跳著讀記憶體，是步道畫面最慢的地方
+function mip(c, px){
+  const L = c._mip || (c._mip = [c]);
+  let k = 0;
+  while (L[k].width >= 16 && L[k].width * 0.5 >= px) {
+    if (!L[k + 1]) { const s = L[k], h = mk(s.width / 2, s.height / 2); h.getContext('2d').drawImage(s, 0, 0, h.width, h.height); L[k + 1] = h; }
+    k++;
+  }
+  return L[k];
+}
 function cAt(i){ return (i < 0 || i > N) ? 0 : curve[i]; }
 function eAt(i){ return i <= 0 ? 0 : (i > N + 1 ? elev[N + 1] : elev[i]); }
 function sAt(i){ return (i < 0 || i > N) ? 0 : stepF[i]; }
@@ -127,8 +138,19 @@ const TRAIL_TEX = { dirt:'ground_dirt', stairs:'ground_stone', scree:'ground_scr
 let TEX = {};
 function mkTex(id, m){
   const c = ART.crop(id); if (!c || !ctx) return null;
-  const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, m:m } : null;
+  const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, m:m, c:c, lv:{} } : null;
 }
+// 貼圖的縮小版（橫、直各自縮 2^nx、2^ny 倍；用重複貼圖去縮，接縫才接得起來）：遠處的路面、草地一個像素蓋好幾個貼圖點時用
+function texLevel(T, nx, ny){
+  const key = nx * 16 + ny; let L = T.lv[key];
+  if (!L) {
+    const c = T.c, w = Math.max(1, Math.round(c.width / (1 << nx))), h = Math.max(1, Math.round(c.height / (1 << ny))), d = mk(w, h), g = d.getContext('2d');
+    g.scale(w / c.width, h / c.height); g.fillStyle = g.createPattern(c, 'repeat'); g.fillRect(0, 0, c.width, c.height);
+    L = T.lv[key] = { p:ctx.createPattern(d, 'repeat'), sx:c.width / w, sy:c.height / h };
+  }
+  return L;
+}
+const TEX_MTX = typeof DOMMatrix === 'function' ? new DOMMatrix() : null;   // 每段路都要對一次貼圖，重複用同一個矩陣不另外配置
 function buildTex(){
   TEX = { road:mkTex(TRAIL_TEX[TH.trail || 'dirt'], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2),
     steps:TH.trail === 'stairs' ? null : mkTex('ground_steps', RW * 2) };   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
@@ -136,8 +158,13 @@ function buildTex(){
 // 把貼圖對準這一段路：左緣 xl、近端 y1、遠端 y2、這段的世界位置 z0
 function texFill(T, xl, s1, y1, y2, z0, a){
   const kx = s1 * T.m / T.w, ky = Math.max(0.0001, (y1 - y2) / SEG * T.m / T.w), v = (z0 % T.m) / T.m * T.w;
-  T.p.setTransform(new DOMMatrix([kx, 0, 0, -ky, xl, y1 + v * ky]));
-  ctx.fillStyle = T.p; ctx.globalAlpha = a;
+  // 一個貼圖點不到一個螢幕像素（縮小）時，改用預先縮好的版本：橫、直分開挑，最後一步最多縮兩倍
+  const nx = Math.min(6, Math.max(0, Math.floor(-Math.log2(kx * DPR)))), ny = Math.min(6, Math.max(0, Math.floor(-Math.log2(ky * DPR))));
+  const L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, ax = L ? kx * L.sx : kx, ay = L ? ky * L.sy : ky;
+  const m = TEX_MTX || new DOMMatrix();
+  m.a = ax; m.b = 0; m.c = 0; m.d = -ay; m.e = xl; m.f = y1 + v * ky;
+  p.setTransform(m);
+  ctx.fillStyle = p; ctx.globalAlpha = a;
 }
 // ───────── 立體草叢：一條一條站起來的草葉（預先畫好幾條「草帶」，每幀沿地面蓋章） ─────────
 // 平鋪的俯視草地貼圖看起來像地毯；低角度看草地應該看到草葉站起來：根部暗、葉尖亮、邊緣毛毛的
@@ -198,7 +225,7 @@ function drawTurf(i, j, y1, y2, s1, fq, fade, DS, gw){
         if (side < 0 ? x + dw * 0.5 < 0 : x - dw * 0.5 > W) break;
         while (k < nS - 2 && d >= DS[k + 1]) k++;
         const v = T[tLvS[(side + 1) * 4 + k]], sp = v[(Hh(i * 7 + q, n) * v.length) | 0], y = gy - terrH(i, side, d) * gs;
-        if (y - dh < H && y > 0) ctx.drawImage(sp.c, x - dw * 0.5, y - dh, dw, dh);
+        if (y - dh < H && y > 0) ctx.drawImage(mip(sp.c, dw * DPR), x - dw * 0.5, y - dh, dw, dh);
       }
     }
   }
@@ -1015,8 +1042,7 @@ function drawMate(mt, j, f, t, fade){
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
-    ctx.filter = 'hue-rotate(' + (150 + hashStr(mt.name) % 3 * 60) + 'deg)';     // 美術圖版本：隊友換個衣服色調，跟自己分得出來
-    const drawn = heroArt(ctx, { rest:mt.rest }, t); ctx.filter = 'none';
+    const drawn = heroArt(ctx, { rest:mt.rest }, t, tintFilter(hashStr(mt.name)));
     if (!drawn) { if (mt.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
   } finally {
     ctx.restore();
@@ -1079,13 +1105,15 @@ function drawBird(x, y, u, s, t){
 // 走路循環的第幾格（四格 = 一個完整步伐循環）；停下來時用第一格
 function walkFrame(){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * 4) : 0; }
 // 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
-function heroArt(c, s, t){
-  if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, 112);
-  if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, 115);
-  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, 196);   // 站上山頂：舉起登山杖歡呼
+// fl：換衣服色調的濾鏡（隊友、廣場上的山友），自己是 undefined
+function heroArt(c, s, t, fl){
+  if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, 112, false, fl);
+  if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, 115, false, fl);
+  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, 196, false, fl);   // 站上山頂：舉起登山杖歡呼
   const walk = isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : 'hiker_walk';   // 下雨天穿黃色雨衣
-  return ART.drawFrame(c, walk, walkFrame(), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176);
+  return ART.drawFrame(c, walk, walkFrame(), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176, false, fl);
 }
+const tintFilter = k => 'hue-rotate(' + (150 + k % 3 * 60) + 'deg)';   // 美術圖版本：隊友換個衣服色調，跟自己分得出來
 function drawHero(s, t){
   proj(jhG, fhG, false);
   const X = gx, Y = gy, u = gs / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
@@ -1115,11 +1143,10 @@ S.drawPerson = function(c, X, Y, u, p, t){
     if (p.pet) drawPet({ pet:p.pet, rest:p.sit }, X + (p.flip ? -62 : 62) * u, Y - 4 * u, u * 0.95, t);
     c.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
     c.save(); c.translate(X, Y); c.scale(p.flip ? -u : u, u);
-    if (p.tint >= 0) c.filter = 'hue-rotate(' + (150 + p.tint % 3 * 60) + 'deg)';   // 美術圖版本：換衣服色調
-    const s = { rest:!!p.sit };
+    const fl = p.tint >= 0 ? tintFilter(p.tint) : undefined, s = { rest:!!p.sit };   // 美術圖版本：換衣服色調
     // p.pose：{ id, cm } 廣場打招呼的動作美術圖（揮手、鞠躬、歡呼），寵物和影子照樣畫
-    const posed = p.pose && ART.get(p.pose.id) ? ART.drawFrame(c, p.pose.id, 0, 0, 0, p.pose.cm) : false;
-    const drawn = posed || heroArt(c, s, t); c.filter = 'none';
+    const posed = p.pose && ART.get(p.pose.id) ? ART.drawFrame(c, p.pose.id, 0, 0, 0, p.pose.cm, false, fl) : false;
+    const drawn = posed || heroArt(c, s, t, fl);
     if (!drawn) { if (p.sit) heroRest(c, t); else heroWalk(c, t); }
     c.restore();
     if (posed) return p.pose.cm;
@@ -1171,8 +1198,9 @@ function drawSpr(sp, x, y, sc, fq, shadow){
   const dw = sp.w * sc, dh = sp.hm * sc; if (dh < 2.5) return;
   const x0 = x - dw * 0.5; if (x0 > W || x0 + dw < 0 || y - dh > H || y < 0) return;
   if (shadow) { const sw = dw * 1.05, shh = Math.min(sw * 0.36, dh * 0.5); ctx.drawImage(SHADOW, x - sw * 0.62, y - shh * 0.55, sw, shh); ctx.drawImage(SHADOW, x - sw * 0.3, y - shh * 0.3, sw * 0.6, shh * 0.6); }   // 地面影子＋腳底接觸陰影
-  if (fq < 0.96) ctx.drawImage(sp.c, x0, y - dh, dw, dh);
-  if (fq > 0.04) { const a = ctx.globalAlpha; ctx.globalAlpha = a * fq; ctx.drawImage(sp.h, x0, y - dh, dw, dh); ctx.globalAlpha = a; }
+  const px = dw * DPR;
+  if (fq < 0.96) ctx.drawImage(mip(sp.c, px), x0, y - dh, dw, dh);
+  if (fq > 0.04) { const a = ctx.globalAlpha; ctx.globalAlpha = a * fq; ctx.drawImage(mip(sp.h, px), x0, y - dh, dw, dh); ctx.globalAlpha = a; }
 }
 // 土坎細節：上緣一條斷斷續續的墨線（讓切面讀得出來），偶爾露出一顆石頭
 function bankDetail(i, j, side, fade, fi){
