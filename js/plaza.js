@@ -212,7 +212,8 @@ function rr(x, y, w, h, r){ ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x,
 function drawLabel(p, x, y, now){
   const mine = p.id === me;
   ctx.font = `12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const nw = ctx.measureText(p.name).width + 12;
+  if (p._nwFor !== p.name) { p._nwFor = p.name; p._nw = ctx.measureText(p.name).width + 12; }   // 名牌寬度、對話框折行只在文字變了才量（以前每格每個字都量一次）
+  const nw = p._nw;
   ctx.fillStyle = mine ? 'rgba(255,224,138,.95)' : 'rgba(255,248,230,.9)'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
   rr(x - nw / 2, y - 9, nw, 18, 9); ctx.fill(); ctx.stroke();
   ctx.fillStyle = INK; ctx.fillText(p.name, x, y + 0.5);
@@ -230,7 +231,8 @@ function drawLabel(p, x, y, now){
   if (p.say && age < SAY_MS) {
     ctx.globalAlpha = Math.min(1, (SAY_MS - age) / 500, age / 120);
     ctx.font = `14px ${FONT}`;
-    const lines = wrap(p.say, 150), lh = 18, bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 18, bh = lines.length * lh + 10;
+    if (p._sayFor !== p.say) { p._sayFor = p.say; p._lines = wrap(p.say, 150); p._bw = Math.max(...p._lines.map(l => ctx.measureText(l).width)) + 18; }
+    const lines = p._lines, lh = 18, bw = p._bw, bh = lines.length * lh + 10;
     const bx = clamp(x - bw / 2, 4, W - bw - 4), by = top - bh - 8;
     ctx.fillStyle = mine ? '#eaf6d8' : '#fffdf4'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
     rr(bx, by, bw, bh, 10); ctx.fill(); ctx.stroke();
