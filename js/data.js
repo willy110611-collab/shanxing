@@ -300,6 +300,76 @@ SX.ENCOUNTERS = [
   { id:'e36', text:'抬頭的瞬間，一顆、兩顆、好多顆流星劃過銀河，是流星雨！', where:{ mountains:['alishan','hehuan','jiaming','xueshan','yushan'], time:['night'] }, wx:['clear'], rare:true, weight:0.6, choices:[
       { label:'趕快許願', result:'願望還沒說完，又一顆流星劃過去。這次你說完了。', effect:{ item:'t_starlight_stamp', temp:2 } },
       { label:'關掉頭燈，躺下來數', result:'你數到第十七顆的時候，覺得整片天空都是你的。', effect:{ stam:15, temp:3 } } ] },
+  // 長期收集奇遇（第 12 批）：每座山都有自己的小故事，稀有的要碰對時段、天氣或季節
+  { id:'e37', text:'走到象山的大石頭旁，山下的城市燈火一盞一盞亮了起來，像打翻的星星盒子。', where:{ mountains:['xiangshan'], minFrac:0.5 }, time:['dusk','night'], choices:[
+      { label:'找塊石頭坐下來看', result:'晚風涼涼的，城市的聲音變得好遠，你覺得一天的累都放下了。', effect:{ stam:8, temp:2 } },
+      { label:'拍一張夜景照片', result:'照片裡的燈光一閃一閃，像是城市在對你眨眼。', effect:{ photo:true } } ] },
+  { id:'e38', text:'林子裡傳來「叩、叩、叩」的聲音，抬頭一看，是一隻五色鳥正在樹洞口張望。', where:{ mountains:['xiangshan','qixing','guanyin'] }, choices:[
+      { label:'站在遠處靜靜看', result:'五色鳥歪著頭看了你一下，又繼續叩叩叩，你忍不住笑了。', effect:{ temp:2 } },
+      { label:'學牠叩叩叩', result:'牠停下來想了想，好像在說：「你敲得不太對喔。」', effect:{ temp:1 } } ] },
+  { id:'e39', text:'霧慢慢散開，夢幻湖出現在眼前。水面上一叢叢細細的台灣水韭，安安靜靜地長在這裡。', where:{ mountains:['qixing'], minFrac:0.2, maxFrac:0.7 }, wxPref:['fog'], rare:true, choices:[
+      { label:'站在木棧道上慢慢看', result:'你只用眼睛和相機記住它們，這麼小的植物，全世界只住在這片湖裡。', effect:{ item:'t_mengxiang_card', temp:2 } },
+      { label:'深呼吸，聽湖邊的蛙鳴', result:'霧又慢慢合起來，湖像是把秘密收回去了。', effect:{ stam:6 } } ] },
+  { id:'e40', text:'冷水坑的足湯冒著白白的熱氣，幾位山友正把腳泡在暖暖的水裡聊天。', where:{ mountains:['qixing'], maxFrac:0.35 }, wxPref:['rain','fog'], choices:[
+      { label:'脫下鞋子一起泡腳', result:'暖意從腳底慢慢爬上來，大家說說笑笑，你捨不得起身。', effect:{ stam:12, temp:3 } },
+      { label:'在旁邊暖暖手就好', result:'熱氣撲在臉上，眼鏡起霧了，你自己笑了出來。', effect:{ temp:2 } } ] },
+  { id:'e41', text:'天空中出現好幾個小黑點，慢慢繞著圈往上升。是過境的灰面鵟鷹，正要往北方飛。', where:{ mountains:['guanyin'], minFrac:0.4 }, wx:['clear','cloud'], rare:true, choices:[
+      { label:'用望遠鏡數數看有幾隻', result:'你數到第二十三隻就數亂了，牠們乘著風，越飛越高。', effect:{ photo:true, temp:2 } },
+      { label:'對牠們說一路順風', result:'最後一隻在你頭上繞了一圈才離開，像是在說再見。', effect:{ temp:3 } } ] },
+  { id:'e42', text:'雨絲裡出現一間小小的山莊，門口寫著「聖母山莊」。屋簷下的長椅，剛好可以躲一下雨。', where:{ mountains:['matcha'], minFrac:0.6 }, wxPref:['rain','fog'], choices:[
+      { label:'進去蓋一個紀念章', result:'章印蓋得歪歪的，但你很喜歡，這是雨天才有的回憶。', effect:{ item:'t_sacredmother_stamp', temp:1 } },
+      { label:'坐在屋簷下聽雨', result:'雨打在鐵皮屋頂上咚咚響，你喝了口熱水，覺得好安心。', effect:{ stam:10, temp:2 } } ] },
+  { id:'es_maple', season:'maple', text:'秋天的稜線上，整片芒草都開成了銀白色，風一吹，整座山像在輕輕呼吸。', where:{ minFrac:0.4 }, choices:[
+      { label:'走進芒草裡拍一張', result:'芒草比你還高，照片裡只看得到你的帽子和一片銀色的海。', effect:{ photo:true } },
+      { label:'坐在步道邊聽風', result:'沙沙沙的聲音一直沒停，你覺得心裡也被吹得好乾淨。', effect:{ stam:8, temp:2 } } ] },
+  { id:'e43', text:'林子的另一邊傳來「嗚——」的汽笛聲，是阿里山小火車正慢慢爬上山。', where:{ mountains:['alishan'], maxFrac:0.5 }, choices:[
+      { label:'跑到觀景點對火車揮手', result:'車窗裡的小朋友也對你揮手，火車慢慢消失在檜木林裡。', effect:{ item:'t_train_ticket', temp:2 } },
+      { label:'停下來聽汽笛的回聲', result:'聲音在山谷裡繞了好幾圈，像是老火車在說故事。', effect:{ temp:1 } } ] },
+  { id:'e44', text:'一棵好大好大的紅檜神木站在步道旁，樹幹要好幾個人手拉手才圍得起來。', where:{ mountains:['alishan','taiping'], maxFrac:0.7 }, choices:[
+      { label:'仰頭看它的樹冠', result:'陽光從好高好高的地方灑下來，你覺得自己好小，也好安心。', effect:{ temp:2 } },
+      { label:'在木棧道上靜靜站一會', result:'它已經在這裡站了兩千年，你的煩惱好像也沒那麼大了。', effect:{ stam:8 } } ] },
+  { id:'e45', text:'天還沒全亮，祝山觀日平台上擠滿了人。遠方玉山的稜線後面，透出一點點金色。', where:{ mountains:['alishan'], minFrac:0.5 }, time:['dawn'], wx:['clear','cloud'], rare:true, choices:[
+      { label:'跟著大家一起倒數', result:'太陽探出頭的那一刻，大家一起「哇」了出來，你也是。', effect:{ photo:true, temp:3 } },
+      { label:'閉上眼睛感受第一道光', result:'臉頰慢慢暖了起來，你覺得今天一定會是好日子。', effect:{ stam:15, temp:2 } } ] },
+  { id:'e46', text:'「叮叮叮——」太平山的蹦蹦車從身旁慢慢開過，車廂晃呀晃，乘客都笑得好開心。', where:{ mountains:['taiping'], maxFrac:0.4 }, choices:[
+      { label:'對車上的人揮揮手', result:'一位阿嬤從窗口遞出一張紀念車票：「給你，下次一起坐！」', effect:{ item:'t_bongbong_ticket', temp:2 } },
+      { label:'跟著蹦蹦的節奏走路', result:'你一路蹦蹦蹦地走，連自己都覺得好好笑。', effect:{ temp:1 } } ] },
+  { id:'e47', text:'霧氣停在翠峰湖上，湖面像一面鏡子，把四周的檜木林一棵一棵倒映出來。', where:{ mountains:['taiping'], minFrac:0.5 }, wxPref:['fog'], rare:true, choices:[
+      { label:'拍下湖面的倒影', result:'照片上下一模一樣，分不清哪邊才是真的森林。', effect:{ item:'t_cuifeng_card' } },
+      { label:'沿著湖邊慢慢散步', result:'湖很安靜，你走路也跟著輕輕的，怕把鏡子踩破。', effect:{ stam:10, temp:1 } } ] },
+  { id:'e48', text:'箭竹叢上停著一隻紅紅的小鳥，像一顆會動的莓果。是酒紅朱雀！', where:{ mountains:['hehuan','xueshan','yushan'], minFrac:0.5 }, wx:['clear','cloud'], rare:true, choices:[
+      { label:'蹲低身子，遠遠拍一張', result:'牠在枝頭跳了兩下才飛走，照片裡留下一抹酒紅色。', effect:{ item:'t_rosefinch_photo' } },
+      { label:'安靜看牠吃草籽', result:'牠吃得好專心，完全沒發現你。你也捨不得出聲。', effect:{ temp:2 } } ] },
+  { id:'e49', text:'箭竹林裡傳來響亮的歌聲，一隻金翼白眉跳到路邊，翅膀上的金色閃了一下。', where:{ mountains:['hehuan','xueshan','yushan','jiaming'], minFrac:0.4 }, choices:[
+      { label:'放慢腳步聽牠唱', result:'牠唱一句，你走一步，好像在幫你打拍子。', effect:{ temp:2 } },
+      { label:'拿出相機記錄', result:'牠一點也不怕，還在鏡頭前歪頭擺了個姿勢。', effect:{ photo:true } } ] },
+  { id:'es_rime', season:'snow', text:'整排冷杉的枝葉上結滿了白白的霧淞，像是一夜之間被畫上了糖霜。', where:{ minFrac:0.4 }, wxPref:['fog','snow'], rare:true, choices:[
+      { label:'拍下冰晶的特寫', result:'放大一看，每一根針葉上都長著細細的小冰花。', effect:{ item:'t_rime_photo', temp:-1 } },
+      { label:'聽冰晶落下的聲音', result:'風一吹，枝頭沙沙落下亮晶晶的碎冰，好像在下小小的雪。', effect:{ temp:-2, stam:4 } } ] },
+  { id:'e50', text:'遠處的草坡上，幾隻水鹿正低頭吃草，大耳朵一轉一轉的。', where:{ mountains:['jiaming','xueshan','yushan'], minFrac:0.4 }, time:['dawn','dusk','night'], rare:true, choices:[
+      { label:'停在原地，遠遠看著', result:'帶頭的水鹿抬頭看了你一眼，又安心地繼續吃草。', effect:{ temp:3 } },
+      { label:'不開閃光，輕輕拍一張', result:'照片裡的水鹿站在暮色裡，像一幅安靜的畫。', effect:{ photo:true } } ] },
+  { id:'e51', text:'夜深了，嘉明湖的水面上浮著一輪月亮。湛藍的「天使的眼淚」，此刻正安安靜靜地抱著月光。', where:{ mountains:['jiaming'], minFrac:0.8 }, time:['night'], wx:['clear'], rare:true, weight:0.2, choices:[
+      { label:'在湖邊坐下來，只是看', result:'你什麼都沒說，湖也什麼都沒說，這樣就很好。', effect:{ item:'t_moon_lake_photo', temp:3 } },
+      { label:'對著湖許一個願', result:'一陣風吹過，月亮在水面輕輕晃了一下，好像聽到了。', effect:{ stam:20, temp:2 } } ] },
+  { id:'e52', text:'山屋外，登山協作大哥正在煮一大鍋熱湯，看到你就招手：「來，喝一碗暖暖身子。」', where:{ mountains:['jiaming','xueshan','yushan'], minFrac:0.4 }, choices:[
+      { label:'雙手接過來，說謝謝', result:'湯裡有高麗菜和香菇，你喝完全身都暖了。大哥笑說明天要早起喔。', effect:{ stam:18, temp:3 } },
+      { label:'幫忙洗碗', result:'大哥說你是今天最乖的山友，還多分你一顆水煮蛋。', effect:{ stam:10, temp:2 } } ] },
+  { id:'e53', text:'走進黑森林，高大的冷杉擋住了天空，地上鋪著厚厚的苔蘚，連腳步聲都變小了。', where:{ mountains:['xueshan'], minFrac:0.55, maxFrac:0.85 }, wxPref:['fog'], choices:[
+      { label:'放輕腳步，聞聞森林的味道', result:'空氣裡有淡淡的木頭香，你覺得自己好像走進了童話書。', effect:{ temp:2 } },
+      { label:'停下來聽有沒有鳥叫', result:'遠遠傳來一兩聲啾啾，森林好像在跟你打招呼。', effect:{ stam:6 } } ] },
+  { id:'e54', text:'傍晚走到 369 山莊，橘色的光照在黃色屋頂上，山友們坐在門口看夕陽。', where:{ mountains:['xueshan'], minFrac:0.45, maxFrac:0.75 }, time:['dusk'], choices:[
+      { label:'進山莊蓋紀念章', result:'管理員幫你把章蓋得端端正正，還提醒你今晚早點睡。', effect:{ item:'t_369_stamp', temp:1 } },
+      { label:'跟大家一起看夕陽', result:'光慢慢從橘色變成粉紅色，沒有人說話，大家都捨不得。', effect:{ photo:true, temp:2 } } ] },
+  { id:'e55', text:'圈谷的碎石坡旁，石縫邊有一隻小小的山椒魚，濕濕亮亮的，正慢慢爬回陰影裡。', where:{ mountains:['xueshan'], minFrac:0.85 }, wxPref:['rain','fog'], rare:true, weight:0.15, choices:[
+      { label:'屏住呼吸，遠遠看著', result:'牠是冰河時期留下來的小居民。你不翻石頭、不打擾，只把牠記在心裡。', effect:{ item:'t_salamander_card', temp:3 } },
+      { label:'輕輕繞開，讓牠好好休息', result:'你把腳步放得好輕好輕，像怕吵醒一個很老很老的夢。', effect:{ temp:2 } } ] },
+  { id:'e56', text:'凌晨的排雲山莊，大家戴著頭燈在門口集合，準備摸黑出發去看日出。', where:{ mountains:['yushan'], minFrac:0.55 }, time:['night','dawn'], choices:[
+      { label:'蓋個章再出發', result:'紅色的章印在頭燈下很清楚，你把它小心收好。', effect:{ item:'t_paiyun_stamp' } },
+      { label:'跟隊友互相檢查裝備', result:'大家幫彼此拉好外套拉鍊，一起說：「出發！」', effect:{ stam:6, temp:2 } } ] },
+  { id:'e57', text:'霧裡出現一片銀白色的枯樹林，是白木林。旁邊的玉山圓柏貼著地面長，努力地抓住山坡。', where:{ mountains:['yushan','hehuan'], minFrac:0.7 }, wx:['fog','cloud'], rare:true, choices:[
+      { label:'拍下霧中的白木林', result:'樹枝像在霧裡寫字，你按下快門，好像收到一封很安靜的信。', effect:{ item:'t_whitewood_photo' } },
+      { label:'摸摸自己的心跳，慢慢走', result:'高山上的樹長得好慢好慢，你也決定慢慢來。', effect:{ stam:8, temp:1 } } ] },
 ];
 
 // 寶物：rarity 為 普通 / 稀有 / 傳說；drop 可為山 id 陣列或 'any'；多為照片、卡片、紀念章、拓印，不取走自然物
@@ -327,6 +397,19 @@ SX.TREASURES = [
   { id:'t_old_triangle', name:'百年三角點的回憶', rarity:'傳說', desc:'一張老照片，記錄了很久以前測量的人們站在山頂的樣子。', drop:['qixing','taiping','xueshan'] },
   { id:'t_summit_dawn', name:'晨光山頂照片', rarity:'傳說', desc:'在天還沒亮前登頂，等到第一道光照亮山稜線。', drop:['yushan','alishan','xueshan'] },
   { id:'t_forest_bell', name:'林間風鈴卡', rarity:'傳說', desc:'一張畫著風鈴的卡片，風吹過時好像能聽到叮噹聲。', drop:['matcha','taiping','alishan'] },
+  // 長期收集寶物（第 12 批）：多半要碰到某座山的奇遇才比較容易拿到
+  { id:'t_mengxiang_card', name:'夢幻湖水韭圖鑑卡', rarity:'稀有', desc:'畫著台灣水韭的小卡，全世界只有七星山的夢幻湖找得到它。你只帶走了這張圖。', drop:['qixing'] },
+  { id:'t_sacredmother_stamp', name:'聖母山莊紀念章', rarity:'普通', desc:'在抹茶山的聖母山莊蓋下的章，印泥被雨氣弄得有點暈開，反而更好看。', drop:['matcha'] },
+  { id:'t_train_ticket', name:'小火車紀念車票', rarity:'普通', desc:'一張硬硬的老式車票，印著阿里山小火車和檜木林。', drop:['alishan'] },
+  { id:'t_bongbong_ticket', name:'蹦蹦車紀念車票', rarity:'普通', desc:'太平山蹦蹦車的紀念票，拿在手上好像還聽得到叮叮叮。', drop:['taiping'] },
+  { id:'t_cuifeng_card', name:'翠峰湖倒影明信片', rarity:'稀有', desc:'霧裡的翠峰湖像一面鏡子，森林上下各有一片。', drop:['taiping'] },
+  { id:'t_rosefinch_photo', name:'酒紅朱雀的一瞥', rarity:'稀有', desc:'箭竹叢上的一抹酒紅色，是高山上最可愛的小訪客。', drop:['hehuan','xueshan','yushan'] },
+  { id:'t_whitebrow_card', name:'金翼白眉圖鑑卡', rarity:'稀有', desc:'記錄了金翼白眉的歌聲和翅膀上的金色，牠總是在步道邊唱歌給山友聽。', drop:['hehuan','xueshan','yushan','jiaming'] },
+  { id:'t_369_stamp', name:'369山莊紀念章', rarity:'普通', desc:'雪山 369 山莊的章，章裡有黃色屋頂和一大片山坡。', drop:['xueshan'] },
+  { id:'t_paiyun_stamp', name:'排雲山莊紀念章', rarity:'普通', desc:'在攻頂玉山前一晚蓋下的章，代表你曾在台灣最高的山屋住過一晚。', drop:['yushan'] },
+  { id:'t_whitewood_photo', name:'白木林照片', rarity:'稀有', desc:'霧中的銀白色枯樹林，安靜得像一幅水墨畫。', drop:['yushan','hehuan'] },
+  { id:'t_salamander_card', name:'雪山山椒魚圖鑑卡', rarity:'傳說', desc:'冰河時期留下來的小居民，只住在高山冷冷的石縫邊。能遇見牠，是山給你的禮物。', drop:['xueshan'] },
+  { id:'t_moon_lake_photo', name:'天使的眼淚月光照片', rarity:'傳說', desc:'夜裡的嘉明湖抱著一輪月亮，湛藍的湖水在月光下閃著銀色。', drop:['jiaming'] },
   // 季節限定寶物：只在 season 的期間、該季節的山上掉落（drop 'any' 代表季節的每一座山）
   { id:'t_snow_crystal_stamp', name:'雪季冰晶章', rarity:'傳說', season:'snow', desc:'只有下雪的季節才蓋得到的章，章印是一片六角形的雪花。', drop:'any' },
   { id:'t_sakura_bookmark', name:'阿里山櫻花書籤', rarity:'稀有', season:'sakura', desc:'印著阿里山櫻花和小火車的書籤，夾在書裡就像把春天帶回家。', drop:['alishan'] },
@@ -336,6 +419,7 @@ SX.TREASURES = [
   { id:'t_cloudfall_photo', name:'夏日雲瀑照片', rarity:'稀有', season:'summer', desc:'午後雷陣雨過後，雲像瀑布一樣從山稜線流下來。', drop:'any' },
   { id:'t_maple_postcard', name:'楓紅明信片', rarity:'稀有', season:'maple', desc:'秋天的山坡一半是紅葉、一半是銀白芒草，寄給想念的人剛剛好。', drop:'any' },
   { id:'t_cloudsea_card', name:'冬日雲海明信片', rarity:'稀有', season:'cloudsea', desc:'冷冷的清晨，腳下是一整片安靜的雲海，遠方的山像小島。', drop:'any' },
+  { id:'t_rime_photo', name:'霧淞照片', rarity:'稀有', season:'snow', desc:'雪季的高山上，冷杉枝頭結滿白白的冰晶，像撒了一層糖霜。', drop:'any' },
 ];
 
 // 隱藏任務 / 成就：cond.type 為 climbs | mountain | time | wx | items | notes | cairns | rests | nofast | gps
