@@ -821,7 +821,12 @@ function buildLUT(sn){
     const c = tone(base[k], lv);
     for (let f = 0; f < FOGN; f++) LUT.push(css(mix(c, hazeRgb, f / (FOGN - 1))));
   }
+  // 草地坡面的連續明暗（-10～10 共 21 階 × 霧階）：背光往暗色、向陽往暖色，越陡越深；底色直接用這個顏色，不用另外蓋一層
+  GRS.length = 0;
+  const g0 = tone(base[0], 0), g1 = tone(base[0], 1), g2 = tone(base[0], 2);
+  for (let f = 0; f < FOGN; f++) for (let q = -10; q <= 10; q++) GRS.push(css(mix(q < 0 ? mix(g1, g0, Math.min(1, -q / 10 * 1.4)) : mix(g1, g2, Math.min(1, q / 10 * 1.4)), hazeRgb, f / (FOGN - 1))));
 }
+const GRS = [];
 // 明暗三階：0 背光（偏藍紫）、1 原色、2 向陽（暖黃）。地面色表和草叢貼圖共用，草才會跟地面同色
 function tone(c, lv){ return lv === 0 ? mix(c, '#2c3560', 0.27) : lv === 2 ? mix(c, '#fff0b4', 0.2) : rgb(c); }
 function addPoly(L, pts, ox){ L.moveTo(pts[0] + ox, pts[1]); for (let i = 2; i < pts.length; i += 2) L.lineTo(pts[i] + ox, pts[i + 1]); L.closePath(); }
@@ -1765,20 +1770,20 @@ function drawWorld(b, t){
           if (side > 0) { ctx.globalAlpha = bA * 0.35; ctx.fillStyle = '#2c3560'; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]); }
           ctx.globalAlpha = fade;
         }
-        // 草地底色：整片同一個顏色（以前每兩段換一次深淺、每格坡面分三階，一段一段像色塊），明暗交給下面連續的坡面陰影
-        ctx.beginPath();
-        for (k = 1; k < nS - 1; k++) { const e = side * 0.8; ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + 1); ctx.lineTo(tX2[k] - e, tY2[k] + 1); ctx.closePath(); }   // 遠端往內縮 1 像素：底色的反鋸齒邊不會蓋到後面那段已經貼好的草地（以前每段交界有一條淡淡的亮線）
-        ctx.fillStyle = LUT[1 * FOGN + fi]; ctx.fill();
+        // 草地底色：依坡面明暗連續變（以前每兩段換一次深淺、每格坡面只分三階，一段一段像色塊）
+        // 遠端往內縮 1 像素：底色的反鋸齒邊不會蓋到後面那段已經貼好的草地（以前每段交界有一條淡淡的亮線）
+        for (k = 1; k < nS - 1; k++) { const e = side * 0.8; ctx.fillStyle = GRS[fi * 21 + Math.round(tSh[k] * 10) + 10]; quad(tX1[k] - e, tY1[k], tX1[k + 1] + e, tY1[k + 1], tX2[k + 1] + e, tY2[k + 1] + 1, tX2[k] - e, tY2[k] + 1); }
         if (TEX.grass && ta > 0.03) {   // 草地貼圖：近處切成薄橫條各自對齊透視，跟前後段接得起來（下雪時淡掉，露出底下積雪的白色坡面）
           texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * GRASS_A * (1 - snowFall * snowAmt * 0.85), function(a, b){
             for (k = 1; k < nS - 1; k++) { ctx.moveTo(lerp(tX1[k], tX2[k], a), lerp(tY1[k], tY2[k], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], a), lerp(tY1[k + 1], tY2[k + 1], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], b), lerp(tY1[k + 1], tY2[k + 1], b)); ctx.lineTo(lerp(tX1[k], tX2[k], b), lerp(tY1[k], tY2[k], b)); ctx.closePath(); }
           }, SUB_GRASS);
           ctx.globalAlpha = fade;
         }
-        // 坡面明暗：背光面壓暗、向陽面提亮，濃淡跟著坡度連續變（蓋在貼圖上，遠處跟著霧變淡）
+        // 很陡的坡再蓋一層陰影／受光（蓋在貼圖上，從 0.3 開始由 0 慢慢加深，不會突然出現；遠處跟著霧變淡）。緩坡只靠底色，少蓋一層省效能
         ctx.globalAlpha = fade * (1 - fq * 0.8);
         for (k = 1; k < nS - 1; k++) {
-          const q = Math.round(tSh[k] * 40); if (Math.abs(q) < 2) continue;
+          const v = Math.abs(tSh[k]); if (v <= 0.3) continue;
+          const q = Math.round((v - 0.3) / 0.7 * 40) * (tSh[k] < 0 ? -1 : 1); if (!q) continue;
           ctx.fillStyle = SHC[q + 40]; quad(tX1[k], tY1[k], tX1[k + 1], tY1[k + 1], tX2[k + 1], tY2[k + 1], tX2[k], tY2[k]);
         }
         ctx.globalAlpha = fade;
