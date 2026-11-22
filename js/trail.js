@@ -1731,7 +1731,8 @@ function stepMates(dt){ for (const mt of mates) mt.d += (mt.target - mt.d) * Mat
 function drawMate(mt, j, f, t, fade){
   const d0 = curS ? curS.dist || 0 : 0, near = Math.abs(mt.d - d0) < 1.6;
   proj(j, f, false);
-  const X = gx + (near ? 0.95 : -0.35) * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
+  const ms = Math.floor(mt.d / SEG), mf = mt.d / SEG - ms, rw = rwF(ms, mf), onSt = sAt(ms) === 1;   // 隊友腳下這段的路半寬、是不是階梯
+  const X = gx + (near ? 0.5 : -0.25) * rw * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
   if (Y - 200 * u > H || na <= 0) return;   // 整個人（含名牌）都在畫面下緣以外才不畫
   fade *= na;
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
@@ -1742,7 +1743,7 @@ function drawMate(mt, j, f, t, fade){
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
-    const drawn = heroArt(ctx, { rest:mt.rest }, t, tintFilter(hashStr(mt.name)));
+    const drawn = heroArt(ctx, { rest:mt.rest, stair:onSt }, t);   // 隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
     if (!drawn) on2D(function(c){ if (mt.rest) heroRest(c, t); else heroWalk(c, t); });
   } finally {
     ctx.restore();
@@ -1830,7 +1831,8 @@ function heroArt(c, s, t, fl, me){
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
   const fw = s.face === 'front' ? 'hiker_front_walk8' : s.face === 'side' ? 'hiker_side_walk8' : null;   // 廣場：往鏡頭走用正面、往旁邊走用側面（plaza.js 決定方向、往左時整個人鏡射），停下來面向鏡頭
   if (fw && ART.get(fw)) return ART.drawFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
-  const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;   // 下雨天穿黃色雨衣
+  const st16 = s.stair && ART.get('hiker_stairs16') ? rainy('hiker_stairs16') : null;   // 隊友走到階梯段：用爬階梯圖
+  const walk = st16 || (isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY);   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
   return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
 }
