@@ -592,5 +592,15 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .byInfo b{font-weight:normal;text-align:right}
 .byInfo p{margin:0 0 4px;font-size:12.5px;line-height:1.5;color:var(--ink2)}
 
+/* ───── 第一次出發的玩法小卡、大廳取暱稱卡 ───── */
+.introL{list-style:none;margin:2px 0 14px;padding:0;display:flex;flex-direction:column;gap:9px}
+.introL li{position:relative;padding:8px 10px 8px 34px;font-family:var(--fontT);font-size:17px;line-height:1.4;background:rgba(255,250,235,.7);border:1.5px dashed rgba(106,78,58,.45);border-radius:var(--irrS)}
+.introL li::before{content:"";position:absolute;left:11px;top:50%;width:13px;height:13px;margin-top:-7px;border-radius:50%;background:#8fcf6e;border:2px solid var(--ink)}
+.lbWelcome{margin:10px auto 0;flex:none}
+.lbWelcome .pw{margin-top:4px}
+.lbWelcome .tiny{margin-top:12px}
+/* 讀取畫面收起時：字和進度條先藏起來，背景再慢慢淡掉，不會跟後面畫面的字疊在一起 */
+.loading.done .ldBox{opacity:0;transition:opacity .12s}
+
 /* 標題用霞鶩文楷（字型定義在 :root --fontT） */
 h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family:var(--fontT)}

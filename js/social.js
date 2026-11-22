@@ -61,19 +61,26 @@
   // ───────── 大廳畫面 ─────────
   let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false;
   const PZ = () => SX.plaza;
-  function ensureAccount(then){
-    if (acct) return then();
-    const mc = $('#mCard'); mc.innerHTML = `<h3>第一次來到山友大廳</h3>
-      <p class="summitBig">取一個暱稱，其他山友會看到這個名字。</p>
+  // 還沒有帳號：大廳裡面放一張「取暱稱」的木牌卡（不用蓋住整個畫面的彈出視窗，上面的「← 地圖」永遠按得到）
+  // 不想取名字可以按「先不要」回地圖，之後想來再來；換手機的人直接在這張卡貼復原碼
+  function renderWelcome(){
+    const body = $('#lobbyBody'); if (!body) return;
+    if (PZ()) PZ().unmount();
+    body.classList.remove('plazaMode');
+    body.innerHTML = `<div class="mCard lbWelcome"><h3>第一次來到山友大廳</h3>
+      <p class="summitBig">取一個暱稱，其他山友會看到這個名字。不急的話，也可以先不要。</p>
       <input id="nmIn" class="txtIn" maxlength="12" placeholder="暱稱（最多 12 個字）">
-      <div class="mBtns"><button class="cbtn go" id="nmOk">進入大廳</button></div>
-      <p class="tiny">已經有帳號（換新手機）？到大廳的「我的帳號」輸入復原碼。</p>`;
-    $('#modal').classList.add('on');
+      <div class="mBtns"><button class="cbtn" id="nmNo">先不要</button><button class="cbtn go" id="nmOk">進入大廳</button></div>
+      <p class="tiny">已經有帳號（換新手機）？在這裡貼上復原碼：</p>
+      <form class="pw" id="rsF0"><input id="rsIn0" placeholder="貼上復原碼"><button class="cbtn sm">登入</button></form></div>`;
+    $('#nmNo').onclick = () => { if (A().pop) A().pop(); if (G().go) G().go('map'); };
     $('#nmOk').onclick = async () => {
       const v = $('#nmIn').value.trim(); if (!v) { toast('先取個暱稱吧'); return; }
       $('#nmOk').disabled = true;
-      try { await register(v); showRecovery(true, then); } catch(e){ toast(e.message, 3200); $('#nmOk').disabled = false; }
+      try { await register(v); showRecovery(true, open); } catch(e){ toast(e.message, 3200); $('#nmOk').disabled = false; }
     };
+    $('#rsF0').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn0').value.trim(); if (!v) return;
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); open(); offerCloudLoad(); } catch(err){ toast(err.message, 3000); } };
   }
   function showRecovery(first, then){
     const mc = $('#mCard'); mc.innerHTML = `<h3>${first ? '帳號建好了！' : '我的復原碼'}</h3>
@@ -85,11 +92,10 @@
     $('#rcOk').onclick = () => { $('#modal').classList.remove('on'); then && then(); };
   }
   function open(){
-    ensureAccount(() => {
-      render(); refresh();
-      if (!lobby) lobby = room('lobby', onLobby);
-      clearInterval(open._t); open._t = setInterval(refresh, 20000);
-    });
+    render(); if (!acct) return;
+    refresh();
+    if (!lobby) lobby = room('lobby', onLobby);
+    clearInterval(open._t); open._t = setInterval(refresh, 20000);
   }
   function close(){ clearInterval(open._t); if (PZ()) PZ().unmount(); if (lobby) { lobby.close(); lobby = null; } }
   // 登山口廣場：伺服器傳來的事件同步到畫面
@@ -121,6 +127,7 @@
   }
   function render(){
     $$('#scrLobby .tab').forEach(b => { b.classList.toggle('on', b.dataset.lt === tab); b.onclick = () => { if (A().pop) A().pop(); tab = b.dataset.lt; render(); if (tab === 'friends') refresh(); }; });
+    if (!acct) return renderWelcome();   // 沒有帳號時每個分頁都先顯示取暱稱的卡（好友、帳號分頁都要有帳號）
     const body = $('#lobbyBody'); if (body) body.classList.toggle('plazaMode', tab === 'plaza');
     if (tab !== 'plaza' && PZ()) PZ().unmount();
     if (tab === 'plaza') renderPlaza(); else if (tab === 'friends') renderFriends(); else renderMe();
