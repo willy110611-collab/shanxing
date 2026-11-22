@@ -10,6 +10,7 @@ const TAU = Math.PI * 2, INK = '#3a2a20', FONT = getComputedStyle(document.docum
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SPEED = 0.2;           // 每秒走多少廣場寬
 const SAY_MS = 5000;         // 頭上冒字停留多久
+const PLAZA_PETS = false;   // 廣場先不帶寵物（玩家意見）；要恢復改成 true
 const PLAZA_ART_TOP = 0.635;   // plaza_bg 美術圖：石板地上緣（山門腳下）在畫面高度的比例；換圖要重量
 // 打招呼動作：k 是連線用的代號，ms 是動作長度（坐下會一直坐到下次走動）
 // 圖示美術圖是 'emo_' + k；pose 是做動作時換上的背影美術圖，poseCm 是那張圖整張要畫多高（公分，圖裡舉高的手也算進去，人才跟走路時一樣高）
@@ -218,7 +219,7 @@ function loop(now){
     }
     // 打招呼的動作圖也交給 drawPerson 畫（寵物、影子、衣服色調都同一套）
     ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
-    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip, face:p.face || 'front', pose:pose ? { id:pose.pose, cm:pose.poseCm } : null }, t) : 182;
+    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:PLAZA_PETS ? p.pet : null, flip:p.flip, face:p.face || 'front', pose:pose ? { id:pose.pose, cm:pose.poseCm } : null }, t) : 182;
     ctx.restore();
     labels.push({ p, x:s.sx, y:s.sy - (headCm * sq + hop) * s.u - 6 });
   }

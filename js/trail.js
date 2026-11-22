@@ -1312,9 +1312,8 @@ function gaitSheet(){
   gait.onTurn = Math.abs(hero.turn) > (gait.onTurn ? G.turnOut : G.turnIn);
   gait.sf = false;
   if (gait.act) { gait.sid = gait.act; gait.sf = gait.aflip; return; }
-  if (gait.onStair && ART.get('hiker_stairs8')) { gait.sid = rainy('hiker_stairs8'); return; }
-  if (gait.lvl && ART.get('hiker_tired_walk8')) { gait.sid = rainy('hiker_tired_walk8'); gait.sf = gait.onTurn && hero.turn > 0; return; }   // 累的走路圖本來朝左前方：右彎時鏡射
-  if (gait.onTurn && ART.get('hiker_turn_walk8')) { gait.sid = rainy('hiker_turn_walk8'); gait.sf = hero.turn < 0; return; }                // 轉身圖朝右前方：左彎時鏡射
+  // 走路一律用「正背面」那張：階梯圖每格身體一下朝左一下朝右、累的圖朝左前方、轉身圖朝右前方，換來換去看起來像左右斜著走（玩家意見：上階梯要直直走）
+  // 累了只放慢速度（GAIT.pace）；這三張要等重畫成正背面再加回來
   // 一般走路：有八格版就用八格（走路比較順）；下雨天穿黃色雨衣
   gait.sid = isRain && ART.get('hiker_rain_walk8') ? 'hiker_rain_walk8' : isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : ART.get('hiker_walk8') ? 'hiker_walk8' : 'hiker_walk';
 }
@@ -1322,7 +1321,7 @@ function gaitSheet(){
 function gaitDraw(c, id, flip, fl){
   const e = ART.get(id); if (!e) return false;
   let i = 0, h = SCALE.hero * 100, dy = 0;
-  if (id === 'hiker_hop4') i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3;
+  if (id === 'hiker_hop4') { i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3; h *= e.frames[i].h / e.frames[3].h; }   // 跳起來那格的外框含離地空隙：照站著那格的比例畫，人不會忽大忽小
   else if (id === 'hiker_breath') h = SCALE.heroBreath * 100;
   else if (e.frames.length === 1) h = SCALE.heroPose * 100;
   else { i = walkFrame(e.frames.length); dy = -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv; }
