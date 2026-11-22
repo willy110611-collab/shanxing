@@ -1195,7 +1195,7 @@ S.resize = function(){
   if (w === W && h === H && d === DPR && RAYS && cv.width === Math.round(w * d)) return;
   W = w; H = h; DPR = d; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * HORF); CAMH = FOOTF * H * HZ / F; U = H / 812;   // 鏡頭高度由「登山客腳底在畫面的位置」反推
-  buildRays(); if (SHOW_FG) buildFG(); FGRIM = {};
+  buildRays(); if (SHOW_FG) buildFG(); FGRIM = {}; farReset();   // 尺寸變了：遠景快取重做
   // 暗角：中心放在登山客和前方步道之間，四角壓暗一點，視線自然落在人和路上
   vig = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.3, W / 2, H * 0.55, H * 0.74);
   vig.addColorStop(0, 'rgba(48,30,24,0)'); vig.addColorStop(0.6, 'rgba(48,30,24,0.14)'); vig.addColorStop(1, 'rgba(48,30,24,0.46)');
@@ -1216,10 +1216,10 @@ S.setMountain = function(m){
   buildCurves(m); buildElev(m); buildSlopes(); cairns = []; buildProps(); buildPalettes(); buildSprites();
   for (const k in tileSets) freeTiles(tileSets[k]);
   freePlx();
-  tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers(); gaitReset(); warmBuild();
+  tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers(); gaitReset(); warmBuild(); farReset();
 };
 // 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
-ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); warmBuild(); } });
+ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); warmBuild(); farReset(); } });
 // 空氣透視的霧色：取白天天空圖「地平線那一條」的平均色（暖金／淡青），遠處的樹、草、地面才會融進遠山和雲海
 // 沒有天空圖就用這座山的遠山色調淡
 function setHaze(){
@@ -1929,16 +1929,17 @@ function drawProp(o, i, j, f, fq, t, fade){
 const LOD_PX = 1.5, LODV = new Float64Array(6); let lodSkip = false;
 function lodSave(j){ LODV[0] = pX[j]; LODV[1] = pY[j]; LODV[2] = pS[j]; LODV[3] = pZ[j]; LODV[4] = pC[j]; LODV[5] = pW[j]; pX[j] = pX[j - 1]; pY[j] = pY[j - 1]; pS[j] = pS[j - 1]; pZ[j] = pZ[j - 1]; pC[j] = pC[j - 1]; pW[j] = pW[j - 1]; }
 function lodRestore(j){ pX[j] = LODV[0]; pY[j] = LODV[1]; pS[j] = LODV[2]; pZ[j] = LODV[3]; pC[j] = LODV[4]; pW[j] = LODV[5]; }
-function drawWorld(b, t){
+// 畫第 jHi 段到第 jLo 段（由遠到近）。far：畫進遠景快取（見 FAR），不畫登山客，最近那段的地面往下多畫 FAR_BLEED 像素，跟現場畫的近景接起來不會露縫
+function drawWorld(b, t, jHi, jLo, far){
   const s = curS, isWood = TH.trail === 'wood', nPeb = TH.trail === 'scree' ? 4 : 2, al = TH.alpine, treeBase = TH.bigtree ? 0.55 : 0.42;
   const snowTrees = snowAmt > 0.5 && SPR.coniferS;
   const lightA = (isNight || isRain || isFog || isSnow) ? 0 : clamp((sunVis - 0.3) / 0.5, 0, 1) * (1 - qs.light);   // 樹影、光斑：要有太陽才畫
   let j, k, pi = AP.length - 1;
-  hitN = 0; heroDone = false; lodSkip = false;
-  for (j = DRAW - 1; j >= 0; j--) {
+  heroDone = !!far; lodSkip = false;
+  for (j = jHi; j >= jLo; j--) {
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false;
-    const lod = j > 0 && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1;
+    const lod = j > jLo && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1;
     if (lod) { lodSave(j); lodSkip = true; }
     // 整段地面都在畫面下緣以外：不畫地面，但路旁的樹、草叢照畫（高的樹根部在畫面外、樹冠還看得到），讓它們自己滑出畫面邊緣
     const y2 = pY[j + 1], below = y2 > H + 80;
@@ -1949,7 +1950,7 @@ function drawWorld(b, t){
     if (fade < 0.005) { if (lod) { lodRestore(j); lodSkip = false; } continue; }
     ctx.globalAlpha = fade;
     if (!below && !skipG && y1 - y2 > 0.2) {
-      const yb = y1 + 0.7, lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
+      const yb = y1 + 0.7 + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
       const g1 = gwAt(pZ[j]) * s1, g2 = gwAt(pZ[j + 1]) * s2, gl1 = x1 - g1, gl2 = x2 - g2, gr1 = x1 + g1, gr2 = x2 + g2;
       // 兩側山坡：沿著離路的距離切幾條帶子，每條依地形高度抬升或下降，依坡向（光從右上來）分亮暗
       const ta = fade * (1 - fq) * TEX_A, DS = j < 60 ? TDN : TDF, nS = DS.length, gw1 = gwAt(pZ[j]), gw2 = gwAt(pZ[j + 1]);
@@ -2188,6 +2189,83 @@ function drawWorld(b, t){
   ctx.globalAlpha = 1;
 }
 
+// ═════════ 遠景快取：離鏡頭 FAR_Z 公尺以外的地面、植物、道具先畫進一張圖 ═════════
+// 遠處那一百多段每段都要畫好幾十筆（地面色帶、貼圖、草叢、樹），是手機最吃力的地方；但它們在畫面上移動很慢
+// 做法：照「開始做的那一刻」的鏡頭位置，每格只畫一截（份量 FAR_W）進後台那張，畫完整張才換上；
+// 每格畫的時候，用三個地面上的點（快取那段的路中心、右邊 10 公尺、更遠的路中心）算出舊鏡頭→新鏡頭的位移縮放，把整張貼上去，
+// 再照常由遠到近現場畫近景（近景一定蓋在遠景上面，前後順序跟以前一樣）。接縫那段遠景的地面往下多畫一點點，被近景蓋住，不會露縫
+const FAR_Z = 20;        // 幾公尺以外放進快取
+const FAR_W = 50;       // 每格畫進後台那張的份量：近的段東西多（草叢、植物牆、細節），一段算好幾份（farW），全部約 240 份、五格做完一張
+function farW(j){ return j < TURF_J ? 5 : j < HEDGE_J + 2 ? 3.5 : j < RAIL_J ? 2 : 1; }
+const FAR_BLEED = 2;     // 快取最近那段的地面往下多畫幾像素
+const FAR_MINJ = 3;      // 鏡頭走近到快取邊界剩不到幾段：這張太舊不用，整段現場畫
+const FAR_AGE = 0.5;     // 鏡頭沒動（休息、停下來看風景）時，隔幾秒重做一次（光斑、寶箱閃光才會動）
+function farSnap(){ return { pC:new Float32Array(DRAW + 3), pW:new Float32Array(DRAW + 3), pZ:new Float32Array(DRAW + 3), pS:new Float32Array(DRAW + 3), pX:new Float32Array(DRAW + 3), pY:new Float32Array(DRAW + 3), b:0, off:0, camX:0, camY:0, t:0, iK:0, hits:[] }; }
+const FAR = { on:true, fc:null, bc:null, front:null, back:farSnap(), live:farSnap(), cur:-1, jK:0, age:0, ok:false, A:new Float64Array(6) };
+FAR.front = farSnap();
+function farCopy(d, s){ d.pC.set(s.pC); d.pW.set(s.pW); d.pZ.set(s.pZ); d.pS.set(s.pS); d.pX.set(s.pX); d.pY.set(s.pY); d.b = s.b; d.off = s.off; d.camX = s.camX; d.camY = s.camY; }
+const LIVE = { get pC(){ return pC; }, get pW(){ return pW; }, get pZ(){ return pZ; }, get pS(){ return pS; }, get pX(){ return pX; }, get pY(){ return pY; }, get b(){ return bG; }, get off(){ return offG; }, get camX(){ return camX; }, get camY(){ return camY; } };
+function farUse(S0){ pC.set(S0.pC); pW.set(S0.pW); pZ.set(S0.pZ); pS.set(S0.pS); pX.set(S0.pX); pY.set(S0.pY); bG = S0.b; offG = S0.off; camX = S0.camX; camY = S0.camY; }
+function farReset(){ FAR.cur = -1; FAR.ok = false; }
+function farCanvas(c){ if (!c || c.width !== cv.width || c.height !== cv.height) { free(c); c = mk(cv.width, cv.height); } return c; }
+// 舊鏡頭的一點 (x0,y0) 對到新鏡頭 (x1,y1)：三組點解出 a b c d e f（x' = a x + c y + e、y' = b x + d y + f）
+function farFit(){
+  const F0 = FAR.front, jo = F0.iK - F0.b, jc = F0.iK - bG;
+  if (jc < FAR_MINJ || jc > DRAW - 2 || jo < 0 || jo > DRAW - 2) return false;
+  const ox = F0.pX[jo], oy = F0.pY[jo], nx = pX[jc], ny = pY[jc];
+  let best = 0, ux2 = 0, uy2 = 0, vx2 = 0, vy2 = 0;
+  for (let q = 0; q < 4; q++) {   // 更遠那一點：挑舊鏡頭裡跟接縫上下差最多的
+    const m = [10, 24, 44, 80][q]; if (jo + m > DRAW + 1 || jc + m > DRAW + 1) break;
+    const dy = F0.pY[jo + m] - oy; if (Math.abs(dy) > Math.abs(best)) { best = dy; ux2 = F0.pX[jo + m] - ox; uy2 = dy; vx2 = pX[jc + m] - nx; vy2 = pY[jc + m] - ny; }
+  }
+  if (Math.abs(best) < 2) { ux2 = 0; uy2 = -10 * F0.pS[jo]; vx2 = 0; vy2 = -10 * pS[jc]; }   // 遠處幾乎跟接縫同高（翻過坡頂）：改用接縫正上方 10 公尺那一點
+  const ux1 = 10 * F0.pS[jo], vx1 = 10 * pS[jc], det = ux1 * uy2;   // 第二點：接縫那段往右 10 公尺（同一條橫線，uy1 = vy1 = 0）
+  if (Math.abs(det) < 1e-6) return false;
+  const A = FAR.A, a = vx1 / ux1, c = (vx2 - a * ux2) / uy2, d = vy2 / uy2;   // [a c; b d] 把 (ux1,0)→(vx1,0)、(ux2,uy2)→(vx2,vy2)
+  if (!(a > 0.8 && a < 1.25 && d > 0.8 && d < 1.25 && Math.abs(c) < 0.3)) return false;
+  A[0] = a; A[1] = 0; A[2] = c; A[3] = d; A[4] = nx - a * ox - c * oy; A[5] = ny - d * oy;
+  return true;
+}
+// 這一格：貼上遠景快取，回傳現場要從第幾段開始畫（沒有可用的快取就回 DRAW - 1，整段現場畫）
+function farBlit(){
+  if (!FAR.on || !FAR.ok || !FAR.fc || FAR.fc.width !== cv.width || FAR.fc.height !== cv.height || !farFit()) return DRAW - 1;
+  const A = FAR.A, F0 = FAR.front;
+  ctx.globalAlpha = 1; ctx.transform(A[0], A[1], A[2], A[3], A[4], A[5]); ctx.drawImage(FAR.fc, 0, 0, W, H); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (let k = 0; k < F0.hits.length; k++) {   // 遠處道具的點擊範圍跟著位移
+    const o = F0.hits[k], h = hits[hitN] || (hits[hitN] = { o:{ type:'', m:0 }, x:0, y:0, w:0, h:0, cx:0, top:0 }); hitN++;
+    h.o.type = o.type; h.o.m = o.m; h.x = A[0] * o.x + A[2] * o.y + A[4]; h.y = A[3] * o.y + A[5]; h.w = o.w * A[0]; h.h = o.h * A[3]; h.cx = A[0] * o.cx + A[2] * o.top + A[4]; h.top = A[3] * o.top + A[5];
+  }
+  return F0.iK - bG - 1;
+}
+// 畫完這一格之後：後台那張再畫一截（鏡頭有動、或這張太舊才開始做新的）
+function farStep(t, dt){
+  if (!FAR.on || !cv) return;
+  FAR.age += dt;
+  if (FAR.cur < 0) {
+    const F0 = FAR.front, moved = !FAR.ok || F0.b !== bG || Math.abs(F0.off - offG) > 1e-4 || Math.abs(F0.camX - camX) > 1e-4 || Math.abs(F0.camY - camY) > 1e-4;
+    if (!moved && FAR.age < FAR_AGE) return;
+    let jK = 1; while (jK < DRAW - 1 && pZ[jK] < FAR_Z) jK++;
+    FAR.bc = farCanvas(FAR.bc); const g = FAR.bc.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, FAR.bc.width, FAR.bc.height);
+    farCopy(FAR.back, LIVE); FAR.back.t = t; FAR.back.iK = bG + jK; FAR.back.hits.length = 0; FAR.jK = jK; FAR.cur = DRAW - 1;
+  }
+  let jLo = FAR.cur, w = farW(jLo); while (jLo > FAR.jK && w + farW(jLo - 1) <= FAR_W) w += farW(--jLo);
+  const B = FAR.back, mainCtx = ctx, h0 = hitN;
+  farCopy(FAR.live, LIVE); farUse(B);
+  ctx = FAR.bc.getContext('2d');
+  try {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
+    drawWorld(B.b, B.t, FAR.cur, jLo, true);
+    for (let k = h0; k < hitN; k++) { const h = hits[k]; B.hits.push({ type:h.o.type, m:h.o.m, x:h.x, y:h.y, w:h.w, h:h.h, cx:h.cx, top:h.top }); }
+  } finally { ctx = mainCtx; hitN = h0; farUse(FAR.live); }
+  FAR.cur = jLo - 1;
+  if (FAR.cur < FAR.jK) {   // 這張畫完了：換上去
+    const c = FAR.fc; FAR.fc = FAR.bc; FAR.bc = c;
+    const s0 = FAR.front; FAR.front = FAR.back; FAR.back = s0;
+    FAR.ok = true; FAR.cur = -1; FAR.age = 0;
+  }
+}
+S.far = function(on){ if (on != null) { FAR.on = !!on; farReset(); } return { on:FAR.on, ok:FAR.ok, jK:FAR.jK }; };   // 測試掛鉤：開關遠景快取（比對畫面、量效能）
+
 // ═════════ 氣氛：飛葉／花瓣／光點、神光、雨、霧、粒子 ═════════
 function respawn(f, far){ f.z = far ? 22 + Math.random() * 18 : 2 + Math.random() * 38; f.x = (Math.random() - 0.5) * 18; f.y = 0.2 + Math.random() * 4.2; }
 function initFlyers(){
@@ -2320,7 +2398,8 @@ S.render = function(s){
     pZ[j] = dz; pS[j] = sc; pX[j] = W / 2 + (pC[j] - camX) * sc; pY[j] = HOR - (pW[j] - camY) * sc;
   }
   drawBG(t, dist);
-  drawWorld(b, t);
+  hitN = 0; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawWorld(b, t, s.dt > 0 ? farBlit() : DRAW - 1, 0, false);   // 拍照那一格（dt = 0，鏡頭焦距不一樣）整段現場畫
   drawFlyers(t, dt, sp);
   if (isFog) fogBands(t, dist);
   if (SHOW_FG) drawFG(t);
@@ -2334,7 +2413,7 @@ S.render = function(s){
   if (snowFall > 0.02) drawSnow(t, snowFall);
   drawParts(dt);
   if (vig) { ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H); }
-  if (s.dt > 0) warmStep();   // 畫完這一格，剩下的時間慢慢預先做之後會用到的圖
+  if (s.dt > 0) { farStep(t, dt); warmStep(); }   // 畫完這一格：遠景快取再畫一截、剩下的時間慢慢預先做之後會用到的圖
 };
 
 // ═════════ 對外：查詢與互動 ═════════
