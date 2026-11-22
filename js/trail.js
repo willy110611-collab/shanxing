@@ -30,8 +30,8 @@ let SPR = {}, signSpr = {}, VG = {}, hazeCss = '#dfe6e2', hazeRgb = [223,230,226
 let smallTab = [], treeTab = [], edgeTab = [];
 const EDGE_J = 40, EDGE_P = 0.55;   // 路緣草叢：幾段以內畫、每邊每段出現的機率
 let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
-let LUT = [], lutKey = -1, snowAmt = 0;
-let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false;
+let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積雪多少；snowFall：正在下的雪有多密（兩個都會慢慢變化）
+let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
 const cSkyT = [0,0,0], cSkyB = [0,0,0], cGrade = [255,255,255], cSun = [0.8,0.12], cSunCol = [255,246,216];
 let SHADOW = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
 const WARM_A = 0.5;     // 午後暖光濾鏡強度（soft-light，再乘上太陽可見度）
@@ -492,7 +492,7 @@ function buildPalettes(){
   for (const k in PAL) PAL[k].valley = mixs(PAL[k].cloudS, mix(TH.mid || '#5a8a5f', PAL[k].tint, PAL[k].tk), 0.3);
 }
 function wxMix(t, r, g, b){ cSkyT[0] = lerp(cSkyT[0], r, t); cSkyT[1] = lerp(cSkyT[1], g, t); cSkyT[2] = lerp(cSkyT[2], b, t); t *= 0.8; cSkyB[0] = lerp(cSkyB[0], r + 18, t); cSkyB[1] = lerp(cSkyB[1], g + 18, t); cSkyB[2] = lerp(cSkyB[2], b + 18, t); }
-function updPalette(wx, frac){
+function updPalette(wx, frac, dt){
   const tm = wx.time, kind = wx.kind; let a, b, k, i;
   if (!PAL[tm] || tm === 'day') {            // 白天：隨爬升比例從午後晴空漸變到雲海夕照
     a = 'day'; b = 'sunset'; k = clamp(frac, 0, 1); if (TH.sunset) k = 0.35 + 0.65 * k;
@@ -503,12 +503,16 @@ function updPalette(wx, frac){
   for (i = 0; i < 3; i++) { cSkyT[i] = lerp(A.skyT[i], B.skyT[i], k); cSkyB[i] = lerp(A.skyB[i], B.skyB[i], k); cGrade[i] = lerp(A.grade[i], B.grade[i], k); cSunCol[i] = lerp(A.sunCol[i], B.sunCol[i], k); }
   cSun[0] = lerp(A.sun[0], B.sun[0], k); cSun[1] = lerp(A.sun[1], B.sun[1], k);
   raysA = lerp(A.rays, B.rays, k); sunVis = 1; fogD = 300;
-  isNight = a === 'night'; isRain = kind === 'rain'; isFog = kind === 'fog'; isCloudy = kind === 'cloudy';
+  isNight = a === 'night'; isRain = kind === 'rain'; isFog = kind === 'fog'; isCloudy = kind === 'cloudy'; isSnow = kind === 'snow';
   if (isCloudy) { wxMix(0.5, 176, 184, 196); cGrade[0] *= 0.86; cGrade[1] *= 0.88; cGrade[2] *= 0.92; raysA *= 0.25; sunVis = 0.45; fogD = 240; }
   else if (isRain) { wxMix(0.75, 138, 148, 164); cGrade[0] *= 0.7; cGrade[1] *= 0.74; cGrade[2] *= 0.82; raysA = 0; sunVis = 0; fogD = 170; }
   else if (isFog) { wxMix(0.6, 222, 228, 230); cGrade[0] *= 0.95; cGrade[1] *= 0.96; cGrade[2] *= 0.97; raysA *= 0.5; sunVis = 0.5; fogD = 80; }
+  else if (isSnow) { wxMix(0.7, 204, 213, 228); cGrade[0] *= 0.9; cGrade[1] *= 0.93; cGrade[2] *= 0.99; raysA = 0; sunVis = 0.2; fogD = 150; }   // 下雪：灰白偏藍的天空、遠處朦朧
   fogD0 = fogD * 0.12;
-  snowAmt = TH.snow ? clamp((frac - 0.4) / 0.35, 0, 1) * (isRain ? 0.3 : 1) * ((tm === 'night' || tm === 'dawn') ? 1 : 0.85) : 0;
+  const sAmt = Math.max(TH.snow ? clamp((frac - 0.4) / 0.35, 0, 1) * (isRain ? 0.3 : 1) * ((tm === 'night' || tm === 'dawn') ? 1 : 0.85) : 0,
+    isSnow ? clamp((frac - 0.2) / 0.2, 0, 1) : 0);   // 高山本來就有殘雪；正在下雪時整片蓋滿
+  const ease = lutKey < 0 ? 1 : Math.min(1, (dt || 0) * 0.5);   // 天氣變了：雪慢慢積起來、慢慢融掉（剛進山直接到位）
+  snowAmt += (sAmt - snowAmt) * ease; snowFall += ((isSnow ? 1 : 0) - snowFall) * ease;
   const key = Math.round(snowAmt * 8);
   if (key !== lutKey) { lutKey = key; buildLUT(key / 8); }
 }
@@ -629,7 +633,8 @@ function drawBG(t, dist){
     const SB = palB !== palA ? skyArt(palB) : null, hd = headAt(dist) * F * 0.35;
     ctx.fillStyle = PAL[palA].valley; ctx.fillRect(0, 0, W, H);
     drawSkyArt(SA, hd, 1); if (SB) drawSkyArt(SB, hd, palK);
-    if (isCloudy || isRain) tile(getTiles(palA).c[1], hd + t * 5, -40 * U, 190 * U, 0.62);
+    if (isCloudy || isRain || isSnow) tile(getTiles(palA).c[1], hd + t * 5, -40 * U, 190 * U, 0.62);
+    if (snowFall > 0.02) { ctx.globalAlpha = snowFall * 0.5; ctx.fillStyle = '#d6dee9'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }   // 下雪：天空蓋一層灰白
     return;
   }
   const g = ctx.createLinearGradient(0, 0, 0, HOR + 30 * U);
@@ -648,7 +653,7 @@ function drawBG(t, dist){
   }
   const TA = getTiles(palA), TB = (palB !== palA && palK > 0.01) ? getTiles(palB) : null;
   const hd = headAt(dist) * F, hv = Math.sin(t * 0.5) * 3 * U;        // 視差：依累積轉向角平移
-  if (isCloudy || isRain) tile(TA.c[1], hd * 0.3 + t * 5, -40 * U, 190 * U, 0.62);   // 高空厚雲
+  if (isCloudy || isRain || isSnow) tile(TA.c[1], hd * 0.3 + t * 5, -40 * U, 190 * U, 0.62);   // 高空厚雲
   layer(TA, TB, 'r', 0, hd * 0.5, HOR - 136 * U, 150 * U);
   layer(TA, TB, 'c', 0, hd * 0.6 + t * 3, HOR - 52 * U + hv * 0.5, 84 * U);
   layer(TA, TB, 'r', 1, hd * 0.7, HOR - 92 * U, 130 * U);
@@ -830,7 +835,7 @@ function updHero(s, t, dt, dist, sp){
   hero.lean += ((s.boost && mv ? 1 : mv ? 0.45 : 0) - hero.lean) * Math.min(1, dt * 5);
   // 每次落腳揚起一點塵土
   const st = Math.floor(hero.ph / Math.PI + 0.5);
-  if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
+  if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain && !isSnow) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
 }
 function limb(c, x1, y1, qx, qy, x2, y2, w, lt, sh){
   c.beginPath(); c.moveTo(x1, y1); c.quadraticCurveTo(qx, qy, x2, y2);
@@ -1266,7 +1271,7 @@ function drawWorld(b, t){
           if (any) { ctx.fillStyle = LUT[(gk * 3 + lv) * FOGN + fi]; ctx.fill(); }
         }
         if (TEX.grass && ta > 0.03) {
-          texFill(TEX.grass, x1, s1, yb, y2, z0, ta * GRASS_A); ctx.beginPath();
+          texFill(TEX.grass, x1, s1, yb, y2, z0, ta * GRASS_A * (1 - snowFall * snowAmt * 0.85)); ctx.beginPath();   // 下雪時草地貼圖淡掉，露出底下積雪的白色坡面
           for (k = 1; k < nS - 1; k++) { ctx.moveTo(tX1[k], tY1[k]); ctx.lineTo(tX1[k + 1], tY1[k + 1]); ctx.lineTo(tX2[k + 1], tY2[k + 1]); ctx.lineTo(tX2[k], tY2[k]); ctx.closePath(); }
           ctx.fill(); ctx.globalAlpha = fade;
         }
@@ -1438,7 +1443,7 @@ function drawLights(t){
   if (raysA > 0.01 && RAYS) {                 // 右上方斜射的神光，輕輕搖曳
     ctx.save(); ctx.globalAlpha = clamp(raysA * (0.8 + 0.2 * Math.sin(t * 0.6)), 0, 1); ctx.translate(W, 0); ctx.rotate(Math.sin(t * 0.23) * 0.03); ctx.drawImage(RAYS, -W, 0, W, H); ctx.restore();
   }
-  if (!isRain) for (let i = 0; i < flyers.length; i++) {      // 金色光點
+  if (!isRain && !isSnow) for (let i = 0; i < flyers.length; i++) {      // 金色光點
     const f = flyers[i]; if (f.k !== 2) continue;
     const sc = F / Math.max(f.z, 0.5), r = Math.max(2.5, 0.1 * sc);
     ctx.globalAlpha = (0.45 + 0.45 * Math.sin(t * 2 + f.ph)) * (isNight ? 1 : 0.75);
@@ -1459,6 +1464,17 @@ function drawRain(t){
     ctx.moveTo(x, y); ctx.lineTo(x - L * 0.22, y + L);
   }
   ctx.stroke();
+}
+// 下雪：三層遠近不同的雪花，大的在近處、落得快，左右輕輕飄；a 是雪下得多密（0～1，跟著 snowFall 淡入淡出）
+function drawSnow(t, a){
+  const ww = W + 40, hh = H + 40, n = Math.round(120 * a);
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < n; i++) {
+    const L = i % 3, r = (1.6 + L * 1.6) * U, v = 34 + L * 30 + (i * 13 % 7) * 4;
+    const x = (((i * 71.3 + Math.sin(t * (0.6 + L * 0.2) + i) * 18 * U - t * (8 + L * 6)) % ww) + ww) % ww - 20, y = ((i * 47.9 + t * v) % hh) - 20;
+    ctx.globalAlpha = (0.55 + L * 0.2) * Math.min(1, a * 1.5); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 function fogBands(t, dist){
   ctx.fillStyle = 'rgba(232,238,238,0.2)'; ctx.fillRect(0, 0, W, H);
@@ -1510,7 +1526,7 @@ S.render = function(s){
   const t = s.t || 0, dt = clamp(s.dt || 0.016, 0, 0.05), dist = Math.max(0, s.dist || 0), sp = s.speed || 0, wx = s.wx || DEFWX;
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
-  updPalette(wx, frac); updHero(s, t, dt, dist, sp); stepMates(dt);
+  updPalette(wx, frac, dt); updHero(s, t, dt, dist, sp); stepMates(dt);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
   const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b;
@@ -1535,6 +1551,7 @@ S.render = function(s){
   if (wa > 0.01 && WARM) { ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = wa; ctx.fillStyle = WARM; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
   drawLights(t);
   if (isRain) drawRain(t);
+  if (snowFall > 0.02) drawSnow(t, snowFall);
   drawParts(dt);
   if (vig) { ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H); }
 };
