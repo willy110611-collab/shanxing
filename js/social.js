@@ -15,7 +15,11 @@
   const km = m => (Math.max(0, m || 0) / 1000).toFixed(2) + ' km';
 
   let acct = load(KEY, null);          // { id, token, name, code }
-  let party = load(KEY_PARTY, null);   // { id, mountain, with:{id,name} }
+  // 一起爬的隊伍：{ id:隊伍房間（同一隊最早的那張邀請）, ids:這隊所有邀請, mountain, host:邀請人, mates:[{id,name}]（不含自己）}
+  // 舊存檔只有 with（一位隊友）：換成 mates，host 等下次讀到邀請再補
+  let party = load(KEY_PARTY, null);
+  if (party && !party.mates) party = party.with ? { id: party.id, ids: [party.id], mountain: party.mountain, host: null, mates: [party.with] } : null;
+  let invMt = null;   // 從山的卡片按「邀請山友」來的：好友分頁的山先選好這座
 
   // ───────── API ─────────
   async function api(path, opt = {}){
@@ -165,8 +169,9 @@
     L.scrollTop = L.scrollHeight;
   }
   // 點了廣場上的別人：加好友、邀請一起爬
+  const mtOpts = () => SX.MOUNTAINS.map(m => `<option value="${m.id}"${m.id === invMt ? ' selected' : ''}>${m.name}</option>`).join('');
   function personCard(p){
-    const fr = friends.find(f => f.id === p.id), opts = SX.MOUNTAINS.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    const fr = friends.find(f => f.id === p.id), opts = mtOpts();
     const mc = $('#mCard'); $('#modal').classList.add('on');
     mc.innerHTML = `<h3>${esc(p.name)}</h3>
       ${fr ? `<p class="summitBig">你們是好友。要邀對方一起爬哪座山？</p><select id="pcMt" class="txtIn">${opts}</select>
@@ -184,14 +189,14 @@
   function renderFriends(){
     const body = $('#lobbyBody'); if (!body) return;
     const inc = invites.filter(v => v.guest === acct.id && v.status === 'pending');
-    const opts = SX.MOUNTAINS.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-    body.innerHTML = `
+    const opts = mtOpts();
+    body.innerHTML = `${invMt ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁邊按「邀請」（山已經幫你選好了）。對方接受後就會加入你的隊伍。</p></div>` : ''}
       <div class="setRow"><h4>我的好友碼 <span class="codeTag">${esc(acct.code)}</span></h4>
         <p>把好友碼給朋友，對方輸入後就會互相成為好友。</p>
         <form class="pw" id="addF"><input id="fcIn" maxlength="8" placeholder="輸入朋友的好友碼" autocapitalize="characters"><button class="cbtn sm">加好友</button></form></div>
       ${inc.length ? `<div class="setRow"><h4>收到的邀請</h4>${inc.map(v => `<div class="frRow"><span><b>${esc(v.host_name)}</b> 邀你一起爬 <b>${esc(mName(v.mountain))}</b></span>
         <span><button class="cbtn go sm" data-acc="${v.id}">一起去</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
-      ${party ? `<div class="setRow"><h4>正在一起爬</h4><div class="frRow"><span>和 <b>${esc(party.with.name)}</b> 爬 <b>${esc(mName(party.mountain))}</b></span>
+      ${party ? `<div class="setRow"><h4>正在一起爬（${partySize(party.mountain)} 人）</h4><div class="frRow"><span>和 <b>${party.mates.map(x => esc(x.name)).join('、')}</b> 爬 <b>${esc(mName(party.mountain))}</b></span>
         <span><button class="cbtn go sm" id="pGo">出發</button><button class="cbtn sm" id="pEnd">結束</button></span></div></div>` : ''}
       ${friends.length ? `<div class="setRow"><h4>本週誰走最多</h4>${[{ id: acct.id, name: acct.name + '（我）', week: myWeek }, ...friends].sort((a, b) => (b.week || 0) - (a.week || 0)).slice(0, 10)
         .map((p, i) => `<div class="rankRow${p.id === acct.id ? ' me' : ''}"><i>${i + 1}</i><b>${esc(p.name)}</b><span>${((p.week || 0) / 1000).toFixed(1)} km</span></div>`).join('')}
@@ -214,18 +219,38 @@
     try {
       const d = await api('/invites/' + id, { json: { accept: yes } });
       const v = invites.find(x => x.id === id);
-      if (yes && v) { setParty({ id, mountain: d.mountain, with: { id: v.host, name: v.host_name } }); toast(`出發！和 ${v.host_name} 一起爬${mName(d.mountain)}`); if (G().startClimb) G().startClimb(d.mountain); }
+      if (yes && v) { v.status = 'accepted'; setParty(teamOf(v.host, d.mountain)); toast(`出發！和 ${v.host_name} 一起爬${mName(d.mountain)}`); if (G().startClimb) G().startClimb(d.mountain); }
       refresh();
     } catch(e){ toast(e.message, 3000); }
   }
-  // 邀請人：看到對方接受了，就自動組隊
-  function checkParty(){
-    if (!acct || party) return;
-    const ok = invites.find(v => v.host === acct.id && v.status === 'accepted' && Date.now() - v.created < 3 * 864e5 && !(load('shanxing-party-done', [])).includes(v.id));
-    if (ok) { setParty({ id: ok.id, mountain: ok.mountain, with: { id: ok.guest, name: ok.guest_name } }); toast(`${ok.guest_name} 接受邀請了！一起去爬${mName(ok.mountain)}吧`, 3600); }
+  // 一隊＝同一位邀請人、同一座山、3 天內已接受的邀請：邀請人邀好幾位好友去同一座山，大家併成一隊（雪季 C+ 的山要三人以上）
+  function teamOf(host, mountain){
+    const done = load('shanxing-party-done', []);
+    const L = invites.filter(v => v.host === host && v.mountain === mountain && v.status === 'accepted' && Date.now() - v.created < 3 * 864e5 && !done.includes(v.id)).sort((a, b) => a.created - b.created);
+    if (!L.length) return null;
+    const mates = [], add = (id, name) => { if (id !== acct.id && !mates.some(x => x.id === id)) mates.push({ id, name }); };
+    add(L[0].host, L[0].host_name); L.forEach(v => add(v.guest, v.guest_name));
+    return { id: L[0].id, ids: L.map(v => v.id), mountain, host, mates };
   }
+  // 邀請人：看到對方接受了，就自動組隊；已經有隊伍時，又有人接受同一座山的邀請就加進來
+  function checkParty(){
+    if (!acct) return;
+    if (party) {
+      const inv = invites.find(v => v.id === party.id), host = party.host || (inv && inv.host), t = host && teamOf(host, party.mountain);
+      if (!t || (t.id === party.id && t.mates.length === party.mates.length && party.host)) return;
+      const add = t.mates.filter(x => !party.mates.some(y => y.id === x.id));
+      setParty(t); if (add.length) toast(`${add.map(x => x.name).join('、')} 加入隊伍了！現在 ${partySize(t.mountain)} 人`, 3600);
+      return;
+    }
+    const ok = invites.find(v => v.host === acct.id && v.status === 'accepted' && Date.now() - v.created < 3 * 864e5 && !(load('shanxing-party-done', [])).includes(v.id));
+    if (ok) { setParty(teamOf(acct.id, ok.mountain)); toast(`${ok.guest_name} 接受邀請了！一起去爬${mName(ok.mountain)}吧`, 3600); }
+  }
+  // 這座山的隊伍有幾個人（自己＋隊友；寵物不算）。雪季管制看這個數字
+  const partySize = mid => party && party.mountain === mid ? 1 + party.mates.length : 1;
+  // 山的卡片按「邀請山友」：打開山友大廳的好友分頁，邀請的山先選好
+  function openInvite(mid){ invMt = mid; tab = 'friends'; if (G().go) G().go('lobby'); }
   function setParty(p){
-    if (!p && party) { const done = load('shanxing-party-done', []); done.push(party.id); store('shanxing-party-done', done.slice(-30)); }
+    if (!p && party) { const done = load('shanxing-party-done', []); done.push(...(party.ids || [party.id])); store('shanxing-party-done', done.slice(-30)); }
     party = p; store(KEY_PARTY, p); if (pRoom) { pRoom.close(); pRoom = null; } partyBox();
   }
   function renderMe(){
@@ -252,7 +277,7 @@
   }
 
   // ───────── 一起爬：登山畫面上的隊友面板 ─────────
-  let pRoom = null, mate = null, stateT = 0;
+  let pRoom = null, mates = {}, stateT = 0;   // mates：隊友 id → 最新進度
   function partyBox(){
     let el = $('#partyBox');
     const M = G().M, on = party && M && M.id === party.mountain && $('#scrClimb.on');
@@ -262,28 +287,31 @@
       el.innerHTML = '<b id="pbName"></b><span id="pbInfo"></span><button class="cbtn sm" id="cheerBtn">幫他加油</button>';
       $('#cheerBtn').onclick = () => {
         if (!party) return; const t = Date.now(); if (t - (partyBox._c || 0) < 3000) { toast('剛剛才加油過，等一下下'); return; } partyBox._c = t;
-        if (pRoom) pRoom.send({ type: 'cheer', to: party.with.id }); if (A().sparkle) A().sparkle(); toast('加油送出了！'); if (SX.game) SX.game.daily('cheer');
+        if (pRoom) pRoom.send({ type: 'cheer' }); if (A().sparkle) A().sparkle(); toast('加油送出了！'); if (SX.game) SX.game.daily('cheer');
       };
     }
     el.classList.add('on');
-    const me = G().st, d = mate && me ? mate.dist - me.dist : null;
-    $('#pbName').textContent = `和 ${party.with.name} 一起爬`;
-    $('#pbInfo').textContent = !pRoom || !pRoom.open ? '連線中…' : mate ? `${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}` : '等對方上線…';
-    if (SX.scene && SX.scene.setMates) SX.scene.setMates(mate && me ? [{ dist: mate.dist, name: party.with.name, rest: !!mate.rest }] : []);
+    // 隊友有好幾位時，面板顯示走最前面的那位；登山畫面上每位隊友都畫出來
+    const me = G().st, many = party.mates.length > 1, on2 = party.mates.filter(x => mates[x.id]);
+    const lead = on2.slice().sort((a, b) => mates[b.id].dist - mates[a.id].dist)[0], mate = lead && mates[lead.id], d = mate && me ? mate.dist - me.dist : null;
+    $('#pbName').textContent = `和 ${party.mates.map(x => x.name).join('、')} 一起爬`;
+    $('#cheerBtn').textContent = many ? '幫大家加油' : '幫他加油';
+    $('#pbInfo').textContent = !pRoom || !pRoom.open ? '連線中…' : mate ? `${many ? lead.name + ' ' : ''}${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}` : '等隊友上線…';
+    if (SX.scene && SX.scene.setMates) SX.scene.setMates(me ? on2.map(x => ({ dist: mates[x.id].dist, name: x.name, rest: !!mates[x.id].rest })) : []);
   }
   function tick(){
     const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
     // 一起爬：連到隊伍房間，每 4 秒回報自己的進度
     if (party && climbing && M.id === party.mountain) {
       if (!pRoom) pRoom = room('party:' + party.id, d => {
-        if (d.type === 'hello') { const p = (d.people || []).find(x => x.id !== acct.id && x.state); if (p) mate = p.state; }
-        else if (d.type === 'state' && d.who.id !== acct.id) mate = d.state;
+        if (d.type === 'hello') (d.people || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = x.state; });
+        else if (d.type === 'state' && d.who.id !== acct.id) mates[d.who.id] = d.state;
         else if (d.type === 'cheer' && d.who.id !== acct.id) { toast(`${d.who.name} 幫你加油！體力 +5`, 2600); if (st) st.stam = Math.min(100, st.stam + 5); if (A().chime) A().chime(); }
-        else if (d.type === 'leave' && d.who.id !== acct.id) mate = mate ? Object.assign({}, mate, { rest: true }) : mate;
+        else if (d.type === 'leave' && d.who.id !== acct.id && mates[d.who.id]) mates[d.who.id] = Object.assign({}, mates[d.who.id], { rest: true });
         partyBox();
       });
       if (Date.now() - stateT > 4000) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep) }); }
-    } else if (pRoom && !climbing) { pRoom.close(); pRoom = null; mate = null; }
+    } else if (pRoom && !climbing) { pRoom.close(); pRoom = null; mates = {}; }
     partyBox();
   }
   setInterval(tick, 1000);
@@ -403,6 +431,6 @@
   }
   document.addEventListener('visibilitychange', () => sendEta(document.hidden));
 
-  SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; } };
+  SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite };
   if (acct) { refresh(); }
 })();
