@@ -305,7 +305,7 @@
       ${ok ? `<div class="rc-feat"><em>建議：</em>${fitText(m)}</div>` : ''}
       <div class="rc-feat"><em>紀錄：</em>${m.recNote}</div>
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
-      <div class="rc-feat"><em>終點：</em>${m.end}${m.temple ? '（可以擲筊、求籤）' : ''}</div>
+      <div class="rc-feat"><em>終點：</em>${m.end}</div>${m.temple ? `<div class="rc-feat"><em>路上：</em>會經過${m.temple}（登頂後可以去擲筊、求籤）</div>` : ''}
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
       ${snowNote(id) ? `<div class="rc-feat"><em>提醒：</em>${snowNote(id)}</div>` : ''}
       ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。想改爬${m.name}，要先從${trN}下山（${trN}的進度會歸零）。</div>
@@ -500,12 +500,14 @@
   const awIco = (id, cls) => `<span class="awI${cls ? ' ' + cls : ''}">${SX.art.img(id, `<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="#f2c35a" stroke="${INK}" stroke-width="1.8"/></svg>`)}</span>`;
   // 奇遇的第一句：句號可能落在「」引號裡面，切開後要把引號補回來
   const firstSentence = s => { const x = s.split('。')[0], open = (x.match(/「/g) || []).length - (x.match(/」/g) || []).length; return x + '」'.repeat(Math.max(0, open)); };
+  // 打瞌睡的說法跟著山走：郊山有涼亭、當天來回的高山找塊避風的大石頭、要過夜的大山才鑽睡袋
+  const napText = m => m.alt < 1500 ? '在涼亭打了個盹' : m.recMin <= 360 ? '找塊避風的大石頭靠著打了個盹' : '還窩進睡袋睡了一下';
   function awayLines(a){
     const m = M, L = [], km = x => (x / 1000).toFixed(1);
     const up = Math.round(altAt(m, a.to / m.dist) - altAt(m, a.from / m.dist)), summit = a.to >= m.dist - 2.5;
     L.push([ 'sign_wood', `慢慢走了 ${Math.round(a.to - a.from).toLocaleString('en-US')} 公尺${up > 0 ? `，爬升 ${up} 公尺` : ''}，現在在海拔 ${Math.round(altAt(m, a.to / m.dist)).toLocaleString('en-US')} 公尺。` ]);
     const ps = SC.props(a.from, a.to), cnt = t => ps.filter(o => t.includes(o.type)).length, nb = cnt(['bench']), nv = cnt(['view']), nn = cnt(['note', 'btree', 'cairn']);
-    if (nb || nv || a.naps) L.push([ nv ? 'deck_view' : nb ? 'bench' : 'icon_rest', [nb > 3 ? '沿路坐了好幾張長椅喝熱茶' : nb ? `在 ${nb} 張長椅坐下來喝口熱茶` : '', nv ? `${nb ? '，' : ''}在觀景台看了好一會兒風景` : '', a.naps ? `${nb || nv ? '，' : ''}走累了還窩進睡袋睡了一下` : ''].join('') + '。' ]);
+    if (nb || nv || a.naps) L.push([ nv ? 'deck_view' : nb ? 'bench' : 'icon_rest', [nb > 3 ? '沿路坐了好幾張長椅喝熱茶' : nb ? `在 ${nb} 張長椅坐下來喝口熱茶` : '', nv ? `${nb ? '，' : ''}在觀景台看了好一會兒風景` : '', a.naps ? `${nb || nv ? '，' : ''}走累了${napText(m)}` : ''].join('') + '。' ]);
     if (a.marks.length) L.push([ 'icon_camera', `經過 ${a.marks.slice(-3).map(k => km(k) + ' 公里').join('、')}的路標${a.pics ? `，拍了 ${a.pics} 張照片收進相簿` : ''}。` ]);
     if (nn) L.push([ 'note_post', `路過 ${nn} 處山友留下的便條和疊石，順手拍掉上面的落葉。` ]);
     const seq = [];
@@ -1185,7 +1187,7 @@
         ${img ? `<div class="pol"><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
-        ${M.temple ? '<p class="summitBig">旁邊有一間小小的福德祠，要不要進去拜一下？</p>' : '<p class="summitBig">集印帳蓋上新的章了！</p>'}
+        ${M.temple ? `<p class="summitBig">下山會經過${M.temple}，要不要進去拜一下？</p>` : '<p class="summitBig">集印帳蓋上新的章了！</p>'}
         ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
         <div class="mBtns">${M.temple ? '<button class="cbtn red" id="aTemple">去福德祠</button>' : ''}<button class="cbtn ${M.temple ? '' : 'go'}" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`);
       if (M.temple) $('#aTemple').onclick = () => { closeModal(); openTemple(); };
