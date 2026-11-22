@@ -40,8 +40,7 @@
       ['prog','done','stamps','bag','bagLog','quests','cairns','badges','encSeen'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
       if (!SV.stats.magpie || typeof SV.stats.magpie !== 'object') SV.stats.magpie = {};
       if (!SV.pets.includes('shiba')) SV.pets.unshift('shiba');
-      if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
-    }
+      if (SV.cur && !SX.M[SV.cur]) SV.cur = null;    }
   } catch(e){ SV = blank(); }
   // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
   if (!SV.born) { const ds = [...Object.values(SV.stamps), ...Object.values(SV.bagLog).map(x => x && x.first), ...Object.values(SV.encSeen).map(x => x && x.first), ...SV.photos.map(p => p.date)].filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d)); SV.born = ds.length ? new Date(Math.min(...ds)).toLocaleDateString('zh-TW') : today(); }
@@ -153,8 +152,10 @@
   const snowSeasonAt = (id, ts) => SX.seasonsAt(testDate || new Date(ts)).some(s => s.id === 'snow' && s.mountains.includes(id));
   let wx = calcWx();
   const seasonNow = (date = testDate || new Date()) => SX.seasonsAt(date);
-  const seasonOk = (sid, mid) => { const s = seasonNow().find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(wx.time)); };
-  const seasonEnd = s => `${+s.to.slice(0, 2)}/${+s.to.slice(3)}`;
+  // w、date：要判斷的天氣時段和日期（離開時的日記用「當時」的），不給就是現在
+  const seasonOk = (sid, mid, w = wx, date) => { const s = seasonNow(date).find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(w.time)); };
+  const mdText = md => `${+md.slice(0, 2)}/${+md.slice(3)}`;   // '03-31' → '3/31'
+  const seasonEnd = s => mdText(s.to);
   const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'snow',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
   function cycleWx(){
     const i = WX_CYCLE.findIndex(w => w.kind === wx.kind && w.time === wx.time);
@@ -381,7 +382,8 @@
     for (let k = Math.floor(from / 500) * 500 + 500; k <= p.dist && k < m.dist; k += 500) if (!a.marks.includes(k)) a.marks.push(k);
     if (a.marks.length) p.ms = Math.max(p.ms || 0, a.marks[a.marks.length - 1]);   // 回來時不要再跳一次「走了 X 公里，拍一張」
   }
-  // 登山畫面畫好之後才整理日記（要用到這座山的路旁道具和拍照）；奇遇、補拍、包裹只做一次，重開也一樣
+  // 登山畫面畫好之後才整理日記（要用到這座山的路旁道具和拍照）；每次打開日記都跑一次：
+  // 奇遇只抽一次；補拍、包裹只補「還沒做過的」（日記看到一半又併進新的一段，新經過的路標和寶物也要算到）
   function composeAway(a){
     const m = M;
     if (!a.enc) {
@@ -389,7 +391,7 @@
       const n = a.sec >= 4 * 3600 ? 2 : 1;
       for (let i = 0; i < n; i++) {
         const ts = a.t0 + Math.random() * (a.t1 - a.t0), f = (a.from + Math.random() * (a.to - a.from)) / m.dist;
-        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts, f), a.enc);
+        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts, f), a.enc, new Date(ts));   // 季節、時段、天氣照「當時」和那時走到的位置算
         if (e) { a.enc.push(e.id); noteEncounterSeen(e.id); }
       }
     }
@@ -398,6 +400,8 @@
     save();
   }
   const awIco = (id, cls) => `<span class="awI${cls ? ' ' + cls : ''}">${SX.art.img(id, `<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="#f2c35a" stroke="${INK}" stroke-width="1.8"/></svg>`)}</span>`;
+  // 奇遇的第一句：句號可能落在「」引號裡面，切開後要把引號補回來
+  const firstSentence = s => { const x = s.split('。')[0], open = (x.match(/「/g) || []).length - (x.match(/」/g) || []).length; return x + '」'.repeat(Math.max(0, open)); };
   function awayLines(a){
     const m = M, L = [], km = x => (x / 1000).toFixed(1);
     const up = Math.round(altAt(m, a.to / m.dist) - altAt(m, a.from / m.dist)), summit = a.to >= m.dist - 2.5;
@@ -410,17 +414,17 @@
     for (let ts = a.t0; ts <= a.t1; ts += 1200000) { const f = (a.from + (a.to - a.from) * (ts - a.t0) / Math.max(1, a.t1 - a.t0)) / m.dist, w = calcWx(m.id, ts, f), s = wxText(w) || '晴'; if (!seq.length || seq[seq.length - 1].s !== s) seq.push({ s, w }); }   // f：那時大概走到哪（照時間平均推算）
     const sh = (seq.length > 3 ? [seq[0], seq[seq.length >> 1], seq[seq.length - 1]] : seq).filter((x, i, l) => !i || l[i - 1].s !== x.s);   // 變很多次：只寫開頭、中間、現在
     if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ HUD.wxArt(w.kind, w.time), `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
-    (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${e.text.split('。')[0]}。` ]); });
+    (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${firstSentence(e.text)}。` ]); });
     if (summit) L.push([ 'emo_cheer', '已經走到山頂前面了，就等你一起踏上山頂！' ]);
     // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲（登頂那行一定留著）
     for (const id of ['note_post', 'face_happy']) { const i = L.map(x => x[0]).lastIndexOf(id); if (L.length > 6 && i >= 0) L.splice(i, 1); }
     return L;
   }
-  let awayShownV = 0;
+  let awayShown = null;   // 打開日記那一刻的內容（v 版本、走到哪、多久），收起時拿來判斷有沒有又併進新的一段
   function showAway(){
     const a = st.away; if (!a) return;
-    if (!a.enc) composeAway(a);
-    awayShownV = a.v; A.paper();
+    composeAway(a);
+    awayShown = { v:a.v, to:a.to, t1:a.t1, sec:a.sec, naps:a.naps, rests:a.rests }; A.paper();
     const left = a.parcel.filter(k => !st.got['t' + k]), h = Math.floor(a.sec / 3600), mi = Math.round(a.sec % 3600 / 60);
     const pics = a.pics ? SV.photos.filter(p => p.id === M.id && a.shot.includes(p.m)).slice(-3) : [];
     modal(`<h3>你不在的時候</h3><div class="awayD">
@@ -442,7 +446,10 @@
     b.onclick = () => { A.pop(); if (last) { closeModal(); endAway(); } else openParcel(list, i + 1); };
   }
   function endAway(){
-    if (st.away && st.away.v === awayShownV) st.away = null;   // 看日記時又補走了一段：留著，等一下再寫一篇
+    const a = st.away, s = awayShown; awayShown = null;
+    if (a && s && a.v !== s.v) {   // 看日記時又補走了一段：看過的部分拿掉，只留新的那段，等一下再寫一篇
+      Object.assign(a, { from:s.to, t0:s.t1, sec:a.sec - s.sec, naps:a.naps - s.naps, rests:a.rests - s.rests, marks:a.marks.filter(k => k > s.to), shot:[], parcel:a.parcel.filter(k => !st.got['t' + k]), enc:null, pics:0, v:1 });
+    } else if (a) st.away = null;
     closeModal(); save(); checkQuests();
   }
 
@@ -605,8 +612,9 @@
   // after：按「收進背包」之後要做的事（例如回到每日畫面、領下一件）
   function gainTreasure(tr, mode, after){
     if (!tr) return;
+    const had = SV.bag[tr.id] > 0;   // 舊存檔：這個功能出來前就拿過的寶物，不知道第一次是哪天，不要記成今天
     SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1;
-    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
+    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = had ? {} : { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
     SV.bagLog[tr.id].last = today();
     if (M && tr.name.includes('紀念章')) SV.stats.magpie[M.id] = 1;
     if (mode === 'show' && !rewarding) daily('treasure');
@@ -638,11 +646,11 @@
     return SX.art.img('enc_' + e.id, `<svg viewBox="0 0 120 120"><path d="M120 0L70 0 20 120 80 120z" fill="rgba(255,220,130,.3)"/>${g}</svg>`, 'artImg encArt');
   }
   const pickEncounter = () => pickEncounterAt(M.id, st.dist / M.dist, wx, [lastEnc]);
-  // 依山、走到幾成、天氣時段挑一個奇遇（skip：這次不要重複的）
-  function pickEncounterAt(mid, f, wx, skip){
+  // 依山、走到幾成、天氣時段挑一個奇遇（skip：這次不要重複的；date：哪一天，不給就是今天）
+  function pickEncounterAt(mid, f, wx, skip, date){
     const k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     const wt = e => encWeight(e) * (e.wxPref && e.wxPref.includes(wx.kind) ? WXPREF_X : 1);   // wxPref：在這種天氣比較容易遇到
@@ -882,7 +890,7 @@
             <div class="tzFrame ${RAR_CLS[tr.rarity] || ''}" style="${RAR_BG[tr.rarity] || ''}">${trSvg(tr)}${fancy ? '<i class="tzSheen"></i>' : ''}</div>
           </div>
         </div>
-        <p class="tzTags"><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span><span class="chip">× ${SV.bag[tr.id]}</span>${many ? `<small>${i + 1} / ${owned.length}</small>` : ''}</p>
+        <p class="tzTags"><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span><span class="chip">× ${SV.bag[tr.id]}</span>${tr.season ? `<span class="chip" style="background:#ffd9e4">季節限定・${SX.SEASON[tr.season].name}</span>` : ''}${many ? `<small>${i + 1} / ${owned.length}</small>` : ''}</p>
         <p class="tzDesc">${tr.desc}</p>
         ${log && log.first ? `<p class="tzFirst">第一次拿到：${log.first}${mt ? `・${mt.name}` : ''}</p>` : ''}
         <div class="mBtns tzBtns">${many ? '<button class="cbtn tzArr" id="tzPrev" aria-label="上一件">‹</button>' : ''}<button class="cbtn go" id="tzBack">回背包</button>${many ? '<button class="cbtn tzArr" id="tzNext" aria-label="下一件">›</button>' : ''}</div>`);
@@ -1284,7 +1292,7 @@
     SV.stamps[id] = date; save();
     modal(`<h3>集印帳</h3><div style="width:190px;margin:0 auto 14px;animation:pop .4s cubic-bezier(.34,1.8,.5,1)">${stampSvg(id, date)}</div>
       <p class="summitBig">蓋好了！集印帳裡可以看到。</p><div class="mBtns"><button class="cbtn go" id="sOk">好</button></div>`);
-    $('#sOk').onclick = () => { A.pop(); $('#modal').classList.remove('on'); };
+    $('#sOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };   // 蓋到章：集印帳徽章馬上算
     done();
   });
 
@@ -1410,14 +1418,18 @@
     $('#bdgOk').onclick = () => { A.pop(); closeModal(); };
   }
   // 沒遇過的奇遇：從出現條件寫一句提示
+  // 季節限定的奇遇：山和時段跟著季節（SX.SEASONS）走，提示也要寫出季節
   function encHint(e){
-    const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time, out = [];
+    const w = e.where || {}, s = e.season && SX.SEASON[e.season], ws = e.wx || w.wx, out = [];
+    const both = (a, b) => a && b ? a.filter(x => b.includes(x)) : a || b;   // 奇遇自己和季節都有限制：兩邊都符合才遇得到
+    const ts = both(e.time || w.time, s && s.time), mts = both(w.mountains, s && s.mountains);
     const TN = { dawn:'清晨', day:'白天', dusk:'黃昏', night:'夜晚' }, WN = {};
     for (const k in WXD) WN[WXD[k]] = k === 'sunny' ? '晴天' : WX_NAMES[k];   // 天氣名稱只寫在 WX_NAMES 一個地方
+    if (s) out.push(`${s.name}（${mdText(s.from)}～${mdText(s.to)}）`);
     if (e.wxPref) out.push(e.wxPref.map(x => WX_NAMES[x] || x).join('或') + '時比較容易遇到');
     if (ts) out.push('只在' + ts.map(x => TN[x] || x).join('或'));
     if (ws) out.push(ws.map(x => WN[x] || x).join('或') + '時');
-    if (w.mountains) { const ms = w.mountains.map(id => SX.M[id]).filter(Boolean);
+    if (mts) { const ms = mts.map(id => SX.M[id]).filter(Boolean);
       out.push(ms.length > 2 && ms.every(m => m.alt >= 2000) ? '高山上' : ms.length > 3 ? `${ms[0].name}等 ${ms.length} 座山` : ms.map(m => m.name).join('、')); }
     if (w.minFrac >= 0.85) out.push('山頂附近'); else if (w.minFrac >= 0.5) out.push('後半段的路上'); else if (w.minFrac >= 0.3) out.push('走了一段路之後'); else if (w.maxFrac != null && w.maxFrac <= 0.3) out.push('登山口附近');
     return out.length ? out.join('・') : '哪座山都可能遇到';
