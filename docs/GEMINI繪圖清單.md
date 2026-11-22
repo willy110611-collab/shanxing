@@ -479,3 +479,16 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `hiker_drink` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind and slightly to the side, standing and drinking from a water bottle, head tilted back, trekking poles held in the other hand. |
 | `hiker_look` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind, standing still and looking out to the side at the view, one hand shading the eyes, trekking poles in the other hand. |
 | `hiker_wipe` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind and slightly to the side, wiping sweat from the forehead with the back of the hand, a little tired but smiling. |
+
+## 第 19 批：廣場正面／側面走路、雨天寵物雨衣、雨天動作（全部洋紅底）
+
+| 檔名 | 放進 | 比例 | 內容 |
+|---|---|---|---|
+| `hiker_front_walk8` | `01.風格` | 16:9 | 洋紅底。The hiker (主角設定) seen **from the front, walking toward the viewer**, smiling, 8-frame walking cycle in 2 rows of 4, same size and foot baseline. Silver-grey trekking poles. |
+| `hiker_side_walk8` | `01.風格` | 16:9 | 洋紅底。The hiker (主角設定) seen **from the side, walking to the right**, 8-frame walking cycle in 2 rows of 4, same size and foot baseline. Silver-grey trekking poles. |
+| `hiker_rain_stairs8` | `01.風格` | 16:9 | 洋紅底。Same as hiker_stairs8 but wearing the yellow rain poncho over the backpack. |
+| `hiker_rain_tired_walk8` | `01.風格` | 16:9 | 洋紅底。Same as hiker_tired_walk8 but wearing the yellow rain poncho over the backpack. |
+| `pet_shiba_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The shiba (柴犬設定) seen from directly behind wearing a tiny yellow hooded raincoat, 4-frame trotting cycle in one row, same size as pet_shiba_walk. |
+| `pet_bear_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The same small cute Formosan black bear cub as pet_bear_walk, seen from behind wearing a tiny yellow raincoat, 4-frame walking cycle in one row. |
+| `pet_leopardcat_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The same leopard cat as pet_leopardcat_walk, seen from behind wearing a tiny yellow raincoat, 4-frame walking cycle in one row. |
+| `pet_magpie_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The same Taiwan blue magpie as pet_magpie_walk, seen from behind hopping, wearing a tiny yellow rain cape, 4-frame hopping cycle in one row. |
