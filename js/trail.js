@@ -9,7 +9,7 @@ const S = SX.scene = {};
 const INK = '#3a2a20', TAU = Math.PI * 2;
 const SEG = 1.6;        // 每段路長（公尺）
 const DRAW = 150;       // 繪製段數（約 240 m）
-const HZ = 6;           // 登山客在鏡頭前方幾公尺
+const HZ = 3.8;         // 登山客在鏡頭前方幾公尺（玩家：鏡頭拉近，比較有走在山林裡的感覺；原本 6）
 const RW = 1.3;         // 步道半寬
 const GW = 30;          // 稜線地面半寬
 const FOGN = 24;        // 霧色階數
@@ -657,7 +657,7 @@ S.resize = function(){
   const d = Math.min(2, window.devicePixelRatio || 1);
   if (w === W && h === H && d === DPR && RAYS && cv.width === Math.round(w * d)) return;
   W = w; H = h; DPR = d; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-  F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * 0.34); CAMH = 0.46 * H * HZ / F; U = H / 812;
+  F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * 0.31); CAMH = 0.46 * H * HZ / F; U = H / 812;   // 地平線稍微往上，少一點空白天空、多一點山林
   buildRays(); buildFG();
   vig = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.32, W / 2, H * 0.5, H * 0.78);
   vig.addColorStop(0, 'rgba(48,30,24,0)'); vig.addColorStop(1, 'rgba(48,30,24,0.36)');
