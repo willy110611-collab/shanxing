@@ -1414,7 +1414,7 @@
     $('#sGps').onclick = () => { s.gps = !s.gps; save(); setGps(s.gps); renderSettings(); };
     $('#sPush').onclick = async () => {
       if (!SX.social) return; const want = !SX.social.pushOn; $('#sPush').disabled = true;
-      try { await SX.social.pushSet(want); toast(want ? '通知打開了' : '通知關掉了'); } catch(e){ toast(e.message, 4200); }
+      try { await SX.social.pushSet(want); toast(want ? '通知打開了' : '通知關掉了'); } catch(e){ toast(e.message, 7000); }   // 說明步驟比較長，停久一點
       renderSettings();
     };
     if (s.dev) {
