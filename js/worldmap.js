@@ -513,13 +513,15 @@ function layoutPins(c, order, ps){
   return out;
 }
 function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
-  const D = S.data, id = m.id, done = D.done[id] || 0, locked = !!D.locked[id], cur = D.current === id;
+  const D = S.data, id = m.id, done = D.done[id] || 0, locked = !!D.locked[id], cur = D.current === id, rec = D.rec === id && !cur && !locked;   // rec：建議下一座（game.js recommendNext）
   const a = S.anim[id] || (S.anim[id] = 1), want = (S.hover === id || S.sel === id) ? 1.14 : 1; S.anim[id] = a + (want - a) * .2;
   ps *= S.anim[id];
   c.save(); c.translate(x, y); c.scale(ps, ps);
   const name = m.name, G = pinGeom(c, m), w = G.bw, ph = G.ph, py = G.py;
   if (cur){ const r = 28 + Math.sin(t * 2.2) * 5, g = c.createRadialGradient(0, -6, 2, 0, -6, r);
     g.addColorStop(0, 'rgba(255,226,130,.75)'); g.addColorStop(.6, 'rgba(255,214,110,.3)'); g.addColorStop(1, 'rgba(255,214,110,0)'); c.fillStyle = g; c.beginPath(); c.arc(0, -6, r, 0, TAU); c.fill(); }
+  if (rec){ const k = .5 + .5 * Math.sin(t * 2.6);   // 推薦下一座：山腳一圈呼吸的金色光環
+    c.strokeStyle = `rgba(255,214,110,${.45 + .4 * k})`; c.lineWidth = 2.2; c.beginPath(); c.ellipse(0, 0, 15 + 3 * k, 5.6 + k, 0, 0, TAU); c.stroke(); }
   c.fillStyle = 'rgba(40,25,10,.22)'; c.beginPath(); c.ellipse(0, 0, 12, 4.4, 0, 0, TAU); c.fill();
   c.fillStyle = 'rgba(40,25,10,.38)'; c.beginPath(); c.ellipse(0, 0, 7, 2.6, 0, 0, TAU); c.fill();
   if (cur) drawWalkers(c, t);
@@ -553,6 +555,10 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, py + .6);
   if (done) drawCrown(c, 0, py - ph / 2 + .6);
   }
+  if (rec){ const tx = G.cx - w / 2 + 12, ty = py - ph / 2 - 6;   // 「推薦」小金牌：木牌左上角
+    c.font = `bold 7px ${FONT}`; const tw2 = c.measureText('推薦').width + 8;
+    c.fillStyle = '#f6c945'; irr(c, tx - tw2 / 2, ty - 5, tw2, 10, 3, 91); c.fill(); c.lineWidth = .8; c.strokeStyle = INK; c.stroke();
+    c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('推薦', tx, ty + .4); }
   const bx = G.cx + w / 2 - 1, byT = py - ph / 2 + Math.tan(G.tilt) * w / 2;   // 照片數徽章：木牌右上角
   const ph2 = D.photos[id]; if (ph2 > 0){ c.fillStyle = '#4f9fd6'; c.beginPath(); c.arc(bx, byT, 4.2, 0, TAU); c.fill(); c.lineWidth = .7; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#fff'; c.font = `bold 6px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ph2 > 99 ? '99+' : ph2, bx, byT + .3); }
   const pg = D.prog[id]; if (pg && pg.dist > 0 && !done && m.dist){ const f = clamp(pg.dist / m.dist, 0, 1);
@@ -733,7 +739,7 @@ SX.worldmap = {
     const o = S.data, n = d || {};
     if (n.mountains && n.mountains !== o.mountains || n.coast && n.coast !== o.coast || n.ridge && n.ridge !== o.ridge) S.dirty = true;
     S.data = { mountains:n.mountains || o.mountains, coast:n.coast || o.coast, ridge:n.ridge || o.ridge,
-      done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {}, pet:n.pet || null };
+      done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {}, pet:n.pet || null, rec:n.rec || null };
     S.tw = {}; ensure();
   },
   onSelect(fn){ S.cb = fn; },

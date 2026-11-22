@@ -1103,9 +1103,12 @@ S.drawPerson = function(c, X, Y, u, p, t){
     c.save(); c.translate(X, Y); c.scale(p.flip ? -u : u, u);
     if (p.tint >= 0) c.filter = 'hue-rotate(' + (150 + p.tint % 3 * 60) + 'deg)';   // 美術圖版本：換衣服色調
     const s = { rest:!!p.sit };
-    const drawn = heroArt(c, s, t); c.filter = 'none';
+    // p.pose：{ id, cm } 廣場打招呼的動作美術圖（揮手、鞠躬、歡呼），寵物和影子照樣畫
+    const posed = p.pose && ART.get(p.pose.id) ? ART.drawFrame(c, p.pose.id, 0, 0, 0, p.pose.cm) : false;
+    const drawn = posed || heroArt(c, s, t); c.filter = 'none';
     if (!drawn) { if (p.sit) heroRest(c, t); else heroWalk(c, t); }
     c.restore();
+    if (posed) return p.pose.cm;
   } finally {
     ctx = keepCtx; isRain = keepRain; Object.assign(hero, sv);
     [JK_L, JK_S, BAG_L, BAG_S, HAT_L, HAT_S] = cols;

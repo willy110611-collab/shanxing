@@ -25,8 +25,6 @@ P.emoArt = k => 'emo_' + k;     // 動作圖示的美術圖名字（選單按鈕
 const ICON_PX = 24;             // 名牌旁動作圖示的大小
 const icons = {};               // 動作圖示：裁好的美術圖（第一次用到才裁）
 function emoIcon(k){ if (!icons[k] && SX.art) { const c = SX.art.crop(P.emoArt(k), 0); if (c) icons[k] = c; } return icons[k] || null; }
-// 別人的衣服色調：跟步道上的隊友一樣，美術圖用色相旋轉（SX.scene.drawPerson 同一套）
-const tintFilter = tint => 'hue-rotate(' + (150 + tint % 3 * 60) + 'deg)';
 
 let host = null, cv = null, ctx = null, W = 0, H = 0, DPR = 1, BG = null, raf = 0, last = 0, ro = null;
 let me = null, opt = {}, ppl = new Map(), taps = [];
@@ -201,31 +199,14 @@ function loop(now){
       else if (e.k === 'bow') sq = 1 - Math.sin(Math.min(1, q * 1.3) * Math.PI) * 0.16;
       else if (e.k === 'wave') sway = Math.sin(et / 120) * 0.08;
     }
-    let headCm;
-    if (pose) headCm = drawPose(p, pose, s);
-    else {
-      ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
-      headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip }, t) : 182;
-      ctx.restore();
-    }
+    // 打招呼的動作圖也交給 drawPerson 畫（寵物、影子、衣服色調都同一套）
+    ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
+    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:p.pet, flip:p.flip, pose:pose ? { id:pose.pose, cm:pose.poseCm } : null }, t) : 182;
+    ctx.restore();
     labels.push({ p, x:s.sx, y:s.sy - (headCm * sq + hop) * s.u - 6 });
   }
   // 名牌、動作圖示、對話框畫在最上層，不會被別人擋住
   for (const L of labels) drawLabel(L.p, L.x, L.y, now);
-}
-// 做動作的背影美術圖：腳底影子＋整張動作圖（別人換衣服色調）；回傳頭頂高度（公分）
-let POSE_SHADOW = null;
-function drawPose(p, e, s){
-  if (!POSE_SHADOW) {
-    POSE_SHADOW = mk(64, 32); const g = POSE_SHADOW.getContext('2d'); g.scale(1, 0.5);
-    const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(25,35,20,0.45)'); gr.addColorStop(0.55, 'rgba(25,35,20,0.24)'); gr.addColorStop(1, 'rgba(25,35,20,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  }
-  ctx.drawImage(POSE_SHADOW, s.sx - 48 * s.u, s.sy - 17 * s.u, 86 * s.u, 34 * s.u);
-  if (p.tint >= 0) ctx.filter = tintFilter(p.tint);
-  SX.art.drawFrame(ctx, e.pose, 0, s.sx, s.sy, e.poseCm * s.u, p.flip);
-  ctx.filter = 'none';
-  return e.poseCm;
 }
 function rr(x, y, w, h, r){ ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
 function drawLabel(p, x, y, now){

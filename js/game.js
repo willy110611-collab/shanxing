@@ -187,12 +187,25 @@
   let selId = null, mapInit = false;
   // 解鎖規則：難度 1–2 一開始就開放；其他要先登頂任何一座「難度 ≥ 自己 − 1」的山
   const unlocked = m => m.diff <= 2 || SV.unlockAll || SX.MOUNTAINS.some(x => SV.done[x.id] && x.diff >= m.diff - 1);
+  // 建議挑戰順序：已開放、還沒爬過的山裡，難度最低、時間最短的那座；全都爬過就推爬最少次的。正在爬的那座不推
+  function recommendNext(){
+    const going = id => { const p = SV.prog[id]; return id === SV.cur && p && p.dist > 0 && !p.fin; };
+    const L = SX.MOUNTAINS.filter(m => unlocked(m) && !going(m.id));
+    L.sort((a, b) => (SV.done[a.id] ? 1 : 0) - (SV.done[b.id] ? 1 : 0) || (SV.done[a.id] || 0) - (SV.done[b.id] || 0) || a.diff - b.diff || a.recMin - b.recMin);
+    return L[0] || null;
+  }
+  // 這座山對現在的你來說：推薦／適合／有點挑戰（依爬過最難的山）
+  function fitText(m){
+    const r = recommendNext(); if (r && r.id === m.id) return '下一座就爬這裡吧！難度剛好，時間也不長';
+    const top = Math.max(2, ...SX.MOUNTAINS.filter(x => SV.done[x.id]).map(x => x.diff));
+    return m.diff <= top ? '適合現在的你' : '有點挑戰，記得量力而為、多休息';
+  }
   function renderMap(){
     const locked = {}, photos = {};
     SX.MOUNTAINS.forEach(m => { if (!unlocked(m)) locked[m.id] = true; });
     SV.userPhotos.forEach(p => { photos[p.mountainId] = (photos[p.mountainId] || 0) + 1; });
     try {
-      WM.setData({ mountains:SX.MOUNTAINS, coast:SX.COAST, ridge:SX.RIDGE, done:SV.done, prog:SV.prog, current:SV.cur, locked, photos, pet:SV.pet || null });
+      WM.setData({ mountains:SX.MOUNTAINS, coast:SX.COAST, ridge:SX.RIDGE, done:SV.done, prog:SV.prog, current:SV.cur, locked, photos, pet:SV.pet || null, rec:(recommendNext() || {}).id || null });
       WM.start(); if (!mapInit) { mapInit = true; WM.reset(); }
     } catch(e){ console.error('worldmap', e); }
   }
@@ -235,6 +248,7 @@
         <div class="paper"><small>收集的照片</small><b>${nPh} 張${nUp ? `＋${nUp}` : ''}</b></div>
         <div class="paper"><small>沿途地標</small><b>${(m.waypoints || []).length} 處</b></div>
       </div>
+      ${ok ? `<div class="rc-feat"><em>建議：</em>${fitText(m)}</div>` : ''}
       <div class="rc-feat"><em>紀錄：</em>${m.recNote}</div>
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
       <div class="rc-feat"><em>終點：</em>${m.end}${m.temple ? '（可以擲筊、求籤）' : ''}</div>
@@ -974,15 +988,17 @@
       if (img) { SV.photos.push({ id:M.id, m:M.dist, alt:M.alt, img, cap:`${M.name}・登頂`, wx:wxText(wx) || '晴', date:today() }); imgDirty = true; save(); }
       const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width/2, r.top + r.height*0.4, 24); confetti();
       const wall = SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) >= M.dist);
+      const nx = recommendNext(), nxt = nx && nx.id !== M.id ? nx : null;   // 登頂後推薦下一座
       modal(`${SX.art.img('summit_' + M.id, '', 'artImg summitArt')}<h3>抵達終點！</h3>
         <div class="summitBig"><b>${M.name} ${M.alt.toLocaleString('en-US')} m</b>${M.end}</div>
         ${img ? `<div class="pol"><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
         ${M.temple ? '<p class="summitBig">旁邊有一間小小的福德祠，要不要進去拜一下？</p>' : '<p class="summitBig">集印帳蓋上新的章了！</p>'}
-        <div class="mBtns">${M.temple ? '<button class="cbtn red" id="aTemple">去福德祠</button>' : ''}<button class="cbtn ${M.temple ? '' : 'go'}" id="aMap">回地圖</button></div>`);
+        ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
+        <div class="mBtns">${M.temple ? '<button class="cbtn red" id="aTemple">去福德祠</button>' : ''}<button class="cbtn ${M.temple ? '' : 'go'}" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`);
       if (M.temple) $('#aTemple').onclick = () => { closeModal(); openTemple(); };
-      $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); };
+      $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { selId = nxt.id; try { WM.focus(nxt.id); } catch(e){} showRoute(nxt.id); } };
       checkQuests();
     }, 1400);
   }
