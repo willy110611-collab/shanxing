@@ -415,3 +415,18 @@ input[type=range]{width:100%;accent-color:#6fb257}
   .topBtns{gap:5px}
   .topBtns .cbtn.sm{padding-left:8px;padding-right:8px;font-size:13px}
 }
+
+/* ───────── 離開時的日記＋路上的包裹 ───────── */
+.awayD{color:var(--ink);text-shadow:none}
+.awayT{text-align:center;font-size:13px;color:var(--wood2);margin:-4px 0 8px}
+.awayL{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.awayL li{display:flex;align-items:flex-start;gap:8px;font-size:14.5px;line-height:1.45;padding-bottom:7px;border-bottom:1.5px dashed rgba(106,78,58,.35)}
+.awayL li:last-child{border-bottom:0;padding-bottom:0}
+.awI{flex:0 0 28px;width:28px;height:28px;display:flex;align-items:center;justify-content:center}
+.awI img,.awI svg{max-width:100%;max-height:100%;object-fit:contain}
+.awI.big{flex-basis:52px;width:52px;height:52px;animation:awWiggle 1.6s ease-in-out infinite}
+.awayPics{display:flex;justify-content:center;gap:8px;margin:12px 0 2px}
+.awayPics img{width:72px;height:72px;object-fit:cover;background:#fffdf6;padding:4px 4px 12px;border:2px solid var(--ink);border-radius:3px;box-shadow:0 3px 0 rgba(58,42,32,.4)}
+.awayParcel{display:flex;align-items:center;gap:10px;margin-top:12px;padding:8px 10px;border:2px dashed var(--wood2);border-radius:12px 15px 11px 16px;background:rgba(255,236,180,.45);font-size:14.5px;line-height:1.4}
+.awayParcel b{font-size:18px;color:#c0602a}
+@keyframes awWiggle{0%,70%,100%{transform:rotate(0)}76%{transform:rotate(-8deg)}84%{transform:rotate(7deg)}92%{transform:rotate(-4deg)}}
