@@ -11,9 +11,10 @@ const listeners = [];
 let loaded = false;
 // 多格動作圖怎麼切：名字符合哪一條就切成 欄 × 列 格（由左到右、上排再下排）。新的動作圖只改這張表
 // air：有跳起來的格子（hiker_hop4）：每格保留離地的高度、不把腳底拉到同一條線；畫的高度以最後一格（站直）為準
-// order：Gemini 畫的格子順序不對（左右腳沒輪流）時，播放順序照這串（0 起算的原圖格號）
-// hiker_walk16 原圖左右腳沒照順序畫：挑出「左腳抬起 → 落地 → 右腳抬起 → 落地」的播放順序
-const WALK16 = [8, 6, 1, 4, 14, 5, 0, 15, 9, 2, 11, 3, 13, 7, 12, 10];
+// order：Gemini 畫的格子順序不對（左右腳沒輪流）時，播放順序照這串（0 起算的原圖格號；~i 是第 i 格左右鏡射）
+// hiker_walk16 原圖左右腳不平均（左腳在前只有 4 格、右腳在前 12 格）：量了每格兩腳的前後差，挑出「左腳在前 → 右腳跨到最前」的 8 格照順序排，
+// 後半步用同樣 8 格左右鏡射（~i 表示第 i 格鏡射），兩步一模一樣、換腳不會小碎步
+const WALK16 = [0, 5, 1, 2, 4, 6, 7, 3, ~0, ~5, ~1, ~2, ~4, ~6, ~7, ~3];
 // hiker_stairs16 原圖第 7、15 格是腳剛踩上上一階：往後挪一格，對齊爬階梯節奏（八格圖是第 4、8 格踩上去）
 const STAIRS16 = [15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const SHEETS = [
@@ -117,7 +118,7 @@ function prep(name, img){
     fr.forEach((f, i) => { const x0 = (i % cols) * cw, w = Math.min(W, cw), by = bys[i]; f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.y = Math.max(y0s[i], by - H); f.w = w; f.h = by - f.y; });
     if (air) e.hk = fr[0].h / stand;   // 畫的時候給的高度是「人站直多高」：整格要再放大這麼多倍（多出來的是跳起來的空間）
   }
-  e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => fr[i]) : fr;
+  e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => i < 0 ? Object.assign({}, fr[~i], { mx:true }) : fr[i]) : fr;
   return toBitmap(c).then(b => { e.img = b; return e; });
 }
 // 一格裡身體的左右重心：只看外框高度 20%～55% 那一段（頭到腰，不含腳和登山杖尖），用不透明度加權
@@ -165,6 +166,7 @@ A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
   const e = lib[id]; if (!e) return false;
   const f = e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length], img = fl ? filtered(e, fl) : e.img;
   h *= e.hk || 1; const w = h * f.w / f.h;
+  if (f.mx) flip = !flip;   // 這一格本身是鏡射格（SHEETS 的 order 用 ~i）
   if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(img, f.x, f.y, f.w, f.h, -w / 2, by - h, w, h); ctx.restore(); }
   else ctx.drawImage(img, f.x, f.y, f.w, f.h, cx - w / 2, by - h, w, h);
   return true;
