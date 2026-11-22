@@ -197,9 +197,41 @@ function texLevel(T, nx, ny){
   return L;
 }
 const TEX_MTX = typeof DOMMatrix === 'function' ? new DOMMatrix() : null;   // 每段路都要對一次貼圖，重複用同一個矩陣不另外配置
+// 不能無縫拼接的圖（例如苔蘚石板、木頭階梯）先鏡射拼成可以無縫重複的一張（只做一次，換山時重複用）
+// r：要用的那一塊（佔原圖的比例 [x0, y0, x1, y1]）；mx、my：左右、上下要不要鏡射；px：每一塊縮成多寬（像素，省記憶體）
+function mirTex(id, m, r, mx, my, px){
+  if (!ctx) return null;
+  const T = keep('texm:' + id, function(){
+    const e = ART.get(id); if (!e) return null;
+    const f = e.frames[0], sx = f.x + f.w * r[0], sy = f.y + f.h * r[1], sw = f.w * (r[2] - r[0]), sh = f.h * (r[3] - r[1]);
+    const w = Math.round(Math.min(px, sw)), h = Math.round(w * sh / sw), c = mk(w * (mx ? 2 : 1), h * (my ? 2 : 1)), g = c.getContext('2d');
+    for (let a = 0; a < (mx ? 2 : 1); a++) for (let b = 0; b < (my ? 2 : 1); b++) {
+      g.save(); g.translate(a ? w * 2 : 0, b ? h * 2 : 0); g.scale(a ? -1 : 1, b ? -1 : 1); g.drawImage(e.img, sx, sy, sw, sh, 0, 0, w, h); g.restore();
+    }
+    const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, c:c, lv:{} } : null;
+  });
+  return T ? { p:T.p, w:T.w, m:m, c:T.c, lv:T.lv } : null;
+}
+// 階梯立面（面對鏡頭那一面）的貼圖：石階用花崗岩石塊（約 5 排石頭）、土路和木棧道的陡段用木頭階梯（約 3 根橫木）
+// m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
+const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95] } };
 function buildTex(){
-  TEX = { road:mkTex(TRAIL_TEX[TH.trail || 'dirt'], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2),
-    steps:TH.trail === 'stairs' ? null : mkTex('ground_steps', RW * 2) };   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
+  const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
+  TEX = { road:mkTex(TRAIL_TEX[tr], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2),
+    steps:tr === 'stairs' ? null : mkTex('ground_steps', RW * 2),   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
+    moss:tr === 'stairs' && !TH.alpine ? mirTex('ground_stone_moss', RW * 2.4, [0, 0, 1, 1], true, true, 512) : null,   // 森林裡的石階：踏面一階石板、一階苔蘚石塊，才不會每階都同一種鋪面
+    riser:rs ? (rs.r ? mirTex(rs.id, rs.m, rs.r, true, false, 640) : mkTex(rs.id, rs.m)) : null };
+  if (TEX.riser) TEX.riser.rows = rs.rows;
+}
+// 立面貼圖：xl 左緣、yt 上緣（螢幕座標）、s 這個深度每公尺幾像素；k 決定這一階對齊圖裡第幾排、左右錯開多少
+function riserFill(T, xl, yt, s, k, a){
+  const kx = s * T.m / T.w, n = Math.min(6, Math.max(0, Math.floor(-Math.log2(kx * DPR))));
+  const L = n ? texLevel(T, n, n) : null, p = L ? L.p : T.p, ax = L ? kx * L.sx : kx, ay = L ? kx * L.sy : kx;
+  const rowPx = T.c.height / T.rows, row = (Hh(k, 181) * T.rows) | 0, u = Hh(k, 182) * T.w;
+  const m = TEX_MTX || new DOMMatrix();
+  m.a = ax; m.b = 0; m.c = 0; m.d = ay; m.e = xl - u * kx; m.f = yt - row * rowPx * kx;
+  p.setTransform(m);
+  ctx.fillStyle = p; ctx.globalAlpha = a;
 }
 // 把貼圖對準這一段路：左緣 xl、近端 y1、遠端 y2、這段的世界位置 z0
 function texFill(T, xl, s1, y1, y2, z0, a){
@@ -1582,6 +1614,7 @@ function drawWorld(b, t){
         // 壓到 0 時跟「整段一階」長得一模一樣，才換成只畫一階
         const rise = pW[j + 1] - pW[j], nMax = clamp(Math.ceil(rise / STEP_H), 1, 4), tm = nMax > 1 ? clamp((rise * s2 / nMax - 3) / 2, 0, 1) : 0, n = tm > 0 ? nMax : 1;   // tm：一階立面 3 像素以下開始壓扁、5 像素以上完整
         const ST = snowAmt > 0.5 ? RT : (TH.trail === 'scree' || TH.trail === 'stairs' ? RT : (TEX.steps || RT));   // 石階、碎石用路面貼圖；土路、木棧道用木頭階梯
+        const RS = snowAmt > 0.5 ? null : TEX.riser;   // 立面貼圖：積雪時不用
         const at = f => { const dz = pZ[j] + f * (pZ[j + 1] - pZ[j]), s = F / dz; return [W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * s, s]; };
         const sd = farA(j, 70, 10);   // 遠處只剩幾像素的階梯：每塊深淺、陰影這些細節慢慢淡掉、最後不畫（省效能），階梯本身照畫
         for (let q = n - 1; q >= 0; q--) {
@@ -1591,6 +1624,7 @@ function drawWorld(b, t){
           const wa = RW * sa, wb = RW * sb;
           // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊
           ctx.fillStyle = LUT[(15 + (lvL ? 1 : 0)) * FOGN + fi]; quad(xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7);
+          if (RS && ta > 0.03 && yt - yr > 0.6) { riserFill(RS, xb - wb * 1.04, yr, sb, i * 8 + (q + 1) % n, ta * mid); quad(xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7); ctx.globalAlpha = fade; }   // 立面貼圖（石塊或橫木），下面照舊壓暗、加唇下陰影
           if (sd > 0) {
             ctx.globalAlpha = fade * sd; ctx.fillStyle = 'rgba(30,22,30,0.22)'; quad(xb - wb * 1.04, yt - (yt - yr) * 0.35, xb + wb * 1.04, yt - (yt - yr) * 0.35, xb + wb * 1.04, yt + 0.7, xb - wb * 1.04, yt + 0.7);
             ctx.globalAlpha = fade; woodTint(i * 8 + (q + 1) % n, 0, xb - wb * 1.04, yr, xb + wb * 1.04, yr, xb + wb * 1.04, yt, xb - wb * 1.04, yt, sd);
@@ -1602,7 +1636,8 @@ function drawWorld(b, t){
           // 踏面
           ctx.fillStyle = LUT[13 * FOGN + fi]; quad(xa - wa * 1.07 - 0.6, ya, xa + wa * 1.07 + 0.6, ya, xb + wb * 1.07 + 0.6, yt, xb - wb * 1.07 - 0.6, yt);
           ctx.fillStyle = LUT[(rk * 3 + lvL) * FOGN + fi]; quad(xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt);
-          if (ST && ta > 0.03) { texFill(ST, xa - wa, sa, ya, yt, z0 + fa * SEG, ta); quad(xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt); ctx.globalAlpha = fade; }
+          const TT = TEX.moss && ST === TEX.road && Hh(i * 8 + q, 190) < 0.45 ? TEX.moss : ST;   // 森林石階：有的階踏面換成苔蘚石塊
+          if (TT && ta > 0.03) { texFill(TT, xa - wa, sa, ya, yt, z0 + fa * SEG, ta); quad(xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt); ctx.globalAlpha = fade; }
           if (sd > 0) {
             if (q) woodTint(i * 8, 1, xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt, (1 - tm) * sd);   // 每階踏面深淺不一：剛分出來的那幾階先跟第一階同色，再慢慢換成自己的顏色
             woodTint(i * 8 + q, 1, xa - wa, ya, xa + wa, ya, xb + wb, yt, xb - wb, yt, (q ? tm : 1) * sd);
