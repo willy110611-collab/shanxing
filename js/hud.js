@@ -135,7 +135,7 @@
     if (art) { H.els.wxWrap.style.background = ''; return; }
     g.lineJoin = 'round'; g.lineCap = 'round';
     const night = time === 'night', warm = time === 'dawn' || time === 'dusk';
-    H.els.wxWrap.style.background = night ? 'linear-gradient(#34436e,#6a6a9c)' : warm ? 'linear-gradient(#f9c98e,#fbe6b8)' : kind === 'rain' ? 'linear-gradient(#a9bfcb,#d5dde0)' : kind === 'snow' ? 'linear-gradient(#c6d3e0,#eef2f6)' : 'linear-gradient(#bfe3f3,#f8ecc8)';
+    H.els.wxWrap.style.background = night ? 'linear-gradient(#34436e,#6a6a9c)' : warm ? 'linear-gradient(#f9c98e,#fbe6b8)' : kind === 'rain' ? 'linear-gradient(#a9bfcb,#d5dde0)' : kind === 'snow' ? 'linear-gradient(#c6d3e0,#eef2f6)' : 'radial-gradient(circle at 40% 35%,#fff6df,#f1dfb6)';   // 晴天：羊皮紙底，跟右上暖陽同色調
     const sun = (x, y, r) => {
       g.strokeStyle = INK; g.lineWidth = 2;
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.beginPath(); g.moveTo(x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2)); g.lineTo(x + Math.cos(a) * (r + 5), y + Math.sin(a) * (r + 5)); g.stroke(); }
@@ -306,17 +306,17 @@
     if (!force && !H.dirty && Math.abs(f - H.lastF) < 1e-4 && Math.abs(dA) < .002) return;
     H.lastF = f; H.dirty = false;
 
-    const S = RS, cx = S / 2, R = S / 2 - 3, py = S / 2 + R * .4;
+    const S = RS, cx = S / 2, R = S / 2 - 6, py = S / 2 + R * .4;   // 外圈留給木框
     g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, S, S);
     g.save(); g.beginPath(); g.arc(cx, S / 2, R, 0, 7); g.clip();
-    g.fillStyle = '#2b523a'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#3a6a4c'; g.fillRect(0, 0, S, S);
     g.save();
     g.translate(cx, py); g.rotate(-Math.PI / 2 - H.angle); g.scale(K, K); g.translate(-p[0], -p[1]);
     g.imageSmoothingQuality = 'high'; g.drawImage(H.world, 0, 0);
     g.restore();
     // 暈邊 + 右上柔光
     const v = g.createRadialGradient(cx, S / 2, R * .45, cx, S / 2, R);
-    v.addColorStop(0, 'rgba(10,30,20,0)'); v.addColorStop(1, 'rgba(10,30,20,.5)');
+    v.addColorStop(0, 'rgba(10,30,20,0)'); v.addColorStop(1, 'rgba(10,30,20,.32)');
     g.fillStyle = v; g.fillRect(0, 0, S, S);
     const lg = g.createLinearGradient(S, 0, 0, S); lg.addColorStop(0, 'rgba(255,238,180,.22)'); lg.addColorStop(.5, 'rgba(255,238,180,0)');
     g.fillStyle = lg; g.fillRect(0, 0, S, S);
@@ -330,9 +330,11 @@
     g.lineWidth = .9; g.strokeStyle = INK; g.stroke();
     g.fillStyle = 'rgba(255,255,255,.45)'; g.beginPath(); g.moveTo(0, -6); g.lineTo(3, 2); g.lineTo(0, 0); g.closePath(); g.fill();
     g.restore();
-    // 外框：墨線 + 淺色細緣
-    g.beginPath(); g.arc(cx, S / 2, R + 1.2, 0, 7); g.lineWidth = 2.6; g.strokeStyle = INK; g.stroke();
-    g.beginPath(); g.arc(cx, S / 2, R - .6, 0, 7); g.lineWidth = 1.4; g.strokeStyle = '#d9ead0'; g.stroke();
+    // 外框：手繪木框（暖木色環＋上方受光細線），內外各一條細墨線
+    g.beginPath(); g.arc(cx, S / 2, R + 2.8, 0, 7); g.lineWidth = 5.2; g.strokeStyle = '#a87849'; g.stroke();
+    g.beginPath(); g.arc(cx, S / 2, R + 3.4, Math.PI * 1.05, Math.PI * 1.95); g.lineWidth = 1.2; g.strokeStyle = 'rgba(255,226,170,.75)'; g.stroke();
+    g.beginPath(); g.arc(cx, S / 2, R + 5.6, 0, 7); g.lineWidth = 1.1; g.strokeStyle = INK; g.stroke();
+    g.beginPath(); g.arc(cx, S / 2, R, 0, 7); g.lineWidth = 1.1; g.strokeStyle = INK; g.stroke();
     // 頂端白色三角 (朝下)
     g.beginPath(); g.moveTo(cx - 5.5, 1.2); g.lineTo(cx + 5.5, 1.2); g.lineTo(cx, 9.5); g.closePath();
     g.fillStyle = '#fff'; g.fill(); g.lineWidth = 1.6; g.lineJoin = 'round'; g.strokeStyle = INK; g.stroke();

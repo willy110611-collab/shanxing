@@ -137,7 +137,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .hudSub{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:6px;font-size:11px;margin-top:3px;color:#ffe9b8}
 .hudSub span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .hudR{display:flex;align-items:center;gap:6px;pointer-events:auto}
-.hudWx{width:42px;height:42px;border-radius:50%;border:2.5px solid var(--ink);background:linear-gradient(#cfeaf5,#f6e8c0);box-shadow:0 3px 0 var(--ink),inset 1px 1px 0 #fff;overflow:hidden;flex:none}
+.hudWx{width:42px;height:42px;border-radius:50%;border:1.6px solid var(--ink);background:radial-gradient(circle at 40% 35%,#fff6df,#f1dfb6);box-shadow:0 0 0 2.5px #e9cfa0,0 0 0 3.6px rgba(58,42,32,.75),0 3px 6px rgba(40,25,10,.25);overflow:hidden;flex:none}   /* 細線手繪圓徽：一圈暖金細緣 */
 .hudWx canvas{display:block;width:100%;height:100%}
 .radarBox{width:104px;height:104px;flex:none;border-radius:50%;position:relative;filter:drop-shadow(0 4px 3px rgba(40,22,8,.4))}
 .radarBox canvas{display:block;width:100%;height:100%}

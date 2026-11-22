@@ -649,6 +649,16 @@
       .infoCard .paper,.infoCard .paperIn{background:none!important;border:0!important;border-bottom:1.5px dashed rgba(120,80,40,.45)!important;border-radius:0!important;box-shadow:none!important}
       .infoCard .ic-meta{gap:2px 14px!important}`);
     // 按鈕用木牌（ui_button）：取代程式畫的漸層亮面按鈕
+    // 登山畫面左上狀態面板：柔和羊皮紙＋細木框（跟山資訊卡同一張 ui_card，框畫細一點），字改深棕墨色
+    if (u('ui_card')) css.push(`.hudP{background:none!important;border-style:solid!important;border-color:transparent!important;border-width:13px 11px 14px!important;border-image:url("${u('ui_card')}") 84 70 88 70 fill / 13px 11px 14px stretch!important;border-radius:0!important;box-shadow:0 3px 8px rgba(40,25,10,.22)!important;padding:2px 4px 2px!important;color:var(--ink)!important;text-shadow:none!important}
+      .hudP::before,.hudP::after{display:none!important}
+      .hudP .hudName,.hudP .hudAlt,.hudP .hudBar span{color:var(--ink)!important;text-shadow:none!important}
+      .hudP .hudAlt .up,.hudP .hudAlt small{color:#9a6a3f!important}.hudP .hudSub{color:#6b4a2b!important}
+      .hudP .hbar{height:9px;border-width:1.4px;background:#e8d9b8;box-shadow:inset 0 1px 1.5px rgba(90,60,30,.3)}
+      .hudP .hudFace{border-width:1.6px;box-shadow:0 1px 3px rgba(40,25,10,.3)}`);
+    // 下方功能列：淺色木牌（ui_button）細墨線，不再是深色厚底條
+    if (u('ui_button')) css.push(`.dock{background:none!important;border-style:solid!important;border-color:transparent!important;border-width:12px 16px!important;border-image:url("${u('ui_button')}") 50 60 fill / 12px 16px stretch!important;border-radius:0!important;box-shadow:0 3px 8px rgba(40,25,10,.25)!important;padding:0 2px!important}
+      .dock::before,.dock::after{display:none!important}`);
     if (u('ui_button')) css.push(`.cbtn{background:none!important;border-style:solid!important;border-color:transparent!important;border-width:12px 15px!important;border-image:url("${u('ui_button')}") 50 60 fill / 12px 15px stretch!important;box-shadow:0 3px 4px rgba(40,25,10,.28)!important;border-radius:0!important;padding:0 5px!important;min-height:44px}
       .cbtn.sm{min-height:34px;padding:0!important;border-width:8px 10px!important;border-image-width:8px 10px!important}
       .cbtn:active{box-shadow:0 1px 2px rgba(40,25,10,.28)!important}
