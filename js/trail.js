@@ -19,7 +19,7 @@ const TWL = 720;        // 背景圖塊邏輯寬度
 const FONT = "'Huninn','PingFang TC','Microsoft JhengHei',sans-serif";
 const LW = 0.032;       // 道具墨線粗細（公尺）
 const HIT = { note:1, btree:1, cairn:1, bench:1, view:1, treasure:1 };
-const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW+1.0, mycairn:RW+0.35, rail:RW+0.45, fall:RW+3.2 };
+const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW+1.0, mycairn:RW+0.35, fall:RW+3.2 };
 const DEFWX = { kind:'sunny', time:'day' };
 
 let cv = null, ctx = null, W = 375, H = 812, DPR = 1, F = 450, HOR = 276, CAMH = 5, U = 1;
@@ -27,8 +27,10 @@ let M = null, TH = {}, seed = 1, N = 0, total = 1;
 let curve = null, elev = null, head = null, stepF = null;
 let props = [], cairns = [], AP = [];
 let SPR = {}, signSpr = {}, VG = {}, hazeCss = '#dfe6e2', hazeRgb = [223,230,226];
-let smallTab = [], treeTab = [], edgeTab = [];
+let smallTab = [], treeTab = [], edgeTab = [], hedgeTab = [];
 const EDGE_J = 40, EDGE_P = 0.55;   // 路緣草叢：幾段以內畫、每邊每段出現的機率
+const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1;   // 植物牆：幾段以內畫、每段幾個位置、每個位置出現的機率（再乘上 theme.wall）
+const RAIL_J = 64, RAIL_H = 1.0, RAIL_D = RW + 0.12;   // 欄杆：幾段以內畫、高度、離路中心多遠（公尺）
 let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
 let LUT = [], lutKey = -1, snowAmt = 0;
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false;
@@ -401,7 +403,6 @@ function buildSprites(){
   SPR.mycairn = artOr('cairn', 0.45, [sprite(0.6, 0.45, 80, function(g){ pCairn(g, false); })]);
   SPR.bench = artOr('bench', 0.9, [sprite(1.9, 0.9, 80, pBench)]);
   SPR.view = artOr('deck_view', 1.75, [sprite(3.7, 1.75, 70, pView)]);
-  SPR.rail = artOr('railing', 1.0, []);        // 只有美術圖：路旁的木欄杆
   SPR.fall = artOr('waterfall', 4.2, []);      // 只有美術圖：路旁小瀑布
   SPR.treasure = artOr('treasure_box', 0.6, [sprite(0.7, 0.55, 80, pTreasure)]);
   SPR.summit = [artSummitSpr((M && M.name) || '山頂') || sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
@@ -409,6 +410,9 @@ function buildSprites(){
   const al = th.alpine;
   smallTab = mkTab([[SPR.rhodo, al ? 3 : 1.4], [SPR.rock, (al || th.rocks || th.trail === 'scree') ? 3 : 1], [SPR.bamboo, al ? 3 : 0.5], [SPR.fern, al ? 0.3 : 2.5], [SPR.grass, 3], [SPR.flower, 1.5], [SPR.silver, th.grass ? 3 : 0.3]]);
   edgeTab = mkTab([[SPR.grass, 3], [SPR.fern, al ? 0.6 : 2], [SPR.flower, 1]]);   // 蓋過路緣的矮草（不放灌木、石頭，才不會擋路）
+  // 路旁植物牆：森林是蕨類＋灌木＋箭竹擠成一道綠牆；高山是玉山箭竹＋杜鵑貼著步道
+  hedgeTab = mkTab(al ? [[SPR.bamboo, 5], [SPR.rhodo, 2], [SPR.rock, th.trail === 'scree' ? 1.5 : 0.6], [SPR.grass, 1], [SPR.silver, th.grass ? 1.5 : 0]]
+    : [[SPR.fern, 4], [SPR.bamboo, 1.6], [SPR.rhodo, 1.1], [SPR.silver, th.grass ? 2 : 0.4], [SPR.grass, 1], [SPR.rock, th.rocks ? 0.8 : 0.3]]);
   const paintedPine =!!ART.get('tree_pine') && !ART.get('tree_broad');   // 手繪松樹旁邊放太多卡通圓樹會很不搭
   a.push([SPR.conifer, al ? 3 : (paintedPine ? 3 : 1.6)], [SPR.broad, al ? 0.01 : (paintedPine ? 0.5 : 2.4)]);
   if (SPR.bigtree) a.push([SPR.bigtree, 0.5]);
@@ -445,16 +449,21 @@ function buildCurves(m){
   for (i = e; i <= N; i++) curve[i] *= Math.max(0, 1 - (i - e) / 20);   // 山頂之後拉直
   head[0] = 0; for (i = 0; i <= N; i++) head[i + 1] = head[i] + curve[i] / SEG;
 }
+// 畫面上的坡度（只影響畫面，不影響海拔數字）：真實平均坡度只有 1～15%，照實畫看起來像平路
+// 所以整體坡度乘上 CLIMB，再穿插一長段一長段的陡階梯（STAIR_SL），從背後看才會一階一階往上疊到天空
+const CLIMB = 1.7;
+const STAIR_SL = [0.34, 0.6];   // 連續階梯段的坡度範圍（真實石階大約 0.5～0.7）
+const STAIR_RUN = { stairs:0.36, wood:0.56, dirt:0.62, scree:0.66 };   // 長段落雜訊超過這個值就是連續階梯（越小＝階梯越多）
 function buildElev(m){
-  const tr = TH.trail, base = clamp(((m.alt || 0) - (m.startAlt || 0)) / total, 0.05, 0.3) * 1.25, e = Math.floor(total / SEG);
-  elev[0] = 0;
+  const tr = TH.trail || 'dirt', base = clamp(((m.alt || 0) - (m.startAlt || 0)) / total, 0.05, 0.3) * 1.25 * CLIMB, e = Math.floor(total / SEG);
+  elev[0] = 0; let sl = base * 0.5;
   for (let i = 0; i <= N; i++) {
-    let sl = clamp(base * (0.25 + 1.5 * vn(i * 0.035, 7)) + 0.05 * (vn(i * 0.21, 8) - 0.3), 0.015, 0.42);
-    if (i >= e) sl *= Math.max(0, 1 - (i - e) / 12);
+    const stairy = vn(i * 0.028, 11) > STAIR_RUN[tr];          // 約 30～90 公尺一段的連續階梯
+    let tg = stairy ? lerp(STAIR_SL[0], STAIR_SL[1], vn(i * 0.05, 12)) : clamp(base * (0.3 + 1.4 * vn(i * 0.035, 7)) + 0.05 * (vn(i * 0.21, 8) - 0.3), 0.04, 0.4);
+    if (i >= e) tg *= Math.max(0, 1 - (i - e) / 12);
+    sl += (tg - sl) * 0.3;                                       // 坡度慢慢變，階梯段的起訖才不會折成一個尖角
     elev[i + 1] = elev[i] + sl * SEG;
-    // 階梯只出現在石階型步道，或土路／碎石路上偶爾一小段很陡的地方；其餘都是原始土坡
-    const patch = vn(i * 0.06, 11) > 0.62;
-    stepF[i] = ((tr === 'stairs' && sl > 0.05) || (tr === 'wood' && sl > 0.1) || (sl > 0.12 && patch) || sl > 0.2) ? 1 : 0;
+    stepF[i] = ((stairy && sl > 0.16) || sl > 0.3) ? 1 : 0;      // 很陡的土坡也做成階梯（真實步道陡處都有木頭或石頭階梯）
   }
 }
 function buildProps(){
@@ -471,8 +480,7 @@ function buildProps(){
   for (m = 420 + r() * 250; m < lim; m += 700 + r() * 300) put('view', m, r() < 0.5 ? -1 : 1);
   for (m = 260 + r() * 400; m < lim; m += 600 + r() * 600) put('treasure', m, r() < 0.5 ? -1 : 1);
   for (m = 500; m < lim; m += 500) { o = put('sign', m, 1); if (o) { const left = total - m; o.text = left >= 1000 ? '山頂 ' + (left / 1000).toFixed(1) + 'K' : '山頂 ' + Math.round(left / 10) * 10 + 'm'; } }
-  // 只有美術圖才有的景物，放在最後（不影響上面固定道具的位置）：欄杆（木棧道、石階）、小瀑布（中低海拔）
-  if (ART.get('railing') && (TH.trail === 'wood' || TH.trail === 'stairs')) for (m = 70 + r() * 60; m < lim; m += 120 + r() * 90) put('rail', m, r() < 0.5 ? -1 : 1);
+  // 只有美術圖才有的景物，放在最後（不影響上面固定道具的位置）：小瀑布（中低海拔）。欄杆改成沿路連續畫（railOn）
   if (ART.get('waterfall') && !TH.alpine) for (m = 600 + r() * 400; m < lim; m += 900 + r() * 600) put('fall', m, r() < 0.5 ? -1 : 1);
   props.push({ type:'summit', m:total + 3, side:1, text:'' });
   mergeProps();
@@ -523,7 +531,8 @@ function buildLUT(sn){
     (tr === 'dirt' || tr === 'scree') ? rgb('#8f6644') : mix(road, INK, 0.34),                     // 5 階梯立面
     mix(mid, '#22382f', 0.45),                                                                   // 6 稜線邊坡
     mix(tr === 'scree' ? '#968b80' : tr === 'stairs' ? '#86725c' : '#8a6446', '#eef2f6', sn * 0.6), // 7 路肩土坎的切面
-    mix('#c8c0b2', '#eef2f6', sn * 0.5)                                                          // 8 路上的石頭
+    mix('#c8c0b2', '#eef2f6', sn * 0.5),                                                         // 8 路上的石頭
+    mix('#b58658', '#eef2f6', sn * 0.4), mix('#7a5238', '#c8d2de', sn * 0.4)                       // 9,10 欄杆木頭（受光／背光）
   ];
   LUT.length = 0;
   for (let k = 0; k < base.length; k++) for (let lv = 0; lv < 3; lv++) {
@@ -1127,7 +1136,13 @@ function quad(x1, y1, x2, y2, x3, y3, x4, y4){ ctx.beginPath(); ctx.moveTo(x1, y
 function gwAt(dz){ return GW * (1 - 0.6 * clamp((dz - 40) / 120, 0, 1)); }   // 稜線越遠越窄，兩側露出山谷與雲海
 // 兩側地形（每座山固定）：路邊一圈微微高起的土肩，讓步道像踩出來的凹槽；離路越遠起伏越大
 // 振幅負的＝往下掉的山坡、正的＝靠著山壁；高山稜線大多往兩邊掉
-function terrAmp(i, side){ const v = vn(i * 0.016 + (side > 0 ? 71.3 : 13.7), 29); return TH.alpine ? clamp((v - 0.66) * 16, -9, 2.5) : clamp((v - 0.45) * 13, -7, 4.5); }
+// 森林步道（wallAt 高）兩邊大多是往上長的山壁，步道像走在一條凹下去的綠色走廊裡；高山稜線照舊往兩邊掉
+function terrAmp(i, side){
+  const v = vn(i * 0.016 + (side > 0 ? 71.3 : 13.7), 29), a = TH.alpine ? clamp((v - 0.66) * 16, -9, 2.5) : clamp((v - 0.45) * 13, -7, 4.5), w = wallAt(i);
+  return w > 0.6 ? lerp(a, 1.2 + 4 * v, (w - 0.6) / 0.4) : a;
+}
+// 這一段路兩側被植物包住的程度：theme.wall = [登山口, 山頂]，沿路線性變化
+function wallAt(i){ const wl = TH.wall || (TH.alpine ? [0.5, 0.3] : [1, 1]); return lerp(wl[0], wl[1], clamp(i * SEG / total, 0, 1)); }
 // 路肩土坎：步道是踩出來的凹槽，兩邊有一道幾乎垂直的土坎（高度沿路慢慢變）。木棧道是鋪在地上的，只留一點點邊
 const BANKW = 0.08;
 const STEP_H = 0.28;      // 一階最高幾公尺（原本 0.2；遠處橫木太密像百葉窗，間距拉開約 1.4 倍）
@@ -1195,6 +1210,30 @@ function root(i, j, fade){
   ctx.beginPath(); ctx.moveTo(x0, gy - 0.012 * gs); ctx.quadraticCurveTo((x0 + x1) / 2, gy - bump - 0.012 * gs, x1, gy + bump * 0.3 - 0.012 * gs);
   ctx.strokeStyle = 'rgba(232,200,150,0.55)'; ctx.lineWidth = Math.max(0.5, 0.014 * gs); ctx.stroke();
   ctx.globalAlpha = fade;
+}
+// 連續欄杆：木棧道整條都有、石階步道在階梯段才有，兩邊都架。每段一根柱子，柱頂之間連扶手＋中間一根橫木，跟著坡度往上斜
+function railOn(i){ return TH.trail === 'wood' || (TH.trail === 'stairs' && (sAt(i) === 1 || sAt(i + 1) === 1)); }
+function drawRail(i, j, fi){
+  const lit = LUT[28 * FOGN + fi], dk = LUT[31 * FOGN + fi], ink = j < 30;
+  for (let side = -1; side <= 1; side += 2) {
+    proj(j + 1, 0, false); const xb = gx + side * RAIL_D * gs, yb = gy - terrH(i + 1, side, RAIL_D) * gs, sb = gs;
+    proj(j, 0, false); const xa = gx + side * RAIL_D * gs, ya = gy - terrH(i, side, RAIL_D) * gs, sa = gs;
+    if (side < 0 ? Math.max(xa, xb) < -4 : Math.min(xa, xb) > W + 4) continue;
+    const ta = Math.max(1, 0.07 * sa), tb = Math.max(0.8, 0.07 * sb);
+    for (let q = 0; q < 2; q++) {               // 扶手（亮）＋中間橫木（暗）
+      const hk = q ? RAIL_H * 0.5 : RAIL_H, ha = ya - hk * sa, hb = yb - hk * sb;
+      ctx.fillStyle = q ? dk : lit; quad(xa, ha - ta, xb, hb - tb, xb, hb + tb, xa, ha + ta);
+      if (ink) { ctx.strokeStyle = INK; ctx.lineWidth = clamp(sa * 0.012, 0.5, 1.6); ctx.beginPath(); ctx.moveTo(xa, ha + ta); ctx.lineTo(xb, hb + tb); ctx.stroke(); }
+    }
+    if (!railOn(i + 1)) railPost(xb, yb, sb, lit, dk, ink);                 // 欄杆終點
+    if (!railOn(i - 1) || (i & 1) === 0) railPost(xa, ya, sa, lit, dk, ink); // 每兩段一根；欄杆起點一定有
+  }
+}
+function railPost(x, y, s, lit, dk, ink){
+  const pw = Math.max(1, 0.09 * s), top = y - (RAIL_H + 0.06) * s;
+  ctx.fillStyle = dk; ctx.fillRect(x - pw, top, pw * 2, y - top);
+  ctx.fillStyle = lit; ctx.fillRect(x - pw * 0.1, top, pw * 1.1, y - top);   // 光從右上：柱子朝右那半邊受光
+  if (ink) { ctx.strokeStyle = INK; ctx.lineWidth = clamp(s * 0.012, 0.5, 1.6); ctx.strokeRect(x - pw, top, pw * 2, y - top); }
 }
 // 路緣的落葉：堆在路邊內側（被踩過的地方掃到兩邊），讓路面和草地的交界不是一條乾淨的線
 function edgeLeaves(i, j, stp){
@@ -1295,7 +1334,7 @@ function drawWorld(b, t){
       const w1 = RW * s1, w2 = RW * s2, e1 = w1 * 1.07 + 0.6, e2 = w2 * 1.07 + 0.6, rk = 2 + (i & 1), stp = sAt(i) === 1 && j < 70;
       if (stp) {
         // 一段路切成好幾階（每階最高 STEP_H），由遠到近畫：上一階的立面 → 這一階的踏面
-        const rise = pW[j + 1] - pW[j], n = clamp(Math.ceil(rise / STEP_H), 1, 4);
+        const rise = pW[j + 1] - pW[j], n = clamp(Math.ceil(rise / STEP_H), 1, Math.min(4, Math.max(1, Math.floor(rise * s2 / 4))));   // 遠處每階立面不到 4 像素就合併，省效能也不會糊成百葉窗
         const ST = snowAmt > 0.5 ? RT : (TH.trail === 'scree' || TH.trail === 'stairs' ? RT : (TEX.steps || RT));   // 石階、碎石用路面貼圖；土路、木棧道用木頭階梯
         const at = f => { const dz = pZ[j] + f * (pZ[j + 1] - pZ[j]), s = F / dz; return [W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * s, s]; };
         for (let q = n - 1; q >= 0; q--) {
@@ -1371,17 +1410,17 @@ function drawWorld(b, t){
           ctx.fillStyle = 'rgba(225,238,255,0.3)'; ctx.beginPath(); ctx.ellipse(gx + (Hh(i, 41) - 0.5) * RW * gs, gy, pr, pr * 0.5 * Math.min(1, CAMH / pZ[j]), 0, 0, TAU); ctx.fill();
         }
       }
-      if (j < TURF_J && TURF.length && snowAmt < 0.9) drawTurf(i, j, y1, y2, s1, fq, fade, DS, gw1);   // 畫在路面之後：路邊第一排草會垂到土坎上
+      if (j < TURF_J && TURF.length && snowAmt < 0.9) drawTurf(i, j, y1, y2, s1, fq, fade, DS, Math.min(gw1, RW + lerp(30, 7, wallAt(i))));   // 森林步道外側被植物牆擋住，草叢只蓋到路邊幾公尺（省效能）   // 畫在路面之後：路邊第一排草會垂到土坎上
     }
-    // 路旁植物：每段 4 個固定亂數位置（由遠到近）
-    const treeP = al ? lerp(0.5, 0.06, clamp(z0 / total, 0, 1)) : treeBase;
+    // 路旁植物：每段 4 個固定亂數位置（由遠到近）；森林步道的樹離路比較近、比較密，兩邊像一道樹牆
+    const wl = wallAt(i), treeP = al ? lerp(0.5, 0.06, clamp(z0 / total, 0, 1)) : lerp(treeBase, 0.8, wl), spread = 26 * (1 - 0.6 * wl);
     for (k = 0; k < 4; k++) {
       if (k === 3 && j > 60) break;
       if (Hh(i, k * 8 + 1) > (k === 3 ? 0.75 : 0.62)) continue;
       const side = Hh(i, k * 8 + 2) < 0.5 ? -1 : 1, u = Hh(i, k * 8 + 3), f = (3 - k + Hh(i, k * 8 + 4)) / 4;
       let xo, arr;
       if (k === 3) { xo = RW + 0.3 + u * 2.2; arr = pick(smallTab, Hh(i, k * 8 + 6)); }
-      else { xo = RW + 0.5 + u * u * 26; arr = (xo > RW + 2.8 && Hh(i, k * 8 + 5) < treeP) ? pick(treeTab, Hh(i, k * 8 + 6)) : pick(smallTab, Hh(i, k * 8 + 6)); }
+      else { xo = RW + 0.5 + u * u * spread; arr = (xo > RW + 2.8 - wl && Hh(i, k * 8 + 5) < treeP) ? pick(treeTab, Hh(i, k * 8 + 6)) : pick(smallTab, Hh(i, k * 8 + 6)); }
       if (xo > gwAt(pZ[j]) - 0.6) continue;
       if (snowTrees && arr === SPR.conifer) arr = SPR.coniferS;
       const sp = arr[(Hh(i, k * 8 + 7) * arr.length) | 0];
@@ -1389,6 +1428,21 @@ function drawWorld(b, t){
       proj(j, f, false);
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * (0.8 + 0.45 * Hh(i, k * 8 + 8)), fq, j < 64);   // 種在真正的地面高度
     }
+    // 植物牆：貼著路邊 0.3～4 公尺擠滿蕨類、灌木、箭竹（越包越密），森林步道再夾幾棵貼著路的樹幹，像走在綠色隧道裡
+    if (j < HEDGE_J && j > 0) for (k = HEDGE_N - 1; k >= 0; k--) {
+      const h0 = 200 + k * 9;
+      if (Hh(i, h0) > wl * HEDGE_P) continue;
+      const side = Hh(i, h0 + 1) < 0.5 ? -1 : 1, u = Hh(i, h0 + 2), f = (k + Hh(i, h0 + 3)) / HEDGE_N;
+      const tree = !al && j > jhG + 2 && u > 0.5 && Hh(i, h0 + 4) < 0.45 * wl;
+      const xo = tree ? RW + 1.1 + u * 2.6 : RW + 0.35 + u * u * 3.6, arr = tree ? pick(treeTab, Hh(i, h0 + 5)) : pick(hedgeTab, Hh(i, h0 + 5));
+      const sp = arr[(Hh(i, h0 + 6) * arr.length) | 0], sc = tree ? 0.85 + 0.4 * Hh(i, h0 + 7) : (al ? 0.85 : 1.05) + 0.6 * Hh(i, h0 + 7);
+      const front = j < jhG || (j === jhG && f <= fhG);
+      if (front && xo - sp.w * sc * 0.5 < RW + 0.3) continue;   // 登山客前面（離鏡頭更近）的植物不能伸進路面，才不會擋到人
+      if (!heroDone && front) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+      proj(j, f, false);
+      drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * sc, fq, j < 50);
+    }
+    if (j < RAIL_J && railOn(i)) drawRail(i, j, fi);
     // 路緣的草叢／蕨類：故意往路面內側蓋過路緣 15～25% 的寬度，路邊才不會是一條筆直的線
     if (j < EDGE_J) for (let side = -1; side <= 1; side += 2) {
       const h0 = side < 0 ? 120 : 130;

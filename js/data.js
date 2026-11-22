@@ -2,37 +2,38 @@
 window.SX = window.SX || {};
 
 // 每座山：經緯度（畫地圖用）、海拔、遊戲距離（公尺）、難度（飯糰數）、外觀主題
+// theme.wall：[登山口, 山頂] 步道兩側被植物包住的程度（1＝森林綠色隧道、0.3＝高山稜線只剩矮箭竹）
 SX.MOUNTAINS = [
   { id:'xiangshan', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
     feat:'城市高樓、步道石階、山頂六顆大石頭', end:'山腰福德小祠', temple:true,
-    theme:{ sky:['#9fd3ee','#fbe7c6'], far:'#8fb3a8', mid:'#6fa86a', near:'#86c06a', trail:'stairs', tower:true, rocks:true } },
+    theme:{ sky:['#9fd3ee','#fbe7c6'], far:'#8fb3a8', mid:'#6fa86a', near:'#86c06a', trail:'stairs', wall:[1,0.85], tower:true, rocks:true } },
   { id:'qixing', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:3500, diff:2,
     feat:'硫磺噴氣孔、整片芒草、火山口', end:'山頂三角點',
-    theme:{ sky:['#a9d6e8','#f6e9cf'], far:'#9aae95', mid:'#8aa86a', near:'#b5c46e', trail:'dirt', steam:true, grass:true } },
+    theme:{ sky:['#a9d6e8','#f6e9cf'], far:'#9aae95', mid:'#8aa86a', near:'#b5c46e', trail:'dirt', wall:[0.9,0.35], steam:true, grass:true } },
   { id:'guanyin', name:'觀音山', area:'新北', lon:121.42, lat:25.135, startAlt:120, alt:616, dist:2200, diff:2,
     feat:'淡水河口夕陽、長長石階', end:'硬漢嶺觀景台',
-    theme:{ sky:['#f3b98e','#fbe3c0'], far:'#9e9db8', mid:'#71a06a', near:'#8cbc6a', trail:'stairs', sunset:true } },
+    theme:{ sky:['#f3b98e','#fbe3c0'], far:'#9e9db8', mid:'#71a06a', near:'#8cbc6a', trail:'stairs', wall:[1,0.75], sunset:true } },
   { id:'matcha', name:'抹茶山', area:'宜蘭', lon:121.80, lat:24.84, startAlt:120, alt:720, dist:6000, diff:3,
     feat:'抹茶色草坡、雲霧繚繞、木棧道', end:'山頂草坡觀景處',
-    theme:{ sky:['#bfe0e6','#eef2df'], far:'#9fbfae', mid:'#7fb874', near:'#a8d46e', trail:'wood', fog:true, grass:true } },
+    theme:{ sky:['#bfe0e6','#eef2df'], far:'#9fbfae', mid:'#7fb874', near:'#a8d46e', trail:'wood', wall:[0.9,0.3], fog:true, grass:true } },
   { id:'alishan', name:'阿里山', area:'嘉義', lon:120.80, lat:23.51, startAlt:2150, alt:2489, dist:4000, diff:2,
     feat:'千年神木、小火車、日出雲海、櫻花', end:'祝山觀日平台',
-    theme:{ sky:['#b4d8ee','#fde8d4'], far:'#8aa7a5', mid:'#4f8a62', near:'#6fae68', trail:'wood', bigtree:true, sakura:true } },
+    theme:{ sky:['#b4d8ee','#fde8d4'], far:'#8aa7a5', mid:'#4f8a62', near:'#6fae68', trail:'wood', wall:[1,1], bigtree:true, sakura:true } },
   { id:'taiping', name:'太平山', area:'宜蘭', lon:121.53, lat:24.50, startAlt:1950, alt:2100, dist:3500, diff:2,
     feat:'翠峰湖、檜木林、蹦蹦車', end:'見晴懷古步道',
-    theme:{ sky:['#b5d4e0','#eef0e0'], far:'#8faaa3', mid:'#4b7f5d', near:'#6aa665', trail:'wood', fog:true, bigtree:true } },
+    theme:{ sky:['#b5d4e0','#eef0e0'], far:'#8faaa3', mid:'#4b7f5d', near:'#6aa665', trail:'wood', wall:[1,1], fog:true, bigtree:true } },
   { id:'hehuan', name:'合歡山', area:'南投', lon:121.27, lat:24.14, startAlt:3150, alt:3417, dist:3000, diff:3,
     feat:'高山杜鵑、滿天星空、冬天會下雪', end:'合歡主峰',
-    theme:{ sky:['#7fb6e6','#e6f0f7'], far:'#8f9fb8', mid:'#7e9f78', near:'#a9bf72', trail:'dirt', snow:true, alpine:true } },
+    theme:{ sky:['#7fb6e6','#e6f0f7'], far:'#8f9fb8', mid:'#7e9f78', near:'#a9bf72', trail:'dirt', wall:[0.5,0.35], snow:true, alpine:true } },
   { id:'jiaming', name:'嘉明湖', area:'台東', lon:121.02, lat:23.29, startAlt:2320, alt:3310, dist:13000, diff:4,
     feat:'天使的眼淚、高山草原、山羌出沒', end:'嘉明湖畔',
-    theme:{ sky:['#78b2e4','#e3f0f6'], far:'#8f9fbc', mid:'#86a56e', near:'#b6c56e', trail:'dirt', alpine:true, lake:true, grass:true } },
+    theme:{ sky:['#78b2e4','#e3f0f6'], far:'#8f9fbc', mid:'#86a56e', near:'#b6c56e', trail:'dirt', wall:[0.6,0.3], alpine:true, lake:true, grass:true } },
   { id:'xueshan', name:'雪山', area:'台中', lon:121.23, lat:24.38, startAlt:2140, alt:3886, dist:11000, diff:5,
     feat:'黑森林、雪山圈谷、冰河地形', end:'雪山主峰',
-    theme:{ sky:['#6faae0','#e4eef6'], far:'#8a96b6', mid:'#3f6e58', near:'#93b06a', trail:'dirt', snow:true, alpine:true } },
+    theme:{ sky:['#6faae0','#e4eef6'], far:'#8a96b6', mid:'#3f6e58', near:'#93b06a', trail:'dirt', wall:[0.95,0.3], snow:true, alpine:true } },
   { id:'yushan', name:'玉山', area:'嘉義・南投', lon:120.957, lat:23.47, startAlt:2610, alt:3952, dist:11000, diff:5,
     feat:'排雲山莊、碎石坡、主峰疊石', end:'玉山主峰',
-    theme:{ sky:['#5f9edc','#e2ecf5'], far:'#8790b2', mid:'#6f8f70', near:'#a7b07a', trail:'scree', snow:true, alpine:true } },
+    theme:{ sky:['#5f9edc','#e2ecf5'], far:'#8790b2', mid:'#6f8f70', near:'#a7b07a', trail:'scree', wall:[0.6,0.3], snow:true, alpine:true } },
 ];
 SX.M = {}; SX.MOUNTAINS.forEach(m => SX.M[m.id] = m);
 
