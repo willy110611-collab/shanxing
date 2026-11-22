@@ -300,7 +300,10 @@
     $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
     if (g) $('#rcBack').onclick = e => { e.stopPropagation(); A.pop(); showGroup(g.id); };
     // 下山要按兩次（第一次換成確認字樣），避免誤按
-    const dn = $('#rcDown'); if (dn) dn.onclick = e => { e.stopPropagation(); A.pop(); if (!dn.dataset.arm) { dn.dataset.arm = 1; dn.textContent = '再按一次確定下山（進度歸零）'; return; } goDown(tr || id); toast('下山了，下次從登山口重新出發'); showRoute(id); };
+    const dn = $('#rcDown'); if (dn) dn.onclick = e => { e.stopPropagation(); A.pop(); if (!dn.dataset.arm) { dn.dataset.arm = 1; dn.textContent = '再按一次確定下山（進度歸零）'; return; } goDown(tr || id); hideRoute();
+      // 下山插圖卡（scene_descend，還沒畫之前只有文字）
+      modal(`${SX.art.img('scene_descend', '', 'artImg summitArt')}<h3>下山了</h3><p class="summitBig">今天先走到這裡。山一直都在，下次從登山口再出發。</p><p class="summitBig">路上收集的寶物和照片，都好好收在背包和相簿裡。</p><div class="mBtns"><button class="cbtn go" id="dnOk">好</button></div>`);
+      $('#dnOk').onclick = () => { closeModal(); selId = id; showRoute(id); }; };
     if (busy) $('#rcBackTo').onclick = () => { A.unlock(); A.chime(); startClimb(tr); };
     else if (ok) {
       $('#rcPet').onclick = () => openPets(id);

@@ -441,3 +441,9 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `t_cirque_card` | 圈谷冰河遺跡圖鑑卡 | a field-guide card illustrating a glacial cirque bowl |
 | `t_landslide_sketch` | 向陽大崩壁素描卡 | a charcoal sketch of a layered eroded cliff face |
 | `t_sancha_rubbing` | 三叉山一等三角點拓印 | a charcoal rubbing on paper of a first-class survey marker stone |
+
+### 放進 `07.奇遇`：下山插圖（16:9，不用去背，按「下山」時顯示）
+
+| 檔名 | 場景 |
+|---|---|
+| `scene_descend` | The hiker (主角設定) and the shiba seen from behind, walking down old stone steps toward a forest trailhead in warm late-afternoon light, the mountain glowing gold behind them, peaceful and a little wistful |
