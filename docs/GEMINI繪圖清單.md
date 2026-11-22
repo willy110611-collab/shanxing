@@ -492,3 +492,11 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `pet_bear_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The same small cute Formosan black bear cub as pet_bear_walk, seen from behind wearing a tiny yellow raincoat, 4-frame walking cycle in one row. |
 | `pet_leopardcat_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The same leopard cat as pet_leopardcat_walk, seen from behind wearing a tiny yellow raincoat, 4-frame walking cycle in one row. |
 | `pet_magpie_rain_walk` | `05.寵物` | 16:9 | 洋紅底。The same Taiwan blue magpie as pet_magpie_walk, seen from behind hopping, wearing a tiny yellow rain cape, 4-frame hopping cycle in one row. |
+
+## 第 20 批：兩座山屋、廣場背景重畫（拿掉像鳥居的木門）
+
+| 檔名 | 放進 | 比例 | 內容 |
+|---|---|---|---|
+| `hut_369` | `02.素材` | 16:9 | 洋紅底。A long single-storey Taiwan high-mountain lodge in the style of Xueshan 369 Lodge: a low wooden building with a **bright yellow corrugated metal roof**, a row of small windows, a few steps up to the door, set on a grassy slope, 3/4 view, no text on signs. |
+| `hut_jiaming` | `02.素材` | 16:9 | 洋紅底。A small simple one-storey Taiwan alpine refuge hut like the Jiaming Lake shelter: a low grey-green metal-and-wood cabin with a shallow roof, one door and two small windows, a few rocks around it, 3/4 view, no text on signs. |
+| `plaza_bg` | `08.登山口廣場` | 9:16 | 不用去背（滿版）。Same as the current plaza background, but the gate where the trail enters the forest must be a **simple rustic Taiwanese trailhead archway made of two rough log posts and one log crossbeam with a blank wooden sign board**, NOT a Japanese torii gate (no curved top beam, no double crossbeam, no red or black shrine style). |
