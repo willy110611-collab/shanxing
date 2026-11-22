@@ -31,12 +31,20 @@ let SPR = {}, signSpr = {}, VG = {}, hazeCss = '#dfe6e2', hazeRgb = [223,230,226
 let smallTab = [], treeTab = [], edgeTab = [], hedgeTab = [];
 const EDGE_J = 40, EDGE_P = 0.55;   // 路緣草叢：幾段以內畫、每邊每段出現的機率
 const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1;   // 植物牆：幾段以內畫、每段幾個位置、每個位置出現的機率（再乘上 theme.wall）
-const RAIL_J = 64, RAIL_H = 1.0, RAIL_D = RW + 0.12;   // 欄杆：幾段以內畫、高度、離路中心多遠（公尺）
+// 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
+// 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
+const SCALE = {
+  hero:1.76, heroSit:1.0, heroSleep:1.0, heroSummit:1.96,
+  bench:0.96, benchSeat:0.45, rail:1.1, sign:1.2, summit:1.3, rock:1.1, cairn:0.95, mycairn:0.45, note:1.4, treasure:0.6, view:1.75, fall:4.2,
+  pine:8.2, broad:6.4, bigtree:12.5, sakura:5.6, wishtree:4.4,
+  rhodo:1.5, bamboo:1.3, fern:0.9, grass:0.55, flower:0.5, silver:1.9
+};
+const RAIL_J = 64, RAIL_H = SCALE.rail, RAIL_D = RW + 0.12;   // 欄杆：幾段以內畫、高度、離路中心多遠（公尺）
 let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
 let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積雪多少；snowFall：正在下的雪有多密（兩個都會慢慢變化）
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
 const cSkyT = [0,0,0], cSkyB = [0,0,0], cGrade = [255,255,255], cSun = [0.8,0.12], cSunCol = [255,246,216];
-let SHADOW = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
+let SHADOW = null, CONTACT = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
 const SHOW_FG = false;   // 畫面上下兩端的前景花草（frame_top／frame_bottom）：玩家意見先拿掉，想恢復改成 true
 const WARM_A = 0.5;     // 午後暖光濾鏡強度（soft-light，再乘上太陽可見度）
 const RIM_A = 0.75;     // 前景框（杜鵑、蕨葉）輪廓光強度
@@ -44,9 +52,10 @@ let FGRIM = {};         // 前景框輪廓光貼圖快取（依尺寸）
 // 投影暫存（每幀重用）
 const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new Float32Array(DRAW + 3),
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
-let camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
+let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
+const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
 
@@ -448,9 +457,9 @@ function artSummitSpr(name){
   for (let i = 0; i < n; i++) g.fillText(name[i], c.width * B.x, c.height * B.y0 + fs * (i + 0.6));
   const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
   hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
-  return { c:c, h:h, w:1.7 * c.width / c.height, hm:1.7, ax:0.5 };
+  return { c:c, h:h, w:SCALE.summit * c.width / c.height, hm:SCALE.summit, ax:0.5 };
 }
-function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) || sprite(1.4, 1.5, 80, function(g){ pSign(g, txt); })); }
+function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) || sprite(SCALE.sign * 0.93, SCALE.sign, 80, function(g){ pSign(g, txt); })); }
 // 美術圖路標（sign_wood）：上面那塊箭頭木板寫字。木板位置是照這張圖量的（裁掉透明邊後的比例）
 const SIGN_BOARD = { x:0.54, y:0.175, w:0.62, h:0.075, rot:-0.07 };
 function artSignSpr(txt){
@@ -461,7 +470,7 @@ function artSignSpr(txt){
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(58,36,22,.88)'; g.fillText(txt, 0, 0); g.restore();
   const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
   hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
-  return { c:c, h:h, w:1.7 * c.width / c.height, hm:1.7, ax:0.5 };
+  return { c:c, h:h, w:SCALE.sign * c.width / c.height, hm:SCALE.sign, ax:0.5 };
 }
 function buildSprites(){
   const r = mkrng(seed ^ 0x7f4a7c15), th = TH, a = [];
@@ -471,28 +480,28 @@ function buildSprites(){
   for (const k in SPR) if (Array.isArray(SPR[k])) SPR[k].forEach(dropSpr);
   SPR = {}; signSpr = {};
   const tL = VG.treeL, tS = VG.treeS;
-  SPR.conifer = artOr('tree_pine', 6.8, [0, 1, 2].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, tL, tS); }, SINK_DEF); }));
+  SPR.conifer = artOr('tree_pine', SCALE.pine, [0, 1, 2].map(function(){ return sprite(SCALE.pine * 0.53, SCALE.pine, 44, function(g){ pConifer(g, r, tL, tS); }, SINK_DEF); }));
   buildTex(); buildTurf();
-  if (th.snow) SPR.coniferS = artOr('tree_pine_snow', 6.8, ART.get('tree_pine') ? null : [0, 1].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }, SINK_DEF); }));
-  SPR.broad = artOr('tree_broad', 4.8, [0, 1].map(function(){ return sprite(4.2, 4.8, 44, function(g){ pBroad(g, r); }, SINK_DEF); }));
-  if (th.bigtree) SPR.bigtree = artOr('tree_big', 10.6, [sprite(7.2, 10.6, 30, function(g){ pBigTree(g, r); }, SINK_DEF)]);
-  if (th.sakura) SPR.sakura = artOr('tree_sakura', 4.4, [sprite(4.6, 4.4, 44, function(g){ pSakura(g, r); }, SINK_DEF)]);
-  SPR.rhodo = artOr('bush_rhodo', 1.4, ['#f08fb0', '#f7b4c8', '#e9769e'].map(function(col){ return sprite(2.3, 1.4, 80, function(g){ pRhodo(g, r, col); }); }));
-  SPR.rock = artOr('rock_moss', 0.8, [0, 1, 2].map(function(){ return sprite(1.7, 0.8, 80, function(g){ pRock(g, r); }); }));
-  SPR.bamboo = artOr('bamboo_dwarf', 1.2, [0, 1].map(function(){ return sprite(1.5, 1.2, 80, function(g){ pTuft(g, r, 13, 1.05, 2.0, 0.03, mixs(VG.grassL, '#e4dc7a', 0.3), VG.grassS); }); }));
-  SPR.fern = artOr('fern', 0.9, [0, 1].map(function(){ return sprite(1.7, 0.9, 80, function(g){ pFern(g, r); }); }));
-  SPR.grass = artOr('grass_tuft', 0.55, [0, 1].map(function(){ return sprite(0.9, 0.55, 80, function(g){ pTuft(g, r, 7, 0.45, 1.7, 0.024, VG.grassL, VG.grassS); }); }));
-  SPR.flower = artOr('flowers', 0.5, ['#ffe07a', '#ffffff', '#b99ae6'].map(function(col){ return sprite(0.8, 0.5, 80, function(g){ pFlowers(g, r, col); }); }));
-  SPR.silver = artOr('grass_silver', 1.9, [0, 1].map(function(){ return sprite(1.9, 1.9, 80, function(g){ pSilver(g, r); }); }));
-  SPR.note = artOr('note_post', 1.5, [sprite(0.9, 1.5, 80, pNote)]);
-  SPR.btree = artOr('wish_tree', 3.7, [sprite(3.6, 3.7, 60, function(g){ pBTree(g, r); }, SINK_DEF)]);
-  SPR.cairn = artOr('cairn', 0.95, [sprite(1.0, 0.95, 80, function(g){ pCairn(g, true); })]);
-  SPR.mycairn = artOr('cairn', 0.45, [sprite(0.6, 0.45, 80, function(g){ pCairn(g, false); })]);
-  SPR.bench = artOr('bench', 0.9, [sprite(1.9, 0.9, 80, pBench)]);
-  SPR.view = artOr('deck_view', 1.75, [sprite(3.7, 1.75, 70, pView)]);
-  SPR.fall = artOr('waterfall', 4.2, []);      // 只有美術圖：路旁小瀑布
-  SPR.treasure = artOr('treasure_box', 0.6, [sprite(0.7, 0.55, 80, pTreasure)]);
-  SPR.summit = [artSummitSpr((M && M.name) || '山頂') || sprite(1.3, 1.7, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
+  if (th.snow) SPR.coniferS = artOr('tree_pine_snow', SCALE.pine, ART.get('tree_pine') ? null : [0, 1].map(function(){ return sprite(SCALE.pine * 0.53, SCALE.pine, 44, function(g){ pConifer(g, r, '#f4f8fb', mixs(tS, '#9fb4cc', 0.5)); }, SINK_DEF); }));
+  SPR.broad = artOr('tree_broad', SCALE.broad, [0, 1].map(function(){ return sprite(SCALE.broad * 0.875, SCALE.broad, 44, function(g){ pBroad(g, r); }, SINK_DEF); }));
+  if (th.bigtree) SPR.bigtree = artOr('tree_big', SCALE.bigtree, [sprite(SCALE.bigtree * 0.68, SCALE.bigtree, 26, function(g){ pBigTree(g, r); }, SINK_DEF)]);
+  if (th.sakura) SPR.sakura = artOr('tree_sakura', SCALE.sakura, [sprite(SCALE.sakura * 1.05, SCALE.sakura, 44, function(g){ pSakura(g, r); }, SINK_DEF)]);
+  SPR.rhodo = artOr('bush_rhodo', SCALE.rhodo, ['#f08fb0', '#f7b4c8', '#e9769e'].map(function(col){ return sprite(SCALE.rhodo * 1.64, SCALE.rhodo, 80, function(g){ pRhodo(g, r, col); }); }));
+  SPR.rock = artOr('rock_moss', SCALE.rock, [0, 1, 2].map(function(){ return sprite(SCALE.rock * 2.1, SCALE.rock, 80, function(g){ pRock(g, r); }); }));
+  SPR.bamboo = artOr('bamboo_dwarf', SCALE.bamboo, [0, 1].map(function(){ return sprite(SCALE.bamboo * 1.25, SCALE.bamboo, 80, function(g){ pTuft(g, r, 13, 1.05, 2.0, 0.03, mixs(VG.grassL, '#e4dc7a', 0.3), VG.grassS); }); }));
+  SPR.fern = artOr('fern', SCALE.fern, [0, 1].map(function(){ return sprite(SCALE.fern * 1.9, SCALE.fern, 80, function(g){ pFern(g, r); }); }));
+  SPR.grass = artOr('grass_tuft', SCALE.grass, [0, 1].map(function(){ return sprite(SCALE.grass * 1.64, SCALE.grass, 80, function(g){ pTuft(g, r, 7, 0.45, 1.7, 0.024, VG.grassL, VG.grassS); }); }));
+  SPR.flower = artOr('flowers', SCALE.flower, ['#ffe07a', '#ffffff', '#b99ae6'].map(function(col){ return sprite(SCALE.flower * 1.6, SCALE.flower, 80, function(g){ pFlowers(g, r, col); }); }));
+  SPR.silver = artOr('grass_silver', SCALE.silver, [0, 1].map(function(){ return sprite(SCALE.silver, SCALE.silver, 80, function(g){ pSilver(g, r); }); }));
+  SPR.note = artOr('note_post', SCALE.note, [sprite(SCALE.note * 0.6, SCALE.note, 80, pNote)]);
+  SPR.btree = artOr('wish_tree', SCALE.wishtree, [sprite(SCALE.wishtree * 0.97, SCALE.wishtree, 60, function(g){ pBTree(g, r); }, SINK_DEF)]);
+  SPR.cairn = artOr('cairn', SCALE.cairn, [sprite(SCALE.cairn * 1.05, SCALE.cairn, 80, function(g){ pCairn(g, true); })]);
+  SPR.mycairn = artOr('cairn', SCALE.mycairn, [sprite(SCALE.mycairn * 1.33, SCALE.mycairn, 80, function(g){ pCairn(g, false); })]);
+  SPR.bench = artOr('bench', SCALE.bench, [sprite(SCALE.bench * 2.1, SCALE.bench, 80, pBench)]);
+  SPR.view = artOr('deck_view', SCALE.view, [sprite(SCALE.view * 2.1, SCALE.view, 70, pView)]);
+  SPR.fall = artOr('waterfall', SCALE.fall, []);      // 只有美術圖：路旁小瀑布
+  SPR.treasure = artOr('treasure_box', SCALE.treasure, [sprite(SCALE.treasure * 1.17, SCALE.treasure, 80, pTreasure)]);
+  SPR.summit = [artSummitSpr((M && M.name) || '山頂') || sprite(SCALE.summit * 0.76, SCALE.summit, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
   const al = th.alpine;
   smallTab = mkTab([[SPR.rhodo, al ? 3 : 1.4], [SPR.rock, (al || th.rocks || th.trail === 'scree') ? 3 : 1], [SPR.bamboo, al ? 3 : 0.5], [SPR.fern, al ? 0.3 : 2.5], [SPR.grass, 3], [SPR.flower, 1.5], [SPR.silver, th.grass ? 3 : 0.3]]);
@@ -801,6 +810,10 @@ function buildStatic(){
   SHADOW = mk(64, 32); let g = SHADOW.getContext('2d'); g.scale(1, 0.5);
   let gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(25,35,20,0.45)'); gr.addColorStop(0.55, 'rgba(25,35,20,0.24)'); gr.addColorStop(1, 'rgba(25,35,20,0)');   // 接觸陰影：深褐綠（跟草地同色系，不會像灰色貼紙）
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  // 接觸陰影：貼著底部、比較小比較深的一片，石頭、灌木、長椅才像壓在地上（不是浮著的貼紙）
+  CONTACT = mk(64, 32); g = CONTACT.getContext('2d'); g.scale(1, 0.5);
+  gr = g.createRadialGradient(32, 32, 1, 32, 32, 32); gr.addColorStop(0, 'rgba(22,20,18,0.7)'); gr.addColorStop(0.45, 'rgba(22,20,18,0.42)'); gr.addColorStop(1, 'rgba(22,20,18,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   GLOW = mk(48, 48); g = GLOW.getContext('2d');
   gr = g.createRadialGradient(24, 24, 0, 24, 24, 24); gr.addColorStop(0, 'rgba(255,244,200,1)'); gr.addColorStop(0.25, 'rgba(255,222,140,0.7)'); gr.addColorStop(1, 'rgba(255,200,90,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 48, 48);
@@ -962,14 +975,18 @@ const LEAFC = ['#8fbf5a', '#d9a441', '#c9703f', '#6fa85a'];
 function updHero(s, t, dt, dist, sp){
   const mv = (sp > 0.05 && !s.rest && !s.sleep) ? 1 : 0;
   hero.mv += (mv - hero.mv) * Math.min(1, dt * 8);
-  hero.ph = dist / STRIDE * TAU;
+  // 步伐：平路一個循環（兩步）走 STRIDE 公尺；階梯上一步踩一階，步子變短（腳才不會在階梯上滑），身體往前傾一點
+  const si = Math.floor(dist / SEG), rise = sAt(si) === 1 ? eAt(si + 1) - eAt(si) : 0, nSt = rise > 0 ? clamp(Math.ceil(rise / STEP_H), 1, 4) : 0;
+  const stride = nSt ? clamp(2 * SEG / nSt, 0.85, STRIDE) : STRIDE, dd = dist - hero.pd;
+  hero.ph = (Math.abs(dd) < 3 && hero.pd >= 0) ? hero.ph + dd / stride * TAU : dist / STRIDE * TAU; hero.pd = dist;   // 一下子跳很遠（換山、補進度）就直接重算
+  hero.stair += ((nSt ? clamp(rise / SEG / 0.45, 0.4, 1) : 0) - hero.stair) * Math.min(1, dt * 3);
   // 背包：阻尼彈簧跟著步伐上下彈
   const tgt = -Math.abs(Math.sin(hero.ph)) * 3 * hero.mv;
   hero.pv += ((tgt - hero.py) * 140 - hero.pv * 14) * dt; hero.py += hero.pv * dt;
   // 鋼杯：單擺
   hero.mgv += (-hero.mga * 60 - hero.mgv * 3 + Math.cos(hero.ph) * 14 * hero.mv + Math.sin(t * 1.3) * 0.6) * dt;
   hero.mga = clamp(hero.mga + hero.mgv * dt, -0.9, 0.9);
-  hero.lean += ((s.boost && mv ? 1 : mv ? 0.45 : 0) - hero.lean) * Math.min(1, dt * 5);
+  hero.lean += ((s.boost && mv ? 1 : mv ? 0.45 + 0.4 * hero.stair : 0) - hero.lean) * Math.min(1, dt * 5);
   // 每次落腳揚起一點塵土
   const st = Math.floor(hero.ph / Math.PI + 0.5);
   if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain && !isSnow) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
@@ -1209,26 +1226,43 @@ function walkFrame(n){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * (n || 4
 // 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
 // fl：換衣服色調的濾鏡（隊友、廣場上的山友），自己是 undefined
 function heroArt(c, s, t, fl){
-  if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, 112, false, fl);
-  if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, 115, false, fl);
-  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, 196, false, fl);   // 站上山頂：舉起登山杖歡呼
+  if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, SCALE.heroSleep * 100, false, fl);
+  if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
+  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
   const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
   const walk = isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk');   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
-  return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176, false, fl);
+  return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
 }
 const tintFilter = k => 'hue-rotate(' + (150 + k % 3 * 60) + 'deg)';   // 美術圖版本：隊友換個衣服色調，跟自己分得出來
-function drawHero(s, t){
+// 登山客站的地面高度：階梯上踩在踏面上（不是斜坡中間）；走路時快到下一階才慢慢抬上去，坐下時就坐在那一階
+function heroGround(){
+  const j = jhG, f = fhG, rise = pW[j + 1] - pW[j], base = pW[j] + rise * f;
+  if (sAt(bG + j) !== 1 || !(rise > 0)) return base;
+  const n = clamp(Math.ceil(rise / STEP_H), 1, 4), x = f * n, k = Math.floor(x), e = x - k;
+  const up = curS && (curS.rest || curS.sleep) ? 0 : clamp((e - 0.62) / 0.38, 0, 1);
+  return pW[j] + rise * (k + up * up * (3 - 2 * up)) / n;
+}
+// 休息時坐的長椅：長椅在停下來的地方前面一點（遊戲走到長椅前 1 公尺停），找得到就坐在椅面上
+function restBench(s, dist){
+  if (!s.rest) return null;
+  for (let i = 0; i < AP.length; i++) { const o = AP[i]; if (o.type === 'bench' && o.m >= dist - 0.5 && o.m <= dist + 3) return o; }
+  return null;
+}
+let benchO = null;
+// bx、by、bs：坐在長椅上時，椅面中間的畫面位置和那裡的比例（每公尺幾像素）；沒給就站在路中間
+function drawHero(s, t, bx, by, bs){
   proj(jhG, fhG, false);
-  const X = gx, Y = gy, u = gs / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
-  hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? 110 : 168) * u;
+  const onB = bx != null, X = onB ? bx : gx, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
+  hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
   ctx.globalAlpha = 1;
-  drawPet(s, X + 68 * u, Y - 6 * u, u, t);
-  // 腳底影子：跨步時兩腳前後張開，影子前後拉長一點、左右縮一點；再疊一個貼著鞋底的小深影
+  drawPet(s, X + 68 * u, (onB ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t);
+  // 腳底影子：跨步時兩腳前後張開，影子前後拉長一點、左右縮一點；再疊一個貼著鞋底的小深影（坐在長椅上就只有椅面上一小片）
   const sd = sit ? 0 : Math.abs(Math.sin(hero.ph)) * hero.mv, sw = 86 * (1 - 0.06 * sd), sh = 34 * (1 + 0.3 * sd);
-  ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
-  if (!sit) ctx.drawImage(SHADOW, X - 26 * u, Y - 8 * u, 48 * u, 14 * u);
-  ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
+  if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
+  else ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
+  if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
+  ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
   if (!heroArt(ctx, s, t)) { if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
   ctx.restore();
 }
@@ -1416,6 +1450,7 @@ function drawProp(o, i, j, f, fq, t, fade){
   proj(j, f, false);
   const x = gx + o.side * PXO[o.type] * gs, y = gy - terrH(i, o.side, PXO[o.type]) * gs, dw = sp.w * gs, dh = sp.hm * gs;
   drawSpr(sp, x, y, gs, fq, 1, fade);
+  if (o === benchO && !heroDone) { drawHero(curS, t, x, y - SCALE.benchSeat * 1.12 * gs, gs); heroDone = true; ctx.globalAlpha = fade; }   // 坐在長椅上：畫在長椅前面（椅面在圖高 47%，椅面中間再往後一點）
   ctx.globalAlpha = fade * clamp((dh - 2) / 2.5, 0, 1);
   if (o.type === 'treasure' && ctx.globalAlpha > 0.01) sparkle(x, y - dh * 0.6, gs, t, o.m);
   ctx.globalAlpha = fade;
@@ -1433,7 +1468,7 @@ function drawWorld(b, t){
   for (j = DRAW - 1; j >= 0; j--) {
     // 整段地面都在畫面下緣以外：不畫地面，但路旁的樹、草叢照畫（高的樹根部在畫面外、樹冠還看得到），讓它們自己滑出畫面邊緣
     const y2 = pY[j + 1], below = y2 > H + 80;
-    if (!heroDone && j < jhG) { drawHero(s, t); heroDone = true; }
+    if (!heroDone && !benchO && j < jhG) { drawHero(s, t); heroDone = true; }
     const i = b + j, y1 = pY[j], s1 = pS[j], s2 = pS[j + 1], x1 = pX[j], x2 = pX[j + 1], z0 = i * SEG, zj = pZ[j] / SEG;   // zj：這段離鏡頭幾段（連續的，給淡入淡出用）
     const fx = clamp((pZ[j] - fogD0) / (fogD - fogD0), 0, 1), fq = fx * (2 - fx), fi = (fq * (FOGN - 1)) | 0;   // 空氣透視：中景就開始變淡（先快後慢），山坡才會融進遠山
     const fade = farA(j, DRAW - 1, 18);
@@ -1607,7 +1642,7 @@ function drawWorld(b, t){
       if (ea <= 0) continue;
       if (snowTrees && arr === SPR.conifer) arr = SPR.coniferS;
       const sp = arr[(Hh(i, k * 8 + 7) * arr.length) | 0];
-      if (!heroDone && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+      if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
       proj(j, f, false);
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * (0.8 + 0.45 * Hh(i, k * 8 + 8)), fq, farA(j, 64, 8), fade * pa * ea);   // 種在真正的地面高度；影子 64 段以外不畫（慢慢淡掉）
     }
@@ -1621,7 +1656,7 @@ function drawWorld(b, t){
       const xo = tree ? RW + 1.1 + u * 2.6 : RW + 0.35 + u * u * 3.6, arr = tree ? pick(treeTab, Hh(i, h0 + 5)) : pick(hedgeTab, Hh(i, h0 + 5));
       const sp = arr[(Hh(i, h0 + 6) * arr.length) | 0], sc = tree ? 0.85 + 0.4 * Hh(i, h0 + 7) : (al ? 0.85 : 1.05) + 0.6 * Hh(i, h0 + 7);
       const front = j < jhG || (j === jhG && f <= fhG);
-      if (!heroDone && front) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+      if (!heroDone && !benchO && front) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
       proj(j, f, false);
       // 伸進路面的植物走到登山客旁邊時慢慢變透明（從他身後 1 公尺到身前 0.2 公尺），才不會擋到人；以前是一走到他前面就整株消失
       const intr = clamp((RW + 0.3 - (xo - sp.w * sc * 0.5)) / 0.4, 0, 1), fa = 1 - intr * (1 - clamp((gz - HZ + 0.2) / 1.2, 0, 1));
@@ -1635,7 +1670,7 @@ function drawWorld(b, t){
       if (Hh(i, h0) > EDGE_P) continue;
       const arr = pick(edgeTab, Hh(i, h0 + 1)), sp = arr[(Hh(i, h0 + 2) * arr.length) | 0], m = 0.75 + 0.35 * Hh(i, h0 + 3), f = Hh(i, h0 + 4);
       const xo = RW + sp.w * m * (0.5 - (0.15 + 0.1 * Hh(i, h0 + 5)));
-      if (!heroDone && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+      if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
       proj(j, f, false);
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, Math.max(xo, RW + BANKW)) * gs, gs * m, fq, 1, eA);
     }
@@ -1764,12 +1799,16 @@ S.render = function(s){
   updPalette(wx, frac, dt); updHero(s, t, dt, dist, sp); stepMates(dt);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
-  const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b; offG = off;
+  const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b; offG = off; bG = b;
+  // 坐長椅休息：鏡頭慢慢往長椅那邊移一點，看得到人坐在椅子上；走起來再慢慢移回來
+  benchO = restBench(s, dist);
+  hero.pan += ((benchO ? benchO.side * PXO.bench * 0.7 : 0) - hero.pan) * Math.min(1, dt * 2);
+  const bob = RMOT && RMOT.matches ? 0 : hero.mv;   // 鏡頭跟著步伐極輕微上下晃（一步一次）；系統設定減少動態就不晃
   let j, x = 0, dx = -off * cAt(b);
   for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc; x += dx; dx += cAt(b + j); }
   const hj = HZ / SEG + off; jhG = Math.floor(hj); fhG = hj - jhG;
-  camX = lerp(pC[jhG], pC[jhG + 1], fhG) + Math.sin(hero.ph) * 0.018 * hero.mv;            // 隨步伐極輕微晃動
-  camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH + Math.sin(hero.ph * 2) * 0.014 * hero.mv;
+  camX = lerp(pC[jhG], pC[jhG + 1], fhG) + hero.pan + Math.sin(hero.ph) * 0.012 * bob;
+  camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH - Math.abs(Math.sin(hero.ph)) * 0.022 * bob;
   for (j = 0; j <= DRAW + 1; j++) {
     const dz = Math.max((j - off) * SEG, 1.2), sc = F / dz;
     pZ[j] = dz; pS[j] = sc; pX[j] = W / 2 + (pC[j] - camX) * sc; pY[j] = HOR - (pW[j] - camY) * sc;
