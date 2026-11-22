@@ -23,14 +23,49 @@ function despill(g, w, h){
   const im = g.getImageData(0, 0, w, h), d = im.data, mg = i => Math.min(d[i], d[i + 2]) - d[i + 1];
   // 把一個帶洋紅的像素：紅、藍往綠拉（去粉紅），並變得較透明
   const despix = (i, m) => { const k = Math.min(1, (m - 25) / 85), gg = d[i + 1]; d[i] -= (d[i] - gg) * k * 0.8; d[i + 2] -= (d[i + 2] - gg) * k * 0.8; d[i + 3] *= 1 - k * 0.7; };
-  for (let i = 0; i < d.length; i += 4) if (d[i + 3] && mg(i) > 110 && Math.abs(d[i] - d[i + 2]) < 90) d[i + 3] = 0;   // 幾乎是洋紅：直接透明
-  // 貼著透明處的邊緣像素，往內剝三圈
-  for (let pass = 0; pass < 3; pass++) {
-    const a0 = new Uint8Array(w * h); for (let p = 0; p < w * h; p++) a0[p] = d[p * 4 + 3];
-    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-      const p = y * w + x, i = p * 4; if (!a0[p] || (a0[p - 1] && a0[p + 1] && a0[p - w] && a0[p + w])) continue;
-      const m = mg(i); if (m > 25) despix(i, m);
-    }
+  // 幾乎是洋紅：直接透明。順便量這張圖的洋紅底實際是什麼顏色（Gemini 的洋紅常常偏一點），算出「洋紅滲進來時紅、藍各多幾分」
+  let vr = 0, vb = 0, vn = 0;
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] && mg(i) > 110 && Math.abs(d[i] - d[i + 2]) < 90) { vr += d[i] - d[i + 1]; vb += d[i + 2] - d[i + 1]; vn++; d[i + 3] = 0; }
+  const VR = vn > 50 ? vr / vn : 145, VB = vn > 50 ? vb / vn : 130;
+  // 邊緣帶：離透明處 1～EDGE 像素的地方（墨線、半透明的那圈都在這裡）。dist：0 透明、1～EDGE 第幾圈、EDGE+1 更裡面
+  const N = w * h, EDGE = 3, dist = new Uint8Array(N), T = 24;
+  for (let p = 0; p < N; p++) dist[p] = d[p * 4 + 3] > T ? EDGE + 1 : 0;
+  for (let k = 1; k <= EDGE; k++) for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const p = y * w + x; if (dist[p] !== EDGE + 1) continue;
+    if (dist[p - 1] === k - 1 || dist[p + 1] === k - 1 || dist[p - w] === k - 1 || dist[p + w] === k - 1) dist[p] = k;
+  }
+  // 細細的東西（登山杖、草葉、竹葉）：左右或上下 EDGE 像素內兩邊都是透明的。這種不往內剝（不然整根被吃掉），只把顏色洗回灰、綠
+  const clear = (x, y) => x < 0 || y < 0 || x >= w || y >= h || d[(y * w + x) * 4 + 3] <= T;
+  const thin = (x, y) => {
+    let l = 0, r = 0, u = 0, b = 0;
+    for (let k = 1; k <= EDGE; k++) { l = l || clear(x - k, y); r = r || clear(x + k, y); u = u || clear(x, y - k); b = b || clear(x, y + k); }
+    return (l && r) || (u && b);
+  };
+  // 圖裡面（不是邊緣）本來就有很多粉紅、紫色的（杜鵑、櫻花）：邊緣保守一點去，不然花瓣邊會被洗白
+  let pk = 0, inn = 0;
+  for (let p = 0; p < N; p++) if (dist[p] > EDGE) { inn++; const i = p * 4; if (Math.min(d[i], d[i + 2]) - d[i + 1] > 25 && d[i] - d[i + 1] > 40) pk++; }
+  const pinkArt = inn > 0 && pk / inn > 0.02;
+  // 邊緣帶去洋紅：洋紅底只會讓紅、藍變多，滲進來的量 a ＝ 紅、藍各自比綠多出來的部分 ÷ 洋紅底的（取小的那個），照比例扣掉
+  // 扣掉的亮度平均還一點回去（灰色登山杖不會變黑）。粉紅花的圖改用保守算法：紅、藍差很多的（粉紅花、紅衣服）是真的顏色，扣得少或不扣
+  // 最外圈洋紅很重的再變透明一點（往內剝 1～2 圈），細的東西不剝
+  // 沒什麼粉紅的圖（植物、登山客、建築）：圖裡面被洋紅染到的小葉子、縫隙也一起洗（這種圖裡帶洋紅的就是染到的）
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const p = y * w + x, dk = dist[p]; if (!dk || (dk > EDGE && pinkArt)) continue;
+    const i = p * 4, s = Math.min(d[i], d[i + 2]) - d[i + 1]; if (s <= 4) continue;
+    let sr, sb;
+    if (pinkArt) { const k = Math.max(0, Math.min(1, (60 - Math.abs(d[i] - d[i + 2])) / 35)); sr = sb = s * k; }
+    else { const a = Math.min(1, (d[i] - d[i + 1]) / VR, (d[i + 2] - d[i + 1]) / VB); sr = a * VR; sb = a * VB; }
+    const sk = (sr + sb) * 0.5; if (sk < 2) continue;
+    const back = sk * 0.25;
+    d[i] = d[i] - sr + back; d[i + 1] = d[i + 1] + back; d[i + 2] = d[i + 2] - sb + back;
+    if (dk <= 2 && dk && sk >(dk === 1 ? 14 : 30) && !thin(x, y)) d[i + 3] *= dk === 1 ? 0.35 : 0.7;
+  }
+  // 半透明的那圈：顏色換成旁邊不透明像素的平均（往內 2 像素找），疊在任何底色上都不會有一圈粉紅或灰白
+  for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+    const p = y * w + x, i = p * 4; if (!dist[p] || dist[p] > 2 || d[i + 3] >= 230) continue;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let v = -2; v <= 2; v++) for (let u = -2; u <= 2; u++) { const j = ((y + v) * w + x + u) * 4; if (d[j + 3] >= 230) { r += d[j]; g += d[j + 1]; b += d[j + 2]; n++; } }
+    if (n) { d[i] += (r / n - d[i]) * 0.65; d[i + 1] += (g / n - d[i + 1]) * 0.65; d[i + 2] += (b / n - d[i + 2]) * 0.65; }
   }
   // 紅藍差不多、明顯高於綠的「洋紅混色」：不管在不在邊緣都清（粉紅杜鵑紅遠大於藍，不會被動到）
   for (let i = 0; i < d.length; i += 4) if (d[i + 3] && Math.abs(d[i] - d[i + 2]) < 50) { const m = mg(i); if (m > 40) despix(i, m); }
