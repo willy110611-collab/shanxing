@@ -140,7 +140,8 @@ P.mount = function(el, o){
   ro = new ResizeObserver(resize); ro.observe(el); resize();
   last = performance.now(); raf = requestAnimationFrame(loop);
 };
-P.unmount = function(){ cancelAnimationFrame(raf); raf = 0; if (ro) ro.disconnect(); ro = null; if (cv) cv.remove(); cv = ctx = host = null; };
+// 離開廣場：畫布和背景圖馬上釋放（iPhone 畫布記憶體有上限，等自動回收太慢，進出大廳幾次就會卡）
+P.unmount = function(){ cancelAnimationFrame(raf); raf = 0; if (ro) ro.disconnect(); ro = null; if (cv) { cv.remove(); cv.width = cv.height = 0; } if (BG) BG.width = BG.height = 0; BG = null; cv = ctx = host = null; };
 P.redraw = function(){ if (cv) { W = 0; resize(); } };   // 美術圖晚到：地面範圍也要跟著圖重算
 if (SX.art) SX.art.onLoad(() => P.redraw());
 
