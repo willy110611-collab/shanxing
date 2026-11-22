@@ -2146,21 +2146,39 @@ S.nearby = function(){
   return best ? { type:best.o.type, m:best.o.m, x:best.cx, y:best.top } : null;
 };
 S.charPos = function(){ return { x:hero.sx, y:hero.top }; };
+// 拍立得的比例（寬 / 高）：要跟 css 的 .pol img aspect-ratio 一樣（check 會檢查）
+const PHOTO_AR = 36 / 26;
+// 構圖：lens 鏡頭焦距倍數（小於 1 是廣角，登山客變小、拍進更多風景）、zw 取景寬度（佔畫面寬的比例）、
+//       fx 登山客在照片左右的位置、fy 腳底在照片上下的位置（0 頂、1 底）
+const PHOTO_COMPS = [
+  { lens:0.55, zw:1, fx:0.5, fy:0.62 },    // 寬景：登山客小小的，多一點天空和遠山（登頂也用這張，山頂標誌拍得進來）
+  { lens:0.8, zw:0.8, fx:0.5, fy:0.88 },   // 中景：登山客在正中間
+  { lens:0.7, zw:0.75, fx:0.34, fy:0.86 },  // 登山客偏左，右邊留風景
+  { lens:0.7, zw:0.75, fx:0.66, fy:0.86 },  // 登山客偏右，左邊留風景
+];
 // 拍照：先用「這一刻的位置」重畫一格再取畫面（遊戲在背景補進度、或不在登山畫面時，畫布可能是空的 → 拍出全黑）
 S.snapshot = function(dist){
   if (!cv || !curS) return '';
+  const F0 = F;
   try {
-    S.render(Object.assign({}, curS, { dt:0, dist:dist != null ? dist : curS.dist, frac:(dist != null ? dist : curS.dist) / total }));
-    const sw = cv.width, sh = cv.height, ch = Math.min(sh, Math.round(sw * 4 / 3));
-    const bottom = Math.min(sh, Math.round((hero.sy + H * 0.07) * DPR)), top = clamp(bottom - ch, 0, sh - ch);
-    const ow = Math.min(600, sw), oh = Math.round(ow * ch / sw), c = mk(ow, oh), g = c.getContext('2d');
-    g.drawImage(cv, 0, top, sw, ch, 0, 0, ow, oh);
+    // 構圖依拍照的位置固定挑一種（同一個地方拍，構圖每次一樣）：寬景、中景、登山客偏左／偏右；登頂用寬景把山頂標誌拍進去
+    const d = dist != null ? dist : curS.dist, comp = d >= total - 1 ? PHOTO_COMPS[0] : PHOTO_COMPS[Math.abs(Math.round(d / 100) * 7919) % PHOTO_COMPS.length];
+    F = F0 * comp.lens;   // 只為這張照片換鏡頭，下面 finally 一定換回來，下一格畫面照舊
+    S.render(Object.assign({}, curS, { dt:0, dist:d, frac:d / total }));
+    // 照片比例跟相簿拍立得框（css .pol img 的 aspect-ratio）一樣，框裡才不會再被裁掉、只剩頭和背包
+    const sw = cv.width, sh = cv.height;
+    const fx = hero.sx * DPR, fy = hero.sy * DPR, hh = (hero.sy - hero.top) * DPR;   // 腳底位置、身高（畫布像素）
+    const need = hh * PHOTO_AR / (sw * (comp.fy - 0.08));                              // 整個人（頭頂留 8%）放得進去的最小寬度比例
+    const cw = Math.round(sw * clamp(Math.max(comp.zw, need), 0.4, 1)), ch = Math.min(sh, Math.round(cw / PHOTO_AR));
+    const left = clamp(Math.round(fx - comp.fx * cw), 0, sw - cw), top = clamp(Math.round(fy - comp.fy * ch), 0, sh - ch);
+    const ow = Math.min(600, cw), oh = Math.round(ow / PHOTO_AR), c = mk(ow, oh), g = c.getContext('2d');
+    g.drawImage(cv, left, top, cw, ch, 0, 0, ow, oh);
     // 檢查有沒有畫出東西改讀這張小照片，不讀登山畫面本身：一直從主畫布讀像素，瀏覽器可能把它改成較慢的繪製方式
     const px = g.getImageData(ow >> 1, oh >> 2, 1, 1).data;
     const url = px[3] === 0 ? '' : c.toDataURL('image/jpeg', 0.74);   // 還是沒畫出東西：不要存一張黑照片
     free(c);
     return url;
-  } catch (e) { return ''; }
+  } catch (e) { return ''; } finally { F = F0; }
 };
 S.SEG = SEG;
 })();

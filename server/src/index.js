@@ -76,7 +76,7 @@ export default {
     const due = (await env.DB.prepare('SELECT * FROM eta WHERE sent = 0 AND at <= ? LIMIT 200').bind(now()).all()).results;
     for (const e of due) {
       await env.DB.prepare('UPDATE eta SET sent = 1 WHERE player = ?').bind(e.player).run();
-      await notify(env, e.player, `快到${e.name}山頂了！`, '你的登山客只差最後幾步，回來一起見證登頂的那一刻吧。', 'summit');
+      await notify(env, e.player, `快到${e.name}山頂了！`, '只差最後幾步了，回來一起見證登頂吧。', 'summit');
     }
     await env.DB.prepare('DELETE FROM push_queue WHERE created < ?').bind(now() - 3 * 864e5).run();
   },
@@ -267,7 +267,7 @@ export default {
         if (!inv || inv.guest !== me.id) return E(env, req, 'not found', 404);
         const status = b.accept ? 'accepted' : 'declined';
         await env.DB.prepare('UPDATE invites SET status = ? WHERE id = ?').bind(status, m[1]).run();
-        if (b.accept) await notify(env, inv.host, `${me.name} 接受了你的邀請`, '一起出發吧！打開遊戲就能開始一起爬。', 'invite');
+        if (b.accept) await notify(env, inv.host, `${me.name} 接受了你的邀請`, '一起出發吧！打開遊戲就能一起爬。', 'invite');
         return J(env, req, { ok: true, status, mountain: inv.mountain });
       }
 

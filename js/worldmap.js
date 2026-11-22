@@ -30,7 +30,7 @@ const S = {
   T:null, dirty:true, running:false, raf:0, last:0, t:0, drawn:0, input:0,
   cb:null, bgCb:null, hits:[], pos:{}, hover:null, sel:null, anim:{}, tw:{},
   sprites:null, shadowSp:null, rays:null, tb1:null, tb2:null,
-  ripples:[], puffs:[], drift:[], ro:null, lastTap:{t:0,x:0,y:0},
+  ripples:[], puffs:[], drift:[], ro:null,
   bx:{x0:0, x1:WW, y0:0, y1:WH}      // 相機可以看的範圍（有立體地圖美術圖時＝圖的範圍）
 };
 
@@ -717,12 +717,9 @@ function bindInput(cv){
       S.dragging = false;
       const dtp = performance.now() - (down ? down.t : 0);
       if (e.type === 'pointerup' && down && moved < 8 && dtp < 450){
-        const id = hitAt(p.x, p.y), now = performance.now();
-        if (id){ S.lastTap.t = 0; select(id); }
-        else {
-          if (now - S.lastTap.t < 320 && Math.hypot(p.x - S.lastTap.x, p.y - S.lastTap.y) < 30){ reset(); S.lastTap.t = 0; S.sel = null; }
-          else { S.lastTap = { t:now, x:p.x, y:p.y }; S.sel = null; if (S.bgCb) S.bgCb(); }
-        }
+        const id = hitAt(p.x, p.y);
+        if (id) select(id);
+        else { S.sel = null; if (S.bgCb) S.bgCb(); }
       } else if (moved >= 8 && performance.now() - lastMv < 80){ S.tgt.x += vel.x * .28; S.tgt.y += vel.y * .28; clampCam(S.tgt); }
     } else if (ptrs.size === 1){ const r = [...ptrs.values()][0]; down = null; moved = 99; r.x = r.x; }
   };

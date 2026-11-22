@@ -341,16 +341,21 @@
   }
 
   /* ───────── 更新 ───────── */
+  // 體力、體溫條的警示等級（像手機電量）：50% 以上正常、未滿 50% 黃色、未滿 20% 紅色輕輕閃
+  const barLevel = v => v < 20 ? 'low' : v < 50 ? 'mid' : '';
   function update(s) {
     if (!H.root || !s) return;
     const E = H.els;
     if (s.name != null && E.name.textContent !== s.name) E.name.textContent = s.name;
     if (s.stam != null) {
-      const v = clamp(s.stam, 0, 100); E.stamI.style.width = v + '%'; E.stam.classList.toggle('low', v < 20);
+      const v = clamp(s.stam, 0, 100), lv = barLevel(v); E.stamI.style.width = v + '%';
+      E.stam.classList.toggle('mid', lv === 'mid'); E.stam.classList.toggle('low', lv === 'low');
     }
     if (s.temp != null) {
-      const v = clamp(s.temp, 0, 100); E.tempI.style.width = v + '%';
-      E.temp.classList.toggle('cold', v < 35); E.temp.classList.toggle('warm', v >= 35);
+      // 體溫自己的冷暖顏色照舊（未滿 35% 藍色）；黃色只在還沒變冷時出現，紅色蓋過一切
+      const v = clamp(s.temp, 0, 100), lv = barLevel(v), cold = v < 35; E.tempI.style.width = v + '%';
+      E.temp.classList.toggle('cold', cold); E.temp.classList.toggle('warm', !cold);
+      E.temp.classList.toggle('mid', lv === 'mid' && !cold); E.temp.classList.toggle('low', lv === 'low');
     }
     if (s.alt != null) setAlt(s.alt);
     if (s.distText != null && E.dd.textContent !== s.distText) E.dd.textContent = s.distText;

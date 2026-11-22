@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#f3e6cc">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/icon-180.png">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/shiba-180.png">
+<link rel="icon" href="icons/shiba-192.png">
 <title>山行小日子</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Iansui&family=LXGW+WenKai+TC&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=61">
+<link rel="stylesheet" href="css/style.css?v=64">
 </head>
 <body>
 <div id="app">
@@ -30,9 +30,10 @@
         <button class="cbtn sm" data-go="bag">背包</button>
         <button class="cbtn sm" data-go="album">相簿</button>
         <button class="cbtn sm" data-go="settings">設定</button>
+        <button class="cbtn sm qBtn" data-go="help" aria-label="新手教學">?</button>
       </div>
     </header>
-    <div class="mapHint">點山上的木牌看介紹，拖曳可以移動地圖</div>
+    <div class="mapHint">點木牌看介紹，拖曳移動地圖</div>
     <div id="mapWrap"></div>
     <div id="routeCard" class="sheet infoCard"></div>
   </section>
@@ -43,7 +44,7 @@
     <div class="hud" id="hudRoot"></div>
     <div id="bubble" class="bubble"></div>
     <button id="propTag" class="tag" style="display:none"></button>
-    <div id="tapHint" class="tapHint">長按畫面可以走快一點</div>
+    <div id="tapHint" class="tapHint">長按畫面走快一點</div>
     <div id="gpsTag" class="gpsTag"></div>
     <button id="hudTog" class="hudTog" aria-label="收起畫面資訊"></button>
     <nav class="dock">
@@ -51,6 +52,7 @@
       <button class="dbtn" data-go="bag"><i class="i-bag"></i>背包</button>
       <button class="dbtn" data-go="album"><i class="i-photo"></i>相簿</button>
       <button class="dbtn" data-go="settings"><i class="i-gear"></i>設定</button>
+      <button class="dbtn" data-go="help"><i class="i-help">?</i>教學</button>
     </nav>
     <div id="restSheet">
       <h4 id="rsTitle">要休息一下嗎？</h4>
@@ -60,23 +62,6 @@
         <button class="cbtn" id="rsUp">上傳照片</button>
         <button class="cbtn go" id="rsGo">繼續出發</button>
       </div>
-    </div>
-  </section>
-
-  <!-- 廟宇 -->
-  <section id="scrTemple" class="scr">
-    <div class="tSky"></div>
-    <header class="tTop">
-      <button class="cbtn sm" id="tBack">← 回地圖</button>
-      <div class="tName" id="tName">象山福德小祠</div>
-    </header>
-    <div class="tStage" id="tStage"></div>
-    <div class="tMsg" id="tMsg">心裡默念自己的名字和想問的事，再來擲筊或求籤。</div>
-    <div class="tBtns">
-      <button class="cbtn" id="bIncense">上香</button>
-      <button class="cbtn red" id="bBwa">擲筊</button>
-      <button class="cbtn" id="bLot">求籤</button>
-      <button class="cbtn" id="bStamp">蓋集印</button>
     </div>
   </section>
 
@@ -90,7 +75,7 @@
   <!-- 相簿 -->
   <section id="scrAlbum" class="scr">
     <header class="pTop"><button class="cbtn sm" data-back>← 返回</button><b>我的相簿</b><span></span></header>
-    <div class="tabs tabs4"><button class="tab on" data-tab="photos">拍立得</button><button class="tab" data-tab="wall">照片牆</button><button class="tab" data-tab="stamps">集印帳</button><button class="tab" data-tab="baiyue">百岳帳</button><button class="tab" data-tab="lots">籤詩冊</button><button class="tab" data-tab="badges">徽章</button><button class="tab" data-tab="enc">奇遇圖鑑</button></div>
+    <div class="tabs tabsGrid"><button class="tab on" data-tab="photos">拍立得</button><button class="tab" data-tab="wall">照片牆</button><button class="tab" data-tab="stamps">集印帳</button><button class="tab" data-tab="baiyue">百岳帳</button><button class="tab" data-tab="badges">徽章</button><button class="tab" data-tab="enc">奇遇圖鑑</button></div>
     <div class="pBody" id="albumBody"></div>
   </section>
 
@@ -102,21 +87,21 @@
 
   <div id="modal" class="modal"><div class="mCard" id="mCard"></div></div>
   <div id="toast" class="toast"></div>
-  <div id="rotate" class="rotate"><div>把手機轉成直的玩比較舒服喔</div></div>
+  <div id="rotate" class="rotate"><div>手機轉成直的，玩起來比較舒服</div></div>
   <input type="file" id="upFile" accept="image/*" hidden>
 </div>
 
-<script src="js/data.js?v=61"></script>
-<script src="js/audio.js?v=61"></script>
-<script src="js/clay.js?v=61"></script>
-<script src="js/art.js?v=61"></script>
-<script src="js/trail.js?v=61"></script>
-<script src="js/worldmap.js?v=61"></script>
-<script src="js/hud.js?v=61"></script>
-<script src="js/game.js?v=61"></script>
-<script src="js/config.js?v=61"></script>
-<script src="js/plaza.js?v=61"></script>
-<script src="js/social.js?v=61"></script>
+<script src="js/data.js?v=64"></script>
+<script src="js/audio.js?v=64"></script>
+<script src="js/clay.js?v=64"></script>
+<script src="js/art.js?v=64"></script>
+<script src="js/trail.js?v=64"></script>
+<script src="js/worldmap.js?v=64"></script>
+<script src="js/hud.js?v=64"></script>
+<script src="js/game.js?v=64"></script>
+<script src="js/config.js?v=64"></script>
+<script src="js/plaza.js?v=64"></script>
+<script src="js/social.js?v=64"></script>
 <script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));</script>
 </body>
 </html>

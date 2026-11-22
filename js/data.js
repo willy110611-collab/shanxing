@@ -5,7 +5,7 @@ window.SX = window.SX || {};
 // theme.wall：[登山口, 山頂] 步道兩側被植物包住的程度（1＝森林綠色隧道、0.3＝高山稜線只剩矮箭竹）
 SX.MOUNTAINS = [
   { id:'xiangshan', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
-    feat:'城市高樓、步道石階、半路的福德小祠、山頂六顆大石頭', end:'象山頂的六巨石', temple:'山腰的福德小祠',
+    feat:'城市高樓、步道石階、山頂六顆大石頭', end:'象山頂的六巨石',
     theme:{ sky:['#9fd3ee','#fbe7c6'], far:'#8fb3a8', mid:'#6fa86a', near:'#86c06a', trail:'stairs', wall:[1,0.85], tower:true, rocks:true } },
   { id:'qixing', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:3500, diff:2,
     feat:'硫磺噴氣孔、整片芒草、火山口', end:'山頂三角點',
@@ -56,7 +56,7 @@ SX.MOUNTAINS = [
   { id:'yushan_front', name:'玉山前峰', group:'yushan', baiyue:true, area:'嘉義・南投', lon:120.913, lat:23.475, startAlt:2610, diff:4,
     feat:'前峰不前、碎石陡坡、俯看塔塔加', end:'玉山前峰' },
   { id:'yushan_west', name:'玉山西峰', group:'yushan', baiyue:true, area:'嘉義・南投', lon:120.925, lat:23.469, startAlt:2610, diff:5,
-    feat:'冷杉林、西峰山神廟、正面看主峰', end:'玉山西峰' },
+    feat:'冷杉林、路邊的小石龕、正面看主峰', end:'玉山西峰' },
   { id:'yushan_north', name:'玉山北峰', group:'yushan', baiyue:true, area:'南投', lon:120.96, lat:23.487, startAlt:2610, diff:5,
     feat:'玉山氣象站、看主峰最美的角度', end:'玉山北峰氣象站' },
   { id:'yushan_east', name:'玉山東峰', group:'yushan', baiyue:true, area:'南投', lon:120.967, lat:23.47, startAlt:2610, diff:5,
@@ -107,32 +107,25 @@ SX.LINES = {
   seg:['到了！這一小段走得很棒','打個勾，下一站也慢慢走','原來走到這裡只要一下下','停一下看看，風景剛剛好','小小的一步，也是往山頂的一步'],   // 抵達「這次的小目標」時說的話
 };
 
-// 原創籤詩：四句＋白話＋台味鼓勵
-SX.FORTUNES = [
-  { no:'第一籤', rank:'上上', poem:['晨光初照半山腰','石階一步一逍遙','心中若有千斤擔','放在雲間風自消'],
-    say:'最近的煩惱其實沒有想像中重，先把它放下，事情會自己慢慢順。', tw:'免驚啦，一步一步來就對了！' },
-  { no:'第二籤', rank:'上吉', poem:['溪水繞山不回頭','清風送客上高樓','莫嫌腳下路途遠','回首青山已在後'],
-    say:'你已經走了很遠，只是自己沒發現。回頭看看，會給自己掌聲。', tw:'你真的足厲害，愛家己呵咾一下！' },
-  { no:'第三籤', rank:'中吉', poem:['雲霧遮山未見峰','且隨小徑入林中','待到日出霧散時','滿山翠綠映天紅'],
-    say:'現在看不清楚方向很正常，先做好眼前的小事，答案會自己出現。', tw:'霧總會散，莫煩惱傷濟。' },
-  { no:'第四籤', rank:'上上', poem:['好友相邀上翠微','一壺清茶話是非','笑聲驚起林間鳥','滿身花香帶月歸'],
-    say:'人緣很好的一段時間，約朋友吃飯散步，好運會一起來。', tw:'揪朋友去呷好料，順紲開講！' },
-  { no:'第五籤', rank:'中平', poem:['細雨綿綿石徑滑','慢行一步莫心急','撐開荷葉聽雨聲','雨停自有彩虹立'],
-    say:'最近不適合衝太快，放慢節奏反而比較順。', tw:'慢慢仔行，較贏跋倒。' },
-  { no:'第六籤', rank:'上吉', poem:['山頂松間一縷風','吹開心底舊朦朧','眼前萬里皆晴朗','好事如雲在掌中'],
-    say:'心情會變得很清爽，想做的事可以開始計畫了。', tw:'時機到矣，衝一下！' },
-  { no:'第七籤', rank:'中吉', poem:['石上青苔歲月深','一年一度一回尋','耐心等得花開日','滿樹繁華報此心'],
-    say:'你的努力需要一點時間發芽，再等一下下。', tw:'好物件愛等，莫急。' },
-  { no:'第八籤', rank:'上上', poem:['星光點點照歸途','螢火相隨不寂孤','莫道夜深行路暗','心燈一盞勝明珠'],
-    say:'就算覺得孤單，其實身邊一直有人在默默支持你。', tw:'你毋是孤單一个人啦。' },
-  { no:'第九籤', rank:'中平', poem:['背上行囊重幾分','路旁小憩又何妨','卸下無用身外物','輕身更好上山岡'],
-    say:'是時候整理一下，把不必要的事和東西放下。', tw:'物件傷濟揹袂行，清清咧較輕鬆。' },
-  { no:'第十籤', rank:'上吉', poem:['杜鵑花開滿山紅','春風拂面笑顏中','今朝喜事臨門到','福氣滿滿似泉湧'],
-    say:'近期會有讓你開心的小驚喜，記得好好收下。', tw:'歡喜就好，福氣自然來！' },
-  { no:'第十一籤', rank:'中吉', poem:['登高望遠看人間','千家燈火萬家煙','平凡日子平凡過','平安二字值千金'],
-    say:'平安順利就是最大的福氣，好好照顧身體。', tw:'食飽睏飽，就是好命。' },
-  { no:'第十二籤', rank:'上上', poem:['一步一階向天行','汗水化作滿天星','回首來時千重嶺','原來我也這麼行'],
-    say:'你比自己以為的更有力量，相信自己。', tw:'你上讚的啦！' },
+// 新手教學（地圖右上、登山畫面下方的「?」）：一頁一個主題，每條一兩行；icon 是美術圖名字
+// intro:true 的那幾條也是第一次出發的玩法小卡、設定頁「操作小抄」的內容（只寫在這裡）
+SX.TUTORIAL = [
+  { title:'出發', items:[
+    { icon:'icon_map', h:'怎麼開始', t:'在地圖點山上的木牌，看完介紹按「出發登山」。' },
+    { icon:'hiker_walk', h:'自己會走', t:'放著不管，角色會照山友的步調自己走；關掉遊戲也會繼續走。', intro:true },
+    { icon:'sign_wood', h:'長按走快', t:'長按畫面（或按住 W／↑）走快一點，但比較累。', intro:true } ] },
+  { title:'體力與休息', items:[
+    { icon:'face_tired', h:'體力與體溫', t:'走路會耗體力，冷會降體溫；見底就打瞌睡，坐下休息就補回來。' },
+    { icon:'bench', h:'休息選單', t:'點長椅或觀景台坐下，能拍風景照、疊石許願、上傳照片，或繼續出發。', intro:true },
+    { icon:'summit_marker', h:'小目標', t:'畫面下方有個幾分鐘就到的小目標，走到常有明信片或寶物。' } ] },
+  { title:'路上的驚喜', items:[
+    { icon:'treasure_box', h:'奇遇與寶物', t:'路上會遇到奇遇，選一個回應看看；閃閃發亮的地方點一下，有寶物。' },
+    { icon:'icon_lock', h:'一次一座山', t:'一次只能爬一座山。想換山要先下山，原本那座的進度會歸零。' },
+    { icon:'map_pin', h:'百岳與分級', t:'百岳有官方分級 A、B、C、C+，先爬過簡單的，才能挑戰更難的。' } ] },
+  { title:'收集與山友', items:[
+    { icon:'badge_quest', h:'每日任務與徽章', t:'「每日」天天有新任務，完成就領寶物；徽章記下你走過的每一步。' },
+    { icon:'icon_album', h:'相簿與集印帳', t:'每走 500 公尺自動拍拍立得；登頂在集印帳蓋章，百岳帳記下爬過的百岳。' },
+    { icon:'emo_wave', h:'山友大廳', t:'在「大廳」取個暱稱，就能跟山友打招呼、加好友、邀請一起爬。' } ] },
 ];
 
 // 台灣海岸線（經緯度），畫地圖用
@@ -151,7 +144,7 @@ SX.RIDGE = [[121.62,24.78],[121.40,24.55],[121.23,24.38],[121.27,24.14],[121.12,
 SX.REC = {
   xiangshan: { recMin:35, recNote:'一般山友上山約 35 分鐘', dist:1500,
     route:[[0.30,0.93],[0.36,0.87],[0.33,0.81],[0.41,0.75],[0.46,0.70],[0.42,0.64],[0.50,0.58],[0.56,0.52],[0.52,0.46],[0.60,0.40],[0.66,0.34],[0.62,0.28],[0.70,0.21],[0.72,0.14],[0.66,0.07]],
-    waypoints:[{m:0,name:'象山步道入口'},{m:600,name:'石階平台'},{m:1100,name:'福德小祠'},{m:1500,name:'象山頂的六巨石'}] },
+    waypoints:[{m:0,name:'象山步道入口'},{m:600,name:'石階平台'},{m:1500,name:'象山頂的六巨石'}] },
   qixing: { recMin:75, recNote:'小油坑上到七星主峰約 1 小時 15 分', dist:3500,
     route:[[0.20,0.92],[0.28,0.87],[0.34,0.83],[0.42,0.80],[0.48,0.74],[0.45,0.68],[0.52,0.63],[0.58,0.58],[0.55,0.52],[0.62,0.46],[0.60,0.40],[0.66,0.33],[0.62,0.26],[0.68,0.18],[0.64,0.10]],
     waypoints:[{m:0,name:'小油坑停車場'},{m:800,name:'硫磺噴氣區'},{m:1800,name:'面天坪'},{m:2700,name:'七星東峰分岔'},{m:3500,name:'七星主峰三角點'}] },
@@ -205,7 +198,7 @@ SX.REC = {
     waypoints:[{m:0,name:'塔塔加登山口'},{m:1700,name:'孟祿亭'},{m:2200,name:'前峰登山口'},{m:2600,name:'碎石陡坡'},{m:3000,name:'玉山前峰'}] },
   yushan_west: { recMin:480, recNote:'塔塔加經排雲山莊到西峰約 8 小時', dist:11500,
     route:[[0.62,0.93],[0.56,0.88],[0.62,0.82],[0.54,0.77],[0.58,0.70],[0.50,0.66],[0.54,0.59],[0.46,0.54],[0.42,0.47],[0.36,0.42],[0.32,0.35],[0.26,0.29],[0.28,0.21],[0.22,0.14],[0.24,0.07]],
-    waypoints:[{m:0,name:'塔塔加登山口'},{m:2200,name:'前峰登山口'},{m:4400,name:'白木林觀景台'},{m:8500,name:'排雲山莊'},{m:10000,name:'西峰冷杉林'},{m:11200,name:'西峰山神廟'},{m:11500,name:'玉山西峰'}] },
+    waypoints:[{m:0,name:'塔塔加登山口'},{m:2200,name:'前峰登山口'},{m:4400,name:'白木林觀景台'},{m:8500,name:'排雲山莊'},{m:10000,name:'西峰冷杉林'},{m:11200,name:'路邊的小石龕'},{m:11500,name:'玉山西峰'}] },
   yushan_north: { recMin:570, recNote:'經排雲、風口到北峰約 9 個半小時', dist:12000,
     route:[[0.18,0.93],[0.26,0.88],[0.32,0.84],[0.40,0.81],[0.46,0.76],[0.52,0.72],[0.48,0.66],[0.56,0.62],[0.62,0.57],[0.58,0.50],[0.66,0.45],[0.62,0.38],[0.60,0.30],[0.54,0.22],[0.50,0.14],[0.44,0.07]],
     waypoints:[{m:0,name:'塔塔加登山口'},{m:4400,name:'白木林觀景台'},{m:8500,name:'排雲山莊'},{m:10500,name:'風口'},{m:11500,name:'北峰碎石坡'},{m:12000,name:'玉山北峰氣象站'}] },
@@ -301,7 +294,7 @@ SX.gradeNeed = id => {
 // 寵物：柴柴起始即有，其餘為未來解鎖
 SX.PETS = [
   { id:'shiba', name:'柴柴', desc:'毛茸茸的柴犬，最愛在涼亭曬太陽，腳步比你還穩。', unlocked:true },
-  { id:'bear', name:'台灣黑熊', desc:'溫和的森林居民，果子、嫩葉、小蟲子都會吃。牠不會來搶你的午餐，你也別留食物給牠喔。', unlocked:false, unlockText:'累計完成 5 座山的登頂' },
+  { id:'bear', name:'台灣黑熊', desc:'溫和的森林居民，果子、嫩葉、小蟲子都會吃。牠不會來搶你的午餐，你也別留食物給牠喔。', unlocked:false, unlockText:'累計登頂 5 次' },
   { id:'leopardcat', name:'石虎', desc:'夜行的小獵人，尾巴很長，眼睛會在草叢裡一閃一閃。', unlocked:false, unlockText:'在夜晚或清晨的步道上遇見過山羌' },
   { id:'magpie', name:'藍鵲', desc:'嗓門很大的報告員，遇到牠就知道前面有好天氣。', unlocked:false, unlockText:'在三座以上不同的山上撿到過紀念章' },
 ];
@@ -338,13 +331,13 @@ SX.permitNeed = function(id, date){
 SX.ENCOUNTERS = [
   { id:'e01', text:'迎面走來一位山友，笑著說：「加油！快到了！」', where:{}, choices:null },
   { id:'e02', text:'草叢裡傳來窸窣聲，一隻山羌探出頭來，又飛快縮了回去。', where:{ mountains:['alishan','taiping','hehuan','jiaming','xueshan','yushan'] }, choices:[
-      { label:'安靜地站著等牠', result:'山羌慢慢走出來，吃了幾口草後才離開，你心情變得很好。', effect:{ temp:1 } },
+      { label:'安靜地站著等牠', result:'山羌慢慢走出來，吃了幾口草才離開，你心情好了起來。', effect:{ temp:1 } },
       { label:'拿出零食想餵牠', result:'山羌只是看了你一眼，走開了。野生動物不吃人的食物，下次記得。', effect:{ stam:-2 } } ] },
   { id:'e03', text:'樹上一群獼猴正在吃果子，牠們好奇地盯著你的背包。', where:{ mountains:['alishan','taiping','xiangshan','qixing'] }, choices:[
-      { label:'保持距離，慢慢經過', result:'獼猴沒有搶東西，你輕鬆地走過去了。', effect:{ temp:1 } },
+      { label:'保持距離，慢慢經過', result:'獼猴沒有搶東西，你輕鬆走了過去。', effect:{ temp:1 } },
       { label:'拿出零食吸引牠們', result:'一隻獼猴跳下來把你的水果搶走，你只能苦笑。', effect:{ stam:-3 } } ] },
   { id:'e04', text:'遠方的樹枝上停著一隻帝雉，尾羽在陽光下閃閃發亮。', where:{ mountains:['alishan','taiping','hehuan','xueshan','yushan'] }, wx:['clear','cloud'], rare:true, choices:[
-      { label:'輕輕按下快門', result:'你拍到一張很漂亮的照片，帝雉慢慢地走進林子裡。', effect:{ photo:true } },
+      { label:'輕輕按下快門', result:'你拍到一張漂亮的照片，帝雉慢慢走進林子裡。', effect:{ photo:true } },
       { label:'靠近一點想看清楚', result:'帝雉被嚇到飛走了，你只能看著牠的背影。', effect:{ temp:-1 } } ] },
   { id:'e05', text:'一位阿伯遞來一顆茶葉蛋：「上山要吃飽，才會有力氣。」', where:{}, choices:[
       { label:'謝謝阿伯，收下來', result:'茶葉蛋還是溫的，你覺得全身都有力氣了。', effect:{ stam:15 } },
@@ -352,78 +345,78 @@ SX.ENCOUNTERS = [
   { id:'e06', text:'腳底一緊，小腿抽筋了！你慢慢蹲下來，把腳掌往自己的方向拉。', where:{ minFrac:0.4 }, choices:[
       { label:'慢慢拉筋，等它放鬆', result:'痠痛慢慢退去，你扶著樹站起來，繼續前進。', effect:{ stam:-5 } },
       { label:'硬撐著繼續走', result:'下一步差點滑倒，你還是乖乖停下來休息。', effect:{ stam:-10 } } ] },
-  { id:'e07', text:'前方一位大哥正在分享西瓜，清涼的香氣飄了過來。', where:{ minFrac:0.2 }, choices:[
+  { id:'e07', text:'前方一位大哥在分西瓜，清涼的香氣飄了過來。', where:{ minFrac:0.2 }, choices:[
       { label:'接過一片，道謝', result:'一口下去，整個人都涼快了，大哥說下山再見。', effect:{ stam:12, temp:-2 } },
       { label:'微笑揮手，繼續走', result:'大哥豪邁地說：「下次記得來吃！」', effect:{ temp:1 } } ] },
-  { id:'e08', text:'路邊有一袋被遺落的塑膠袋，裡面還有半包空的零食袋。', where:{}, choices:[
+  { id:'e08', text:'路邊有個被遺落的塑膠袋，裡面塞著空的零食袋。', where:{}, choices:[
       { label:'把垃圾收進口袋，帶下山', result:'你默默把垃圾帶回山下，心裡很踏實。', effect:{ temp:2, item:'t_clean_pledge' } },
       { label:'當作沒看到，繼續走', result:'你走了幾步，心裡還是有點過意不去。', effect:{} } ] },
   { id:'e09', text:'雲海突然從山谷裡翻湧上來，眼前一片白茫茫。', where:{ minFrac:0.5 }, wx:['fog','cloud'], choices:null },
   { id:'e10', text:'一陣大霧襲來，步道好像不見了，你停下腳步，仔細看路標。', where:{}, wx:['fog'], choices:[
       { label:'沿著步道標記慢慢找回去', result:'你找到了熟悉的紅白指示牌，鬆了一口氣。', effect:{ stam:-4 } },
       { label:'憑感覺直走', result:'還好你很快發現走錯了，乖乖折返。', effect:{ stam:-8 } } ] },
-  { id:'e11', text:'鞋帶突然鬆開，你蹲下來重新綁好，順便聽到遠方傳來鳥叫聲。', where:{}, choices:null },
-  { id:'e12', text:'山屋的管理員阿姨正在曬棉被，她招手叫你過去喝杯熱茶。', where:{ minFrac:0.6 }, choices:[
+  { id:'e11', text:'鞋帶鬆了，你蹲下來重新綁好，聽見遠方傳來鳥叫聲。', where:{}, choices:null },
+  { id:'e12', text:'山屋的管理員阿姨在曬棉被，招手叫你過去喝杯熱茶。', where:{ minFrac:0.6 }, choices:[
       { label:'坐下來喝茶聊天', result:'阿姨說了好多山上的故事，你覺得這趟值得了。', effect:{ stam:10, temp:2 } },
       { label:'禮貌地說趕時間', result:'阿姨說：「慢慢來，山不會跑掉。」', effect:{ temp:1 } } ] },
   { id:'e13', text:'有位挑夫扛著補給箱快步經過，還不忘對你點頭致意。', where:{ minFrac:0.4, mountains:['xueshan','yushan','jiaming'] }, choices:[
       { label:'側身讓路，讚嘆他的體力', result:'挑夫笑著說：「山裡的路，要一步一步走。」', effect:{ temp:2 } },
-      { label:'想幫忙拿一點東西', result:'挑夫婉拒了，並提醒你重量要量力而為。', effect:{ stam:-2 } } ] },
+      { label:'想幫忙拿一點東西', result:'挑夫婉拒了，提醒你背重要量力而為。', effect:{ stam:-2 } } ] },
   { id:'e14', text:'肚子咕嚕咕嚕叫，你在涼亭裡煮了一碗泡麵，香味傳遍整個山頭。', where:{}, choices:[
       { label:'吃完泡麵，把湯喝光', result:'熱湯下肚，全身都暖了起來。', effect:{ stam:18, temp:3 } },
-      { label:'吃完把包裝收好，帶下山', result:'幾隻鳥跳過來看了看，什麼也沒撿到，又飛回樹上找蟲吃。不留食物給牠們、垃圾也全部帶走，就是對山上的朋友最好的照顧。', effect:{ stam:8, temp:1 } } ] },
+      { label:'吃完把包裝收好，帶下山', result:'幾隻鳥跳過來看了看，什麼也沒撿到，又飛回樹上找蟲吃。不留食物、垃圾全部帶走，就是對山上朋友最好的照顧。', effect:{ stam:8, temp:1 } } ] },
   { id:'e15', text:'一隻蝴蝶停在你的背包上，好像在搭便車。', where:{}, choices:null },
   { id:'e16', text:'附近傳來清脆的鳥鳴，你抬頭找了半天，卻只看見一片晃動的葉子。', where:{}, choices:null },
-  { id:'e17', text:'突然下起雨來，你趕緊拿出雨衣，雨滴打在葉子上，聲音很好聽。', where:{}, wx:['rain'], choices:[
-      { label:'停下來聽雨聲', result:'雨聲像一首慢歌，你覺得心情平靜了很多。', effect:{ temp:2 } },
+  { id:'e17', text:'突然下起雨，你趕緊拿出雨衣，雨滴打在葉子上，很好聽。', where:{}, wx:['rain'], choices:[
+      { label:'停下來聽雨聲', result:'雨聲像一首慢歌，心情平靜了許多。', effect:{ temp:2 } },
       { label:'加快腳步趕路', result:'你溼了半身，但總算找到遮雨的地方。', effect:{ stam:-6 } } ] },
   { id:'e18', text:'一隻藍鵲從頭頂飛過，留下一聲響亮的叫聲。', where:{}, rare:true, choices:[
       { label:'拍下牠飛過的瞬間', result:'照片裡只留下一根藍色的羽毛影子，你笑了。', effect:{ photo:true } },
       { label:'朝牠揮揮手', result:'藍鵲在枝頭停下來看了你一眼，好像在回應你。', effect:{ temp:1 } } ] },
-  { id:'e19', text:'步道旁有一塊小石頭被疊成了小塔，是路過的山友留下的。', where:{}, choices:[
-      { label:'在上面再放一顆石頭', result:'小石塔變得更高了，你覺得好像留下了一點祝福。', effect:{ item:'t_cairn_stone' } },
-      { label:'靜靜欣賞，不動它', result:'你覺得這座小石塔很可愛，就讓它留在那裡。', effect:{ temp:1 } } ] },
+  { id:'e19', text:'步道旁有幾顆小石頭疊成的小塔，是路過的山友留下的。', where:{}, choices:[
+      { label:'在上面再放一顆石頭', result:'小石塔更高了，好像也留下了你的一點祝福。', effect:{ item:'t_cairn_stone' } },
+      { label:'靜靜欣賞，不動它', result:'小石塔很可愛，就讓它好好待在那裡。', effect:{ temp:1 } } ] },
   { id:'e20', text:'山頂的風很大，吹得你的帽子差點飛走。', where:{ minFrac:0.85 }, choices:[
-      { label:'抓緊帽子，大笑起來', result:'風把煩惱都吹走了，你覺得身體輕了不少。', effect:{ temp:3 } },
+      { label:'抓緊帽子，大笑起來', result:'風把煩惱都吹走了，身體輕了不少。', effect:{ temp:3 } },
       { label:'趕快找地方躲風', result:'你在岩石後面坐下，喝口水休息。', effect:{ stam:5 } } ] },
   { id:'e21', text:'一位小朋友在步道上跑來跑去，媽媽在後面大喊：「慢一點！」', where:{ maxFrac:0.3 }, choices:[
       { label:'笑著讓小朋友先過', result:'小朋友回頭對你揮手，你覺得整個人都變年輕了。', effect:{ temp:2 } },
       { label:'提醒小朋友注意腳下', result:'媽媽感謝你的提醒，小朋友乖乖慢下來。', effect:{ temp:1 } } ] },
-  { id:'e22', text:'溪邊有一塊平坦的大石頭，很適合坐下來休息一下。', where:{ minFrac:0.1, maxFrac:0.6 }, wx:['clear','cloud','fog'], choices:[
+  { id:'e22', text:'溪邊有塊平坦的大石頭，很適合坐下來歇歇。', where:{ minFrac:0.1, maxFrac:0.6 }, wx:['clear','cloud','fog'], choices:[
       { label:'坐下來曬曬太陽', result:'陽光灑在身上，你差點睡著了。', effect:{ stam:12, temp:1 } },
       { label:'泡一下腳', result:'溪水很涼，腳底的疲憊一下子消失了。', effect:{ stam:8, temp:2 } } ] },
-  { id:'e23', text:'一位外國背包客迷路了，他拿著地圖一臉困惑地看著你。', where:{}, choices:[
+  { id:'e23', text:'一位外國背包客迷路了，拿著地圖一臉困惑地看著你。', where:{}, choices:[
       { label:'指著路標，告訴他方向', result:'他開心地說了好幾次謝謝，還分你一顆糖。', effect:{ stam:4, temp:2, item:'t_thanks_postcard' } },
-      { label:'說「我也不太熟」，一起找路', result:'你們一起找到了步道，變成了短暫的同伴。', effect:{ temp:3 } } ] },
-  { id:'e24', text:'黃昏的光線從山谷照了上來，金色的光灑在草坡上，像一幅畫。', where:{ time:['dusk'] }, rare:true, choices:[
+      { label:'說「我也不太熟」，一起找路', result:'你們一起找回步道，當了一段路的同伴。', effect:{ temp:3 } } ] },
+  { id:'e24', text:'黃昏的光從山谷照上來，金色灑滿草坡，像一幅畫。', where:{ time:['dusk'] }, rare:true, choices:[
       { label:'拍一張夕陽照片', result:'你拍下了這個溫柔的傍晚。', effect:{ photo:true } },
-      { label:'靜靜坐著，不拍照', result:'你只是看著光慢慢變淡，覺得很幸福。', effect:{ temp:3 } } ] },
+      { label:'靜靜坐著，不拍照', result:'你看著光慢慢變淡，覺得很幸福。', effect:{ temp:3 } } ] },
   { id:'e25', text:'夜晚的步道上，螢火蟲在草叢間一閃一閃，像是在替你照路。', where:{ time:['night'] }, rare:true, choices:[
       { label:'關掉頭燈，安靜地走一段', result:'黑暗裡只剩螢火與星光，你覺得很安心。', effect:{ temp:2 } },
       { label:'拍一張照片留念', result:'照片裡的光點像散落的星星。', effect:{ photo:true } } ] },
   { id:'e26', text:'一片山櫻花瓣飄落在肩上，你忍不住停下來看了好久。', where:{ mountains:['alishan','taiping','hehuan'] }, choices:null },
   { id:'e27', text:'前方的步道被落石擋住了，幾位山友正在合力把石頭搬開。', where:{ minFrac:0.5 }, choices:[
       { label:'加入一起搬', result:'大家一起把路清開，你成了這段路的小英雄。', effect:{ stam:-6, temp:3 } },
-      { label:'在旁邊等待，順便幫忙指揮', result:'你幫忙看路，很快就把路清出來了。', effect:{ temp:2 } } ] },
-  { id:'e28', text:'手機沒有訊號，你想起要把它收起來，聽聽山的聲音。', where:{}, choices:[
+      { label:'在旁邊幫忙指揮', result:'你幫忙看路，大家很快就把路清開了。', effect:{ temp:2 } } ] },
+  { id:'e28', text:'手機沒有訊號，乾脆收起來，聽聽山的聲音。', where:{}, choices:[
       { label:'收起手機，聽風聲十分鐘', result:'世界還是好好的，你覺得很輕鬆。', effect:{ temp:2 } },
       { label:'拍下這一刻，傳給朋友', result:'朋友回你一句「好羨慕」，你笑著繼續走。', effect:{ photo:true } } ] },
-  { id:'e29', text:'遠方一座山頭的雲忽然散開，露出清楚的山稜線，像是在對你打招呼。', where:{ minFrac:0.6 }, wx:['clear','cloud'], rare:true, choices:[
-      { label:'停下來看很久', result:'你覺得這一刻值得回憶很久。', effect:{ photo:true, temp:3 } } ] },
+  { id:'e29', text:'遠方山頭的雲忽然散開，露出清楚的稜線，像在對你打招呼。', where:{ minFrac:0.6 }, wx:['clear','cloud'], rare:true, choices:[
+      { label:'停下來看很久', result:'這一刻，值得記很久。', effect:{ photo:true, temp:3 } } ] },
   { id:'e30', text:'路邊有一張被風吹來的舊明信片，上面寫著「下次一起來」。', where:{}, rare:true, choices:[
       { label:'小心收進背包', result:'你決定找機會替它寄出去。', effect:{ item:'t_hiker_postcard' } },
       { label:'留在原地，讓它繼續旅行', result:'明信片被風吹向遠方，你祝福它找到主人。', effect:{ temp:2 } } ] },
   { id:'e31', text:'腳底一滑，你趕緊扶住樹幹，心跳得很快。', where:{ minFrac:0.3 }, choices:[
       { label:'慢慢站穩，調整步伐', result:'你穩穩地踩在石頭上，鬆了一口氣。', effect:{ stam:-3 } },
       { label:'坐下來休息一下', result:'你深呼吸幾次，身體慢慢放鬆下來。', effect:{ stam:4 } } ] },
-  { id:'e32', text:'在涼亭裡遇到一位爺爺，他正在下棋，還很熱情地招你過去坐。', where:{ mountains:['xiangshan','qixing','guanyin','alishan'] }, choices:[
-      { label:'坐下來看他下棋', result:'爺爺贏了你一步，他笑得很開心。', effect:{ temp:3 } },
+  { id:'e32', text:'涼亭裡一位爺爺正在下棋，熱情地招你過去坐。', where:{ mountains:['xiangshan','qixing','guanyin','alishan'] }, choices:[
+      { label:'坐下來看他下棋', result:'爺爺贏了你一步，笑得好開心。', effect:{ temp:3 } },
       { label:'禮貌道謝，繼續走', result:'爺爺說：「下次再來找我下棋喔！」', effect:{ temp:1 } } ] },
   // 季節限定奇遇（season 見 SX.SEASONS，山與時段跟著季節走）
   { id:'es_sakura', season:'sakura', text:'一陣風吹過，整排山櫻花瓣像下雨一樣飄下來，步道一下子變成粉紅色。', where:{}, choices:[
-      { label:'舉起相機，拍下櫻花雨', result:'你按下快門，花瓣剛好落在鏡頭前，是一張很幸運的照片。', effect:{ item:'t_sakura_photo' } },
+      { label:'舉起相機，拍下櫻花雨', result:'按下快門時，花瓣剛好落在鏡頭前，好幸運的一張。', effect:{ item:'t_sakura_photo' } },
       { label:'站在花雨裡深呼吸', result:'空氣裡有淡淡的花香，你覺得心裡也開花了。', effect:{ temp:2, stam:5 } } ] },
-  { id:'es_rhodo', season:'rhodo', text:'轉過一個彎，整片山坡開滿了粉白色的玉山杜鵑，像一片花海。', where:{ minFrac:0.3 }, choices:[
+  { id:'es_rhodo', season:'rhodo', text:'轉過一個彎，整片山坡開滿粉白色的玉山杜鵑，像一片花海。', where:{ minFrac:0.3 }, choices:[
       { label:'坐在步道邊看花', result:'蜜蜂在花間忙碌，你什麼都不想，只是看著。', effect:{ stam:10, temp:2 } },
       { label:'拍一張花海照片', result:'粉色和白色在照片裡一層一層地開著。', effect:{ photo:true } } ] },
   { id:'es_firefly', season:'firefly', text:'整片山谷亮起成千上萬的小光點，螢火蟲像是從天上掉下來的星星。', where:{}, rare:true, choices:[
@@ -522,9 +515,6 @@ SX.ENCOUNTERS = [
   { id:'e59', text:'碎石坡上回頭一看，塔塔加和鹿林山整片在腳下，雲正從山谷慢慢爬上來。', where:{ peaks:['yushan_front'], minFrac:0.7 }, wx:['clear','cloud'], choices:[
       { label:'拍下雲爬上來的樣子', result:'雲一層一層往上漫，照片裡的山脊像浮在白色的海上。', effect:{ photo:true } },
       { label:'坐在石頭上喘口氣', result:'風從谷底吹上來，涼涼的，你的呼吸慢慢平穩下來。', effect:{ stam:8 } } ] },
-  { id:'e60', text:'冷杉林裡藏著一間小小的山神廟，有人在前面放了一顆糖，和一張寫著「平安下山」的紙條。', where:{ peaks:['yushan_west'], minFrac:0.9 }, choices:[
-      { label:'合掌鞠躬', result:'你在廟前站了一會兒，拍下一張石階的照片，背面寫上「謝謝山讓我們過」。', effect:{ item:'t_shrine_card' } },
-      { label:'也留一張紙條', result:'你寫了「大家都平安」，壓在那顆糖旁邊。', effect:{ temp:2 } } ] },
   { id:'e61', text:'從西峰正面望過去，玉山主峰整座山像一面巨大的屏風，午後的雲影慢慢從上面滑過。', where:{ peaks:['yushan_west'], minFrac:0.85 }, time:['day'], wx:['clear','cloud'], rare:true, choices:[
       { label:'拍下整面山壁', result:'鏡頭塞不下整座主峰，你退了好幾步才拍到。', effect:{ photo:true } },
       { label:'坐下來看雲影走過去', result:'雲影從左邊滑到右邊，花了好久好久，你一點都不急。', effect:{ temp:3 } } ] },
@@ -574,23 +564,23 @@ SX.TREASURES = [
   { id:'t_thanks_postcard', name:'道謝明信片', rarity:'普通', desc:'一張寫著「謝謝你的指路」的明信片。', drop:'any' },
   { id:'t_hut_stamp', name:'山屋紀念章', rarity:'普通', desc:'在山屋櫃台蓋下的紅色章印，代表你曾在這裡歇腳。', drop:['taiping','hehuan','jiaming','xueshan','yushan'] },
   { id:'t_summit_stamp', name:'登頂紀念章', rarity:'普通', desc:'每一座山頂都有屬於自己的小紀念章。', drop:'any' },
-  { id:'t_tea_card', name:'山茶花小卡', rarity:'普通', desc:'一張畫著山茶花的卡片，花瓣上還帶著一點露水的感覺。', drop:['alishan','taiping','matcha'] },
+  { id:'t_tea_card', name:'山茶花小卡', rarity:'普通', desc:'畫著山茶花的卡片，花瓣上好像還帶著露水。', drop:['alishan','taiping','matcha'] },
   { id:'t_fog_note', name:'霧中便條', rarity:'普通', desc:'在濃霧裡撿到的一張便條，寫著「別怕，慢慢走」。', drop:['qixing','matcha','taiping'] },
   { id:'t_sunset_photo', name:'夕陽照片', rarity:'普通', desc:'在傍晚的步道上拍下的一張照片。', drop:['guanyin','alishan','xiangshan'] },
   { id:'t_rain_card', name:'雨後小卡', rarity:'普通', desc:'雨停後，樹葉上的水珠在陽光下閃閃發亮。', drop:'any' },
   { id:'t_hiker_postcard', name:'舊明信片', rarity:'稀有', desc:'一張寫著「下次一起來」的老明信片，不知道是誰留下的。', drop:['yushan','xueshan','jiaming','hehuan'] },
   { id:'t_bird_photo', name:'藍鵲的一瞥', rarity:'稀有', desc:'藍鵲飛過枝頭的瞬間，照片裡只留下一抹藍色。', drop:['alishan','taiping','qixing','guanyin'] },
-  { id:'t_cone_card', name:'玉山圓柏毬果圖鑑卡', rarity:'稀有', desc:'附有繪圖的圖鑑卡，記錄了玉山圓柏的小毬果，但你不會摘下任何一顆。', drop:['yushan','hehuan'] },
+  { id:'t_cone_card', name:'玉山圓柏毬果圖鑑卡', rarity:'稀有', desc:'畫著玉山圓柏小毬果的圖鑑卡，真的毬果你一顆也沒摘。', drop:['yushan','hehuan'] },
   { id:'t_rubbing', name:'古老三角點拓印', rarity:'稀有', desc:'用紙和鉛筆輕輕拓下三角點的文字，石頭仍留在原地。', drop:['qixing','hehuan','xueshan'] },
-  { id:'t_bird_feather_photo', name:'帝雉的尾羽照片', rarity:'稀有', desc:'帝雉尾羽在陽光下的特寫，你只用相機記錄了牠的美麗。', drop:['alishan','taiping','yushan','xueshan'] },
+  { id:'t_bird_feather_photo', name:'帝雉的尾羽照片', rarity:'稀有', desc:'帝雉尾羽在陽光下的特寫，你只用相機記下牠的美。', drop:['alishan','taiping','yushan','xueshan'] },
   { id:'t_deer_track_card', name:'山羌足跡拓印卡', rarity:'稀有', desc:'用紙拓下的小小蹄印，提醒你山裡還有很多住客。', drop:['jiaming','xueshan','taiping'] },
   { id:'t_cloud_bottle', name:'雲海瓶', rarity:'稀有', desc:'把雲海的照片裝進小瓶子裡，打開就能想起那天的白色海洋。', drop:['alishan','hehuan','taiping'] },
-  { id:'t_rhodo_card', name:'高山杜鵑明信卡', rarity:'稀有', desc:'杜鵑花盛開時的明信卡，花朵粉粉的，很可愛。', drop:['hehuan','taiping','qixing'] },
+  { id:'t_rhodo_card', name:'高山杜鵑明信卡', rarity:'稀有', desc:'杜鵑盛開時的明信卡，花朵粉粉的，好可愛。', drop:['hehuan','taiping','qixing'] },
   { id:'t_lake_map', name:'嘉明湖湖畔地圖', rarity:'稀有', desc:'手繪的湖畔小地圖，標示著哪裡可以安靜地坐著看水。', drop:['jiaming'], peaks:['jiaming'] },
   { id:'t_angel_tear_card', name:'天使的眼淚明信片', rarity:'傳說', desc:'嘉明湖畔的美景明信片，傳說看到的人心裡會多一點溫柔。', drop:['jiaming'], peaks:['jiaming'] },
   { id:'t_starlight_stamp', name:'滿天星空紀念章', rarity:'傳說', desc:'在合歡山的夜晚拍下星空，印成一枚金色的小章。', drop:['hehuan'] },
-  { id:'t_old_triangle', name:'百年三角點的回憶', rarity:'傳說', desc:'一張老照片，記錄了很久以前測量的人們站在山頂的樣子。', drop:['qixing','taiping','xueshan'] },
-  { id:'t_summit_dawn', name:'晨光山頂照片', rarity:'傳說', desc:'在天還沒亮前登頂，等到第一道光照亮山稜線。', drop:['yushan','alishan','xueshan'] },
+  { id:'t_old_triangle', name:'百年三角點的回憶', rarity:'傳說', desc:'一張老照片，記下很久以前測量隊員站在山頂的樣子。', drop:['qixing','taiping','xueshan'] },
+  { id:'t_summit_dawn', name:'晨光山頂照片', rarity:'傳說', desc:'天還沒亮就登頂，等到第一道光照亮山稜線。', drop:['yushan','alishan','xueshan'] },
   { id:'t_forest_bell', name:'林間風鈴卡', rarity:'傳說', desc:'一張畫著風鈴的卡片，風吹過時好像能聽到叮噹聲。', drop:['matcha','taiping','alishan'] },
   // 長期收集寶物（第 12 批）：多半要碰到某座山的奇遇才比較容易拿到
   { id:'t_mengxiang_card', name:'夢幻湖水韭圖鑑卡', rarity:'稀有', desc:'畫著台灣水韭的小卡，全世界只有七星山的夢幻湖找得到它。你只帶走了這張圖。', drop:['qixing'] },
@@ -599,7 +589,7 @@ SX.TREASURES = [
   { id:'t_bongbong_ticket', name:'蹦蹦車紀念車票', rarity:'普通', desc:'太平山蹦蹦車的紀念票，拿在手上好像還聽得到叮叮叮。', drop:['taiping'] },
   { id:'t_cuifeng_card', name:'翠峰湖倒影明信片', rarity:'稀有', desc:'霧裡的翠峰湖像一面鏡子，森林上下各有一片。', drop:['taiping'] },
   { id:'t_rosefinch_photo', name:'酒紅朱雀的一瞥', rarity:'稀有', desc:'箭竹叢上的一抹酒紅色，是高山上最可愛的小訪客。', drop:['hehuan','xueshan','yushan'] },
-  { id:'t_whitebrow_card', name:'金翼白眉圖鑑卡', rarity:'稀有', desc:'記錄了金翼白眉的歌聲和翅膀上的金色，牠總是在步道邊唱歌給山友聽。', drop:['hehuan','xueshan','yushan','jiaming'] },
+  { id:'t_whitebrow_card', name:'金翼白眉圖鑑卡', rarity:'稀有', desc:'記下金翼白眉的歌聲和翅膀上的金色，牠總在步道邊唱歌給山友聽。', drop:['hehuan','xueshan','yushan','jiaming'] },
   { id:'t_369_stamp', name:'369山莊紀念章', rarity:'普通', desc:'雪山 369 山莊的章，章裡有黃色屋頂和一大片山坡。', drop:['xueshan'], peaks:['xueshan'] },
   { id:'t_paiyun_stamp', name:'排雲山莊紀念章', rarity:'普通', desc:'在攻頂玉山前一晚蓋下的章，代表你曾在台灣最高的山屋住過一晚。', drop:['yushan'], peaks:['yushan','yushan_west','yushan_north','yushan_east'] },
   { id:'t_whitewood_photo', name:'白木林照片', rarity:'稀有', desc:'霧中的銀白色枯樹林，安靜得像一幅水墨畫。', drop:['yushan','hehuan'] },
@@ -607,7 +597,6 @@ SX.TREASURES = [
   { id:'t_moon_lake_photo', name:'天使的眼淚月光照片', rarity:'傳說', desc:'夜裡的嘉明湖抱著一輪月亮，湛藍的湖水在月光下閃著銀色。', drop:['jiaming'], peaks:['jiaming'] },
   // 百岳第二階段寶物（第 15 批）：玉山群峰、雪主東、嘉明湖線
   { id:'t_front_sticker', name:'「前峰不前」貼紙', rarity:'普通', desc:'山友之間流傳的手繪貼紙，畫著一個喘到吐舌頭的小人，在陡坡上努力往上爬。', drop:['yushan'], peaks:['yushan_front'] },
-  { id:'t_shrine_card', name:'西峰山神廟平安小卡', rarity:'稀有', desc:'冷杉林裡小小山神廟的石階照片，背面寫著「謝謝山讓我們過」。', drop:['yushan'], peaks:['yushan_west'] },
   { id:'t_weather_log', name:'玉山氣象站觀測紀錄卡', rarity:'稀有', desc:'一張手寫的格子表，記下這一天北峰上的溫度和風向。', drop:['yushan'], peaks:['yushan_north'] },
   { id:'t_ridge_sketch', name:'十峻之首岩壁速寫', rarity:'傳說', desc:'在玉山東峰岩壁下畫的鉛筆速寫，岩紋一條一條都畫得很用力。', drop:['yushan'], peaks:['yushan_east'] },
   { id:'t_crying_slope', name:'哭坡過關證書', rarity:'普通', desc:'一張歪歪的手寫小證書：「本人已爬完哭坡，沒有哭（大概）。」', drop:['xueshan'] },
@@ -631,12 +620,12 @@ SX.QUESTS = [
   { id:'q01', name:'三山行者', hint:'山的數量比你想的還多一點。', desc:'登頂三座不同的山。', cond:{ type:'climbs', n:3, distinct:true }, reward:{ title:'三山行者' } },
   { id:'q02', name:'夜登之人', hint:'月亮是最好的嚮導。', desc:'在夜晚登上任一座山頂。', cond:{ type:'time', when:'night', n:1 }, reward:{ item:'t_summit_dawn' } },
   { id:'q03', name:'雨中登頂', hint:'雨傘不是唯一的裝備。', desc:'在下雨的天氣登頂一次。', cond:{ type:'wx', kind:'rain', n:1 }, reward:{ title:'雨中行者' } },
-  { id:'q04', name:'疊石的人', hint:'一顆、一顆、再一顆。', desc:'在步道上疊出五座石堆。', cond:{ type:'cairns', n:5 }, reward:{ item:'t_cairn_stone' } },
-  { id:'q05', name:'長椅知音', hint:'坐下來的人才看得見風景。', desc:'在十次休息點停下來休息。', cond:{ type:'rests', n:10 }, reward:{ title:'長椅知音' } },
+  { id:'q04', name:'疊石的人', hint:'一顆、一顆、再一顆。', desc:'在步道上疊五座石堆。', cond:{ type:'cairns', n:5 }, reward:{ item:'t_cairn_stone' } },
+  { id:'q05', name:'長椅知音', hint:'坐下來的人才看得見風景。', desc:'在休息點休息十次。', cond:{ type:'rests', n:10 }, reward:{ title:'長椅知音' } },
   { id:'q06', name:'寶物收藏家', hint:'每一張卡片都有一個故事。', desc:'收集五件寶物。', cond:{ type:'items', n:5 }, reward:{ title:'收藏家' } },
-  { id:'q07', name:'樹洞讀者', hint:'樹洞裡藏著別人的心事。', desc:'讀完十則樹洞的山友便條。', cond:{ type:'notes', n:10 }, reward:{ item:'t_thanks_postcard' } },
-  { id:'q08', name:'黑熊的朋友', hint:'牠喜歡五座山頂的味道。', desc:'累計完成五座山的登頂，解鎖台灣黑熊。', cond:{ type:'climbs', n:5 }, reward:{ pet:'bear' } },
-  { id:'q09', name:'慢慢走的人', hint:'快不一定好，但穩最重要。', desc:'一趟登山都沒有趕路，全程慢慢走完。', cond:{ type:'nofast', n:1 }, reward:{ title:'慢行者' } },
+  { id:'q07', name:'樹洞讀者', hint:'樹洞裡藏著別人的心事。', desc:'讀十則樹洞便條。', cond:{ type:'notes', n:10 }, reward:{ item:'t_thanks_postcard' } },
+  { id:'q08', name:'黑熊的朋友', hint:'牠喜歡五座山頂的味道。', desc:'累計登頂五次，解鎖台灣黑熊。', cond:{ type:'climbs', n:5 }, reward:{ pet:'bear' } },
+  { id:'q09', name:'慢慢走的人', hint:'快不一定好，但穩最重要。', desc:'一趟山全程不趕路，慢慢走完。', cond:{ type:'nofast', n:1 }, reward:{ title:'慢行者' } },
   { id:'q10', name:'在山上的那一刻', hint:'手機放久一點，心會更近。', desc:'在山上收起手機十分鐘。', cond:{ type:'gps', n:0, offlineMinutes:10 }, reward:{ item:'t_clean_pledge' } },
   { id:'q11', name:'霧中的指路人', hint:'看不見時，就看腳下。', desc:'在濃霧中找回步道三次。', cond:{ type:'wx', kind:'fog', n:3 }, reward:{ item:'t_fog_note' } },
   { id:'q12', name:'高山的呼吸', hint:'海拔越高，越要慢下來。', desc:'登上海拔超過三千公尺的山頂。', cond:{ type:'mountain', minAlt:3000, n:1 }, reward:{ title:'高山行者' } },
