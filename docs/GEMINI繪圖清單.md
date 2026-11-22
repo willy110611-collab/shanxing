@@ -279,3 +279,10 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 |---|---|---|
 | `stone_a` `stone_b` `stone_c` | 1:1 | 洋紅底。Three different flat river stones for stacking (round grey / oval brown-grey / small pale), seen from the side. 放 `10.小遊戲` |
 | `note_paper` | 1:1 | 洋紅底。A small blank wish note paper tied with string. 放 `04.背包` |
+
+## 第十批：讓地面更立體（放進 `02.素材`）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `grass_clumps` | 16:9 | 洋紅底。A row of 8 separate short wild grass clumps of different shapes (ankle height), seen slightly from above at a low angle, evenly spaced, each fully visible, same lighting from the upper right. |
+| `trail_bank` | 16:9 | 洋紅底。A horizontal strip of a small soil bank at the edge of a mountain trail seen from the side: a short vertical dirt cut with exposed tree roots and small pebbles, moss on top edge, seamless tileable left-right. |
