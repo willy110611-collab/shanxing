@@ -436,7 +436,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .tzStage.leg .tzSheen{mix-blend-mode:screen;opacity:.55}
 .tzStage.tilting .tzSheen{animation:none;background-position:var(--sx,50%) 0}
 @keyframes tzShine{0%,25%{background-position:130% 0}75%,100%{background-position:-30% 0}}
-.tzTags{display:flex;align-items:center;justify-content:center;gap:8px;margin:2px 0 8px}
+.tzTags{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 8px;margin:2px 0 8px}
 .tzTags small{font-size:12px;opacity:.7}
 .tzDesc{text-align:center;font-size:15px;line-height:1.6;padding:0 6px}
 .tzFirst{text-align:center;font-size:13px;margin-top:8px;opacity:.75}

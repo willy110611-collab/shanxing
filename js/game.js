@@ -146,7 +146,8 @@
   const seasonNow = (date = testDate || new Date()) => SX.seasonsAt(date);
   // w、date：要判斷的天氣時段和日期（離開時的日記用「當時」的），不給就是現在
   const seasonOk = (sid, mid, w = wx, date) => { const s = seasonNow(date).find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(w.time)); };
-  const seasonEnd = s => `${+s.to.slice(0, 2)}/${+s.to.slice(3)}`;
+  const mdText = md => `${+md.slice(0, 2)}/${+md.slice(3)}`;   // '03-31' → '3/31'
+  const seasonEnd = s => mdText(s.to);
   const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
   function cycleWx(){
     const i = WX_CYCLE.findIndex(w => w.kind === wx.kind && w.time === wx.time);
@@ -878,7 +879,7 @@
             <div class="tzFrame ${RAR_CLS[tr.rarity] || ''}" style="${RAR_BG[tr.rarity] || ''}">${trSvg(tr)}${fancy ? '<i class="tzSheen"></i>' : ''}</div>
           </div>
         </div>
-        <p class="tzTags"><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span><span class="chip">× ${SV.bag[tr.id]}</span>${many ? `<small>${i + 1} / ${owned.length}</small>` : ''}</p>
+        <p class="tzTags"><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span><span class="chip">× ${SV.bag[tr.id]}</span>${tr.season ? `<span class="chip" style="background:#ffd9e4">季節限定・${SX.SEASON[tr.season].name}</span>` : ''}${many ? `<small>${i + 1} / ${owned.length}</small>` : ''}</p>
         <p class="tzDesc">${tr.desc}</p>
         ${log && log.first ? `<p class="tzFirst">第一次拿到：${log.first}${mt ? `・${mt.name}` : ''}</p>` : ''}
         <div class="mBtns tzBtns">${many ? '<button class="cbtn tzArr" id="tzPrev" aria-label="上一件">‹</button>' : ''}<button class="cbtn go" id="tzBack">回背包</button>${many ? '<button class="cbtn tzArr" id="tzNext" aria-label="下一件">›</button>' : ''}</div>`);
@@ -1354,12 +1355,16 @@
     $('#bdgOk').onclick = () => { A.pop(); closeModal(); };
   }
   // 沒遇過的奇遇：從出現條件寫一句提示
+  // 季節限定的奇遇：山和時段跟著季節（SX.SEASONS）走，提示也要寫出季節
   function encHint(e){
-    const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time, out = [];
+    const w = e.where || {}, s = e.season && SX.SEASON[e.season], ws = e.wx || w.wx, out = [];
+    const both = (a, b) => a && b ? a.filter(x => b.includes(x)) : a || b;   // 奇遇自己和季節都有限制：兩邊都符合才遇得到
+    const ts = both(e.time || w.time, s && s.time), mts = both(w.mountains, s && s.mountains);
     const TN = { dawn:'清晨', day:'白天', dusk:'黃昏', night:'夜晚' }, WN = { clear:'晴天', cloud:'多雲', fog:'起霧', rain:'下雨' };
+    if (s) out.push(`${s.name}（${mdText(s.from)}～${mdText(s.to)}）`);
     if (ts) out.push('只在' + ts.map(x => TN[x] || x).join('或'));
     if (ws) out.push(ws.map(x => WN[x] || x).join('或') + '時');
-    if (w.mountains) { const ms = w.mountains.map(id => SX.M[id]).filter(Boolean);
+    if (mts) { const ms = mts.map(id => SX.M[id]).filter(Boolean);
       out.push(ms.length > 2 && ms.every(m => m.alt >= 2000) ? '高山上' : ms.length > 3 ? `${ms[0].name}等 ${ms.length} 座山` : ms.map(m => m.name).join('、')); }
     if (w.minFrac >= 0.85) out.push('山頂附近'); else if (w.minFrac >= 0.5) out.push('後半段的路上'); else if (w.minFrac >= 0.3) out.push('走了一段路之後'); else if (w.maxFrac != null && w.maxFrac <= 0.3) out.push('登山口附近');
     return out.length ? out.join('・') : '哪座山都可能遇到';
