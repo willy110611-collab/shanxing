@@ -1128,16 +1128,18 @@ function drawBird(x, y, u, s, t){
   c.strokeStyle = '#e2463a'; c.lineWidth = 2.2; seg(c, -2.5, -8, -3.5, -1); seg(c, 2.5, -8, 3.5, -1);   // 紅腳
   c.restore();
 }
-// 走路循環的第幾格（四格 = 一個完整步伐循環）；停下來時用第一格
-function walkFrame(){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * 4) : 0; }
+// 走路循環的第幾格（n 格 = 一個完整步伐循環，四格或八格看美術圖）；停下來時用第一格
+function walkFrame(n){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * (n || 4)) : 0; }
 // 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
 // fl：換衣服色調的濾鏡（隊友、廣場上的山友），自己是 undefined
 function heroArt(c, s, t, fl){
   if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, 112, false, fl);
   if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, 115, false, fl);
   if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, 196, false, fl);   // 站上山頂：舉起登山杖歡呼
-  const walk = isRain && ART.get('hiker_rain_walk') ? 'hiker_rain_walk' : 'hiker_walk';   // 下雨天穿黃色雨衣
-  return ART.drawFrame(c, walk, walkFrame(), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176, false, fl);
+  const w8 = id => ART.get(id + '8') ? id + '8' : id;   // 有八格版就用八格（走路比較順）
+  const walk = isRain && (ART.get('hiker_rain_walk8') || ART.get('hiker_rain_walk')) ? w8('hiker_rain_walk') : w8('hiker_walk');   // 下雨天穿黃色雨衣
+  const e = ART.get(walk);
+  return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, 176, false, fl);
 }
 const tintFilter = k => 'hue-rotate(' + (150 + k % 3 * 60) + 'deg)';   // 美術圖版本：隊友換個衣服色調，跟自己分得出來
 function drawHero(s, t){

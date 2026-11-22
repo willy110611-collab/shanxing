@@ -447,3 +447,12 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | 檔名 | 場景 |
 |---|---|
 | `scene_descend` | The hiker (主角設定) and the shiba seen from behind, walking down old stone steps toward a forest trailhead in warm late-afternoon light, the mountain glowing gold behind them, peaceful and a little wistful |
+
+## 第 16 批：走路更順（八格走路動作，放進 `01.風格`，跟原本 hiker_walk 同一個資料夾）
+
+原本走路只有四格，看起來一頓一頓的。這批改成八格：**兩排、每排四格**（上排第 1～4 格，下排第 5～8 格），八格接起來剛好是完整的一步左腳、一步右腳。到了之後遊戲會自動改用八格版，四格版留著當備用。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `hiker_walk8` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind, slightly from above, full body, shown as an **8-frame walking cycle sprite sheet arranged in 2 rows of 4** (frames 1–4 on the top row, 5–8 on the bottom row, read left to right), evenly spaced in a grid, same size and same foot baseline in every frame. One full stride: left foot contact → passing → right foot contact → passing, with the trekking poles swinging opposite to the legs, the backpack bouncing slightly, natural uphill walking posture leaning a little forward. |
+| `hiker_rain_walk8` | 16:9 | 洋紅底。Same as hiker_walk8 (same grid, same 8 poses, same size and baseline), but the hiker wears a yellow rain poncho over the backpack. |

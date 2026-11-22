@@ -51,13 +51,14 @@ function prep(name, img){
   if (opaque) { const e = { img:c, w:c.width, h:c.height, frames:[{ x:0, y:0, w:c.width, h:c.height }], opaque }; return toBitmap(c).then(b => { e.img = b; return e; }); }
   const e = { img:c, w:c.width, h:c.height, frames:[], opaque };
   const px = despill(g, c.width, c.height);
-  const n = /_walk$/.test(name.id) ? 4 : 1, cw = Math.floor(c.width / n);
-  const fr = [];
-  for (let i = 0; i < n; i++) fr.push(bounds(px, c.width, i * cw, 0, cw, c.height) || { x:i * cw, y:0, w:cw, h:c.height });
+  // 走路連續動作：_walk 一排四格；_walk8 兩排、每排四格（共八格，由左到右、上排再下排）
+  const cols = /_walk8?$/.test(name.id) ? 4 : 1, rows = /_walk8$/.test(name.id) ? 2 : 1, n = cols * rows;
+  const cw = Math.floor(c.width / cols), ch = Math.floor(c.height / rows), fr = [];
+  for (let i = 0; i < n; i++) { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch; fr.push(bounds(px, c.width, x0, y0, cw, ch) || { x:x0, y:y0, w:cw, h:ch }); }
   // 多格動作：每格用同樣的寬高（取最大），以各自的腳底中心對齊，走路時才不會忽大忽小
   if (n > 1) {
     const W = Math.max.apply(null, fr.map(f => f.w)), H = Math.max.apply(null, fr.map(f => f.h));
-    fr.forEach((f, i) => { const cx = f.x + f.w / 2, by = f.y + f.h; f.x = Math.round(clampN(cx - W / 2, i * cw, (i + 1) * cw - W)); f.y = Math.max(0, by - H); f.w = W; f.h = by - f.y; });
+    fr.forEach((f, i) => { const x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * ch, cx = f.x + f.w / 2, by = f.y + f.h; f.x = Math.round(clampN(cx - W / 2, x0, x0 + cw - W)); f.y = Math.max(y0, by - H); f.w = W; f.h = by - f.y; });
   }
   e.frames = fr;
   return toBitmap(c).then(b => { e.img = b; return e; });
