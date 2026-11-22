@@ -267,25 +267,15 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 |---|---|---|
 | `hiker_wave` `hiker_bow` `hiker_cheer` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind: waving one hand / bowing politely / jumping with both arms up cheering. |
 
-## 放進 `09.廟宇`（新資料夾：象山福德祠）
-
-| 檔名 | 比例 | 內容 |
-|---|---|---|
-| `temple_bg` | 9:16 | A small cozy Taiwanese Earth God shrine (土地公廟) on a mountain trail, front view, red tile roof with curved ridges, red lanterns, a stone incense burner in front, trees around, warm afternoon light. No text on plaques. 不用去背。 |
-| `bwa_flat` / `bwa_round` | 1:1 | 洋紅底。One red wooden divination block (moon block, 筊杯): flat side up / round side up. |
-| `lot_tube` | 9:16 | 洋紅底。A bamboo fortune-stick tube full of wooden sticks. |
-| `lot_paper` | 9:16 | 洋紅底。A blank vertical fortune paper (pale red-cream paper with a thin border), no text. |
-| `incense` | 9:16 | 洋紅底。Three lit incense sticks in a small bronze incense burner with soft smoke curling up. |
-
-## 放進 `10.集印帳`（新資料夾）
+## 放進 `09.集印帳`（新資料夾）
 
 | 檔名 | 比例 | 內容 |
 |---|---|---|
 | `stamp_xiangshan` `stamp_qixing` `stamp_guanyin` `stamp_matcha` `stamp_alishan` `stamp_taiping` `stamp_hehuan` `stamp_jiaming` `stamp_xueshan` `stamp_yushan` | 1:1 | 洋紅底。Ten round red-ink rubber stamp impressions (like Taiwanese trail commemorative stamps), each showing the silhouette of that mountain's famous view (see 登頂插圖 above), slightly uneven ink, **no text**. |
 
-## 放進 `04.背包`、`11.小遊戲`
+## 放進 `04.背包`、`10.小遊戲`
 
 | 檔名 | 比例 | 內容 |
 |---|---|---|
-| `stone_a` `stone_b` `stone_c` | 1:1 | 洋紅底。Three different flat river stones for stacking (round grey / oval brown-grey / small pale), seen from the side. 放 `11.小遊戲` |
+| `stone_a` `stone_b` `stone_c` | 1:1 | 洋紅底。Three different flat river stones for stacking (round grey / oval brown-grey / small pale), seen from the side. 放 `10.小遊戲` |
 | `note_paper` | 1:1 | 洋紅底。A small blank wish note paper tied with string. 放 `04.背包` |
