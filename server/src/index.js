@@ -151,7 +151,9 @@ export default {
         const room = (url.searchParams.get('room') || 'lobby').replace(/[^a-z0-9:_-]/gi, '').slice(0, 48);
         if (room.startsWith('party:')) {
           const inv = await env.DB.prepare('SELECT * FROM invites WHERE id = ? AND status = \'accepted\'').bind(room.slice(6)).first();
-          if (!inv || (inv.host !== me.id && inv.guest !== me.id)) return E(env, req, 'forbidden', 403);
+          // 一隊＝同一位邀請人、同一座山已接受的邀請：同隊的其他隊友也能進這個房間（三人以上一起爬）
+          const mate = inv && inv.host !== me.id && inv.guest !== me.id && await env.DB.prepare('SELECT 1 FROM invites WHERE guest = ? AND status = \'accepted\' AND host = ? AND mountain = ?').bind(me.id, inv.host, inv.mountain).first();
+          if (!inv || (inv.host !== me.id && inv.guest !== me.id && !mate)) return E(env, req, 'forbidden', 403);
         } else if (room !== 'lobby') return E(env, req, 'bad room');
         const qp = url.searchParams.get('pet'), pet = qp !== null ? (/^[a-z]{1,16}$/.test(qp) ? qp : null) : me.pet;   // 現在帶著的寵物（廣場上跟在身邊）
         const fwd = () => { const f = new Request(req.url, req); f.headers.set('X-Player', JSON.stringify({ id: me.id, name: me.name, pet })); return f; };
@@ -246,7 +248,8 @@ export default {
       if (path === '/api/invites' && M === 'GET') {
         const r = await env.DB.prepare(`SELECT i.*, h.name AS host_name, g.name AS guest_name FROM invites i
           JOIN players h ON h.id = i.host JOIN players g ON g.id = i.guest
-          WHERE (i.guest = ? OR i.host = ?) AND i.created > ? ORDER BY i.created DESC LIMIT 20`).bind(me.id, me.id, now() - 7 * 864e5).all();
+          WHERE (i.guest = ? OR i.host = ? OR (i.status = 'accepted' AND EXISTS (SELECT 1 FROM invites j WHERE j.guest = ? AND j.status = 'accepted' AND j.host = i.host AND j.mountain = i.mountain)))
+          AND i.created > ? ORDER BY i.created DESC LIMIT 20`).bind(me.id, me.id, me.id, now() - 7 * 864e5).all();   // 也列出同隊其他隊友接受的邀請：被邀的人才知道隊伍有幾個人
         return J(env, req, { invites: r.results });
       }
       if (path === '/api/invites' && M === 'POST') {
