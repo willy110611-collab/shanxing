@@ -104,6 +104,7 @@ SX.LINES = {
   tired:['先瞇一下…','呼…休息一下下'],
   fog:['霧好濃，像在雲裡散步','看不到前面，那就看腳下'],
   snow:['下雪了！呼出來的氣都是白的','雪踩起來沙沙響','雪花落在帽子上了','手好冰，等下喝口熱茶'],
+  seg:['到了！這一小段走得很棒','打個勾，下一站也慢慢走','原來走到這裡只要一下下','停一下看看，風景剛剛好','小小的一步，也是往山頂的一步'],   // 抵達「這次的小目標」時說的話
 };
 
 // 原創籤詩：四句＋白話＋台味鼓勵
@@ -642,19 +643,21 @@ SX.BADGE_TIERS = [
   { name:'金', color:'#e8b730' },
   { name:'白金', color:'#9fd8e8' },
 ];
+// 入門級：徽章可以多寫 starter（比銅還低的一級），第一次上山（象山走一趟）就拿得到，徽章頁才不會整片灰灰的；存檔另外記，不影響銅銀金白金
+SX.BADGE_STARTER = { name:'入門', color:'#8fbf7a' };
 SX.BADGES = [
-  { id:'walk',    name:'步行里程',   glyph:'步', stat:'walked',      unit:'km', tiers:[40, 250, 600, 2000], desc:'累積走過的路' },
-  { id:'summit',  name:'登頂次數',   glyph:'頂', stat:'summits',     unit:'次', tiers:[10, 50, 120, 400], desc:'所有山加起來的登頂次數' },
+  { id:'walk',    name:'步行里程',   glyph:'步', stat:'walked',      unit:'km', starter:1, tiers:[40, 250, 600, 2000], desc:'累積走過的路' },
+  { id:'summit',  name:'登頂次數',   glyph:'頂', stat:'summits',     unit:'次', starter:1, tiers:[10, 50, 120, 400], desc:'所有山加起來的登頂次數' },
   { id:'fav',     name:'老朋友',     glyph:'山', stat:'favMountain', unit:'次', tiers:[3, 15, 40, 120], desc:'同一座山登頂的次數（算最常去的那座）' },
   { id:'streak',  name:'連續上山',   glyph:'日', stat:'bestStreak',  unit:'天', tiers:[7, 30, 100, 365], desc:'連續上山的天數（算最長的一次）' },
   { id:'night',   name:'夜登',       glyph:'夜', stat:'night',       unit:'次', tiers:[3, 15, 40, 120], desc:'在夜晚登頂的次數' },
   { id:'rain',    name:'雨中行',     glyph:'雨', stat:'rain',        unit:'次', tiers:[2, 8, 20, 60], desc:'在下雨天登頂的次數' },
   { id:'fog',     name:'霧中行',     glyph:'霧', stat:'fogTop',      unit:'次', tiers:[2, 10, 25, 80], desc:'在起霧時登頂的次數' },
   { id:'snow',    name:'雪中行',     glyph:'雪', stat:'snowTop',     unit:'次', tiers:[1, 5, 15, 40], desc:'在下雪時登頂的次數（只有雪季的高山會下雪）' },
-  { id:'rest',    name:'長椅常客',   glyph:'憩', stat:'rests',       unit:'次', tiers:[10, 60, 150, 500], desc:'在長椅或觀景台休息的次數' },
-  { id:'cairn',   name:'疊石人',     glyph:'石', stat:'cairns',      unit:'座', tiers:[5, 30, 80, 250], desc:'疊出的許願石堆' },
-  { id:'treasure',name:'寶物收藏',   glyph:'寶', stat:'treasureKinds', unit:'種', tiers:[10, 18, 'all'], desc:'蒐集到的寶物種類' },
-  { id:'enc',     name:'奇遇見聞',   glyph:'遇', stat:'encKinds',    unit:'種', tiers:[10, 20, 32, 'all'], desc:'遇過的奇遇種類' },
+  { id:'rest',    name:'長椅常客',   glyph:'憩', stat:'rests',       unit:'次', starter:1, tiers:[10, 60, 150, 500], desc:'在長椅或觀景台休息的次數' },
+  { id:'cairn',   name:'疊石人',     glyph:'石', stat:'cairns',      unit:'座', starter:1, tiers:[5, 30, 80, 250], desc:'疊出的許願石堆' },
+  { id:'treasure',name:'寶物收藏',   glyph:'寶', stat:'treasureKinds', unit:'種', starter:3, tiers:[10, 18, 'all'], desc:'蒐集到的寶物種類' },
+  { id:'enc',     name:'奇遇見聞',   glyph:'遇', stat:'encKinds',    unit:'種', starter:1, tiers:[10, 20, 32, 'all'], desc:'遇過的奇遇種類' },
   { id:'stamp',   name:'集印帳',     glyph:'印', stat:'stamps',      unit:'座', tiers:[3, 6, 'all'], desc:'集印帳蓋到章的山' },
   // 山群徽章：stat 'groupPeaks' 算 group 這個山群登頂過幾座（'all' 就是山群裡全部的山）
   { id:'g_hehuan', name:'合歡群峰全制霸', glyph:'歡', stat:'groupPeaks', group:'hehuan', unit:'座', tiers:[1, 3, 'all'], desc:'合歡群峰五座百岳，登頂過幾座' },
