@@ -19,7 +19,7 @@
 
   // ───────── 存檔 ─────────
   // 資料形狀先照之後接後端的樣子放：userPhotos、cairns、bag、quests 都是可以直接同步的清單／對照表
-  const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[],
+  const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[], bagLog:{},   // bagLog：寶物 id → { first 第一次拿到的日期, mt 在哪座山, last 最近一次 }
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{} },
     set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false } });
@@ -35,7 +35,7 @@
       try { const ri = JSON.parse(localStorage.getItem(KEY_IMG) || 'null'); if (ri) { if (Array.isArray(ri.photos)) SV.photos = ri.photos; if (Array.isArray(ri.userPhotos)) SV.userPhotos = ri.userPhotos; imgDirty = false; } } catch(e){}
       SV.set = Object.assign(b.set, o.set); SV.stats = Object.assign(b.stats, o.stats);
       ['photos','lots','titles','pets','userPhotos'].forEach(k => { if (!Array.isArray(SV[k])) SV[k] = b[k]; });
-      ['prog','done','stamps','bag','quests','cairns'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
+      ['prog','done','stamps','bag','bagLog','quests','cairns'].forEach(k => { if (!SV[k] || typeof SV[k] !== 'object') SV[k] = {}; });
       if (!SV.stats.magpie || typeof SV.stats.magpie !== 'object') SV.stats.magpie = {};
       if (!SV.pets.includes('shiba')) SV.pets.unshift('shiba');
       if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
@@ -449,7 +449,7 @@
     if (u('ui_close')) css.push(`.rc-x{background:url("${u('ui_close')}") center/contain no-repeat!important;border:0!important;box-shadow:none!important;color:transparent!important;font-size:0!important}`);
     if (u('ui_bubble')) css.push(`.bubble{background:none!important;border-style:solid!important;border-width:12px 16px 20px!important;border-color:transparent!important;border-image:url("${u('ui_bubble')}") 60 70 90 70 fill / 12px 16px 20px stretch!important;box-shadow:none!important;padding:0 2px!important}.bubble::after{display:none!important}`);
     if (u('ui_page')) css.push(`#scrAlbum,#scrSettings,#scrLobby{background:url("${u('ui_page')}") center/cover no-repeat!important}`);
-    for (const k of ['common', 'rare', 'legend']) if (u('rarity_' + k)) css.push(`.bag .slot.rar-${k}{background:url("${u('rarity_' + k)}") center/100% 100% no-repeat!important;border-color:transparent!important;box-shadow:none!important}`);
+    for (const k of ['common', 'rare', 'legend']) if (u('rarity_' + k)) css.push(`.bag .slot.rar-${k},.tzFrame.rar-${k}{background:url("${u('rarity_' + k)}") center/100% 100% no-repeat!important;border-color:transparent!important;box-shadow:none!important}`);
     if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
     if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }
   });
@@ -471,6 +471,8 @@
   function gainTreasure(tr, mode){
     if (!tr) return;
     SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1;
+    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
+    SV.bagLog[tr.id].last = today();
     if (M && tr.name.includes('紀念章')) SV.stats.magpie[M.id] = 1;
     if (mode === 'show' && !rewarding) daily('treasure');
     save();
@@ -703,7 +705,7 @@
   }
 
   // ───────── 背包（寶物、稱號、任務）─────────
-  function openBag(){
+  function openBag(back){   // back：從寶物放大卡回來時，捲回原本的位置
     const have = SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
     modal(`<h3>背包</h3>
       ${SV.titles.length ? `<div class="grp" style="margin-top:0">稱號（點一個掛在身上）</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${SV.titles.map(x => `<button class="chip" data-title="${x}"${SV.title === x ? ' style="background:#ffe08a"' : ''}>${x}</button>`).join('')}</div>` : ''}
@@ -713,9 +715,56 @@
       <div class="grp">隱藏任務 ${Object.keys(SV.quests).length} / ${SX.QUESTS.length}</div>
       <ul class="quest">${SX.QUESTS.map(q => SV.quests[q.id] ? `<li class="done"><span>${q.name}<small>${q.desc}</small></span></li>` : `<li class="hid"><span>？？？<small>${q.hint}</small></span></li>`).join('')}</ul>
       <div class="mBtns" style="margin-top:14px"><button class="cbtn go" id="bagOk">關上背包</button></div>`);
-    $$('#mCard [data-tr]').forEach(b => b.onclick = () => { const x = SX.TREASURES.find(k => k.id === b.dataset.tr); A.pop(); $('#bagInfo').innerHTML = `<span class="chip" style="background:${RAR_COL[x.rarity] || '#fff'}">${x.rarity}</span>　${x.name}<br>${x.desc}`; });
+    $$('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop); });
     $$('#mCard [data-title]').forEach(b => b.onclick = () => { A.pop(); SV.title = b.dataset.title; save(); $$('#mCard [data-title]').forEach(k => { k.style.background = k === b ? '#ffe08a' : ''; }); });
     $('#bagOk').onclick = () => { A.pop(); closeModal(); };
+    if (typeof back === 'number') $('#mCard').scrollTop = back;
+  }
+
+  // ───────── 寶物放大卡（背包裡點寶物）─────────
+  // 大圖＋稀有度框、名稱、說明、數量、第一次拿到的日期和山；稀有／傳說有流光和跟著手指的傾斜；左右滑或箭頭換下一件
+  function treasureCard(id, bagScroll){
+    const owned = SX.TREASURES.filter(x => SV.bag[x.id] > 0);
+    let i = owned.findIndex(x => x.id === id);
+    if (i < 0) return;
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const show = dir => {
+      const tr = owned[i], log = SV.bagLog[tr.id], mt = log && log.mt && SX.M[log.mt];
+      const fancy = tr.rarity !== '普通' && !calm, many = owned.length > 1;
+      modal(`<h3>${tr.name}</h3>
+        <div class="tzWrap${dir ? (dir > 0 ? ' inR' : ' inL') : ''}" id="tzWrap">
+          <div class="tzStage${fancy ? ' fancy' : ''}${tr.rarity === '傳說' ? ' leg' : ''}" id="tzStage">
+            <div class="tzFrame ${RAR_CLS[tr.rarity] || ''}" style="${RAR_BG[tr.rarity] || ''}">${trSvg(tr)}${fancy ? '<i class="tzSheen"></i>' : ''}</div>
+          </div>
+        </div>
+        <p class="tzTags"><span class="chip" style="background:${RAR_COL[tr.rarity] || '#fff'}">${tr.rarity}</span><span class="chip">× ${SV.bag[tr.id]}</span>${many ? `<small>${i + 1} / ${owned.length}</small>` : ''}</p>
+        <p class="tzDesc">${tr.desc}</p>
+        ${log && log.first ? `<p class="tzFirst">第一次拿到：${log.first}${mt ? `・${mt.name}` : ''}</p>` : ''}
+        <div class="mBtns tzBtns">${many ? '<button class="cbtn tzArr" id="tzPrev" aria-label="上一件">‹</button>' : ''}<button class="cbtn go" id="tzBack">回背包</button>${many ? '<button class="cbtn tzArr" id="tzNext" aria-label="下一件">›</button>' : ''}</div>`);
+      const wrap = $('#tzWrap'), stage = $('#tzStage');
+      const step = d => { A.pop(); i = (i + d + owned.length) % owned.length; show(d); };
+      const tilt = e => {   // 手指在卡片上的位置 → 卡片往那邊傾、流光跟著移
+        const r = stage.getBoundingClientRect(), px = clamp((e.clientX - r.left) / r.width, 0, 1), py = clamp((e.clientY - r.top) / r.height, 0, 1);
+        stage.classList.add('tilting');
+        stage.style.setProperty('--rx', ((0.5 - py) * 18).toFixed(1) + 'deg');
+        stage.style.setProperty('--ry', ((px - 0.5) * 22).toFixed(1) + 'deg');
+        stage.style.setProperty('--sx', (100 - px * 100).toFixed(0) + '%');
+      };
+      const untilt = () => { stage.classList.remove('tilting'); ['--rx', '--ry', '--sx'].forEach(k => stage.style.removeProperty(k)); };
+      let p0 = null;
+      wrap.onpointerdown = e => { p0 = { x:e.clientX, y:e.clientY }; try { wrap.setPointerCapture(e.pointerId); } catch(err){} if (fancy) tilt(e); };
+      wrap.onpointermove = e => { if (fancy && (p0 || e.pointerType === 'mouse')) tilt(e); };
+      wrap.onpointerup = e => {
+        if (!p0) return;
+        const dx = e.clientX - p0.x, dy = e.clientY - p0.y; p0 = null; untilt();
+        if (many && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) step(dx < 0 ? 1 : -1);   // 往左滑看下一件
+      };
+      wrap.onpointercancel = () => { p0 = null; untilt(); };
+      wrap.onpointerleave = () => { if (!p0) untilt(); };
+      if (many) { $('#tzPrev').onclick = () => step(-1); $('#tzNext').onclick = () => step(1); }
+      $('#tzBack').onclick = () => { A.pop(); openBag(bagScroll); };
+    };
+    show(0);
   }
 
   // ───────── 每日任務與連續上山天數 ─────────
