@@ -171,3 +171,121 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | 檔名 | 比例 | 內容 |
 |---|---|---|
 | `plaza_bg` | 9:16 | A cozy Taiwan mountain trailhead plaza seen from a high angle, looking slightly down: the bottom two-thirds of the picture is an open, empty flagstone plaza floor receding into the distance (no people, no animals, nothing standing in the middle). At the far edge of the plaza: a small wooden mountain hut with warm lit windows on the left, a blank wooden trailhead sign arch in the center where the trail enters the forest, a wooden notice board on the right. Taiwan hemlock trees on both sides, layered blue-green mountains and a little cloud sea in the background, soft golden morning light. |
+
+---
+
+# 第九批：補圖（2026-11-22 整理）
+
+畫面上還有這些東西是程式畫的，跟美術圖放在一起會不搭。**資料夾照現在的分類放**（沒有的資料夾就新建）。
+寫「洋紅底」的照共通規則去背；畫人物的照主角設定。**全部不要有文字**（字由遊戲自己寫上去）。
+
+## 放進 `02.素材`（步道上的東西）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `tree_broad` | 9:16 | 洋紅底。One medium broadleaf tree (Taiwan camphor / beech), round full crown of leaves, visible trunk and roots, whole tree from roots to top. |
+| `tree_big` | 9:16 | 洋紅底。One huge ancient Taiwan red cypress "sacred tree" with a massive gnarled trunk covered in moss and ferns, whole tree from roots to top. |
+| `tree_sakura` | 9:16 | 洋紅底。One Taiwan mountain cherry tree in full bloom (deep pink flowers), whole tree from roots to top. |
+| `tree_pine_snow` | 9:16 | 洋紅底。The same Taiwan hemlock / fir tree as tree_pine, but covered with fresh snow on every branch. |
+| `grass_tuft` | 1:1 | 洋紅底。A small low clump of wild mountain grass, very simple, ankle height. |
+| `treasure_box` | 1:1 | 洋紅底。A small old wooden treasure box with brass corners half hidden in grass, a soft golden glow coming out of the lid gap. |
+| `summit_marker` | 9:16 | 洋紅底。A Taiwan mountain summit triangulation stone pillar (square white-grey stone post with a red top band), blank face with no text, a few small rocks around its base. |
+| `hiker_rain_walk` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind wearing a yellow rain poncho over the backpack, **4-frame walking cycle sprite sheet** like hiker_walk, same size and baseline in every frame. |
+| `hiker_summit` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind standing on a summit rock, both trekking poles raised high in celebration. |
+
+## 放進 `03.台灣立體微縮地圖`
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `map_pin` | 1:1 | 洋紅底。A small wooden signpost pin stuck in the ground: one short post with a blank horizontal wooden name board and a tiny red cloth flag on top, no text. |
+| `map_cloud` | 16:9 | 洋紅底。One soft fluffy white cloud puff, cel-shaded, seen slightly from above, for drifting over a map. |
+
+## 放進 `05.寵物`（坐著的樣子，主角休息時用）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `pet_bear_sit` `pet_leopardcat_sit` `pet_magpie_sit` | 1:1 | 洋紅底。Each pet (same design as its walk sheet) seen from behind, sitting calmly and looking at the view. |
+
+## 放進 `06.介面`
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `ui_page` | 9:16 | Full-page background for menu screens (album, settings, lobby list): a warm wooden desk with a soft parchment sheet, gentle vignette, very calm and plain in the middle so text is readable. 不用去背。 |
+| `ui_tab` / `ui_tab_on` | 16:9 | 洋紅底。A small blank wooden tab plank (light wood) / the same plank in darker warm wood with a slight glow (selected). |
+| `ui_close` | 1:1 | 洋紅底。A small round wooden button with a carved X mark. |
+| `ui_toggle_on` / `ui_toggle_off` | 16:9 | 洋紅底。A wooden slide switch: knob on the right with a green leaf inlay (on) / knob on the left, plain (off). |
+| `ui_ribbon` | 16:9 | 洋紅底。A blank cloth ribbon banner for window titles, warm cream with brown stitched edges, no text. |
+| `ui_bubble` | 16:9 | 洋紅底。A blank hand-drawn speech bubble (cream paper, brown ink outline, small tail at the bottom center). |
+| `wx_sun` `wx_cloud` `wx_rain` `wx_fog` `wx_snow` `wx_night` | 1:1 | 洋紅底。Six round weather icons in the same style as the other icons: sun / cloud / rain cloud / fog / snowflake / crescent moon with stars. |
+| `emo_wave` `emo_bow` `emo_jump` `emo_sit` `emo_cheer` | 1:1 | 洋紅底。Five small round emote icons: waving hand / bowing / sparkle jump / steaming cup (sit and rest) / party popper (cheer). |
+
+## 放進 `07.奇遇`（16:9，不用去背）
+
+| 檔名 | 場景 |
+|---|---|
+| `enc_e01` | A friendly hiker coming down the trail smiling and cheering the hiker on |
+| `enc_e07` | A kind man sharing slices of watermelon at a trail rest spot |
+| `enc_e11` | The hiker crouching to retie a loose bootlace, birds in the trees |
+| `enc_e12` | A mountain hut keeper auntie airing quilts, waving with a cup of hot tea |
+| `enc_e15` | A butterfly resting on the hiker's backpack |
+| `enc_e16` | Looking up at swaying leaves, trying to find a singing bird |
+| `enc_e17` | Sudden rain on the trail, the hiker pulling out a rain poncho, raindrops on leaves |
+| `enc_e18` | A Taiwan blue magpie flying overhead with its long tail |
+| `enc_e19` | A small stone cairn left by other hikers beside the trail |
+| `enc_e20` | Strong wind on a summit almost blowing the hiker's hat away |
+| `enc_e21` | A little kid running on the trail with the mother calling from behind |
+| `enc_e22` | A big flat rock beside a clear mountain stream, perfect for resting |
+| `enc_e23` | A confused foreign backpacker holding a map, asking for directions |
+| `enc_e24` | Golden evening light rising from the valley over a grassy slope |
+| `enc_e25` | Fireflies glowing in the grass along a night trail |
+| `enc_e26` | Cherry blossom petals falling on the hiker's shoulder |
+| `enc_e27` | Several hikers working together to move fallen rocks off the trail |
+| `enc_e28` | The hiker putting away a phone with no signal, listening to the mountain |
+| `enc_e29` | Clouds parting to reveal a clear distant mountain ridge |
+| `enc_e30` | An old postcard blown onto the trail side by the wind (blank back, no readable text) |
+| `enc_e31` | The hiker slipping and grabbing a tree trunk, a little scared |
+| `enc_e32` | A grandpa playing Chinese chess in a trail pavilion, inviting the hiker to sit |
+
+## 放進 `07.奇遇`：登頂插圖（16:9，不用去背，抵達山頂時顯示）
+
+| 檔名 | 場景 |
+|---|---|
+| `summit_xiangshan` | View from Elephant Mountain over the Taipei city skyline and Taipei 101 at sunset |
+| `summit_qixing` | Qixing Mountain summit, silver grass, volcanic fumaroles steaming below, Taipei basin far away |
+| `summit_guanyin` | Guanyin Mountain summit overlooking the Tamsui river mouth and the sea |
+| `summit_matcha` | "Matcha Mountain" (Shengmu trail) bright green grassy ridge like a matcha ice cream, cloudy sea view |
+| `summit_alishan` | Alishan sunrise over a sea of clouds with Yushan range silhouettes |
+| `summit_taiping` | Taipingshan misty forest with old railway, mossy trees |
+| `summit_hehuan` | Hehuan Mountain wide dwarf-bamboo grassland ridges under a deep blue sky |
+| `summit_jiaming` | Jiaming Lake, a small deep-blue oval lake ("angel's tear") among grassy alpine slopes |
+| `summit_xueshan` | Xueshan main peak with the glacial cirque and rugged rocky ridges |
+| `summit_yushan` | Yushan main peak summit at dawn, rocky top, endless sea of clouds |
+
+## 放進 `08.登山口廣場`
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `hiker_wave` `hiker_bow` `hiker_cheer` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind: waving one hand / bowing politely / jumping with both arms up cheering. |
+
+## 放進 `09.廟宇`（新資料夾：象山福德祠）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `temple_bg` | 9:16 | A small cozy Taiwanese Earth God shrine (土地公廟) on a mountain trail, front view, red tile roof with curved ridges, red lanterns, a stone incense burner in front, trees around, warm afternoon light. No text on plaques. 不用去背。 |
+| `bwa_flat` / `bwa_round` | 1:1 | 洋紅底。One red wooden divination block (moon block, 筊杯): flat side up / round side up. |
+| `lot_tube` | 9:16 | 洋紅底。A bamboo fortune-stick tube full of wooden sticks. |
+| `lot_paper` | 9:16 | 洋紅底。A blank vertical fortune paper (pale red-cream paper with a thin border), no text. |
+| `incense` | 9:16 | 洋紅底。Three lit incense sticks in a small bronze incense burner with soft smoke curling up. |
+
+## 放進 `10.集印帳`（新資料夾）
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `stamp_xiangshan` `stamp_qixing` `stamp_guanyin` `stamp_matcha` `stamp_alishan` `stamp_taiping` `stamp_hehuan` `stamp_jiaming` `stamp_xueshan` `stamp_yushan` | 1:1 | 洋紅底。Ten round red-ink rubber stamp impressions (like Taiwanese trail commemorative stamps), each showing the silhouette of that mountain's famous view (see 登頂插圖 above), slightly uneven ink, **no text**. |
+
+## 放進 `04.背包`、`11.小遊戲`
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `stone_a` `stone_b` `stone_c` | 1:1 | 洋紅底。Three different flat river stones for stacking (round grey / oval brown-grey / small pale), seen from the side. 放 `11.小遊戲` |
+| `note_paper` | 1:1 | 洋紅底。A small blank wish note paper tied with string. 放 `04.背包` |

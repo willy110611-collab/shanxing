@@ -527,7 +527,7 @@
     return '<div class="grid">' + list.map((p, i) => `<div class="pol" style="margin:4px 0 12px;transform:rotate(${(i % 3 - 1) * 1.5}deg)"><img src="${p.img}"><p>${p.by}・${Math.round(p.alt).toLocaleString('en-US')} m</p></div>`).join('') + '</div>';
   }
   function takePhoto(m, quiet, label, mark){
-    const img = SC.snapshot();
+    const img = SC.snapshot(m);
     const cap = label ? `${M.name}・${label}` : `${M.name}・${(m/1000).toFixed(1)} km`, wt = wxText(wx) || '晴';
     if (img) { SV.photos.push({ id:M.id, m:Math.round(m), alt:Math.round(altAt(M, m / M.dist)), img, cap, wx:wt, date:today() }); if (SV.photos.length > 60) SV.photos.shift(); imgDirty = true; save(); }
     if (quiet) return;
@@ -1048,6 +1048,7 @@
   // ───────── 設定 ─────────
   let gpsWatch = null, gpsPrev = null, gpsTotal = 0;
   const DEV_HASH = 'acac170fa5097902002a7e1e522ac96c9838c1193505835d2a990e0cd7917fef';
+  let devPeek = false, devTaps = 0, devTapT = 0;
   function renderSettings(){
     const s = SV.set;
     $('#setBody').innerHTML = `
@@ -1055,9 +1056,9 @@
         <input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.vol}"><p>腳步聲、鳥叫、雨聲和廟裡的鐘聲。</p></div>
       <div class="setRow"><h4>人在山上，定位加速<button class="tgl ${s.gps ? 'on' : ''}" id="sGps"></button></h4>
         <p>開啟後會用手機定位。你人真的在這座山附近（大約 3 公里內）的時候，真的走一公尺，遊戲裡就多走三公尺。不在山上就沒有作用。只有遊戲畫面開著的時候才會計算，比較耗電。</p></div>
-      <div class="setRow"><h4>操作小抄</h4>
+      <div class="setRow"><h4 id="tipsH">操作小抄</h4>
         <p>放著不管，角色會照山友實際紀錄的速度慢慢走，關掉遊戲也會繼續。長按畫面（或按住 W／↑）可以走快一點，但比較累。點長椅或觀景台可以休息、拍照、疊石頭。</p></div>
-      <div class="setRow"><h4>開發者選項</h4>
+      ${s.dev || devPeek ? `<div class="setRow"><h4>開發者選項</h4>
         ${s.dev ? `<p>已解鎖</p><div class="devBtns">
           <button class="cbtn sm" id="dFast">${s.devOn && s.fast ? '關閉' : '開啟'}快轉 ×20</button>
           <button class="cbtn sm" id="dNext">跳到下個 500m</button>
@@ -1072,8 +1073,9 @@
           <button class="cbtn sm" id="dReset">清除存檔</button>
           <button class="cbtn sm" id="dLock">鎖回去</button></div>`
         : `<div class="pw"><input id="pw" type="password" inputmode="numeric" placeholder="密碼"><button class="cbtn sm" id="pwOk">解鎖</button></div>`}
-      </div>
-      <p style="text-align:center;font-size:12px;color:#fff7e4;opacity:.8;margin-top:10px">山行小日子 v0.2・試玩版</p>`;
+      </div>` : ''}`;
+    // 開發者選項平常藏起來：連點「操作小抄」標題 7 下才出現（進入方式寫在 HANDOFF.md 管理手冊）
+    $('#tipsH').onclick = () => { const n = Date.now(); devTaps = n - devTapT < 600 ? devTaps + 1 : 1; devTapT = n; if (devTaps >= 7 && !devPeek) { devPeek = true; renderSettings(); } };
     $('#sSound').onclick = () => { s.sound = !s.sound; A.setOn(s.sound); save(); renderSettings(); if (s.sound) { A.unlock(); A.pop(); } };
     $('#sVol').oninput = e => { s.vol = +e.target.value; A.setVol(s.vol); save(); };
     $('#sVol').onchange = () => { A.unlock(); A.pop(); };
@@ -1092,7 +1094,7 @@
       $('#dReview').onclick = () => { if (SX.social) SX.social.review(); };
       $('#dReset').onclick = () => { if (confirm('確定要清除所有存檔嗎？')) { resetting = true; localStorage.removeItem(KEY); localStorage.removeItem(KEY_IMG); location.reload(); } };
       $('#dLock').onclick = () => { s.dev = false; s.devOn = false; s.fast = false; save(); renderSettings(); };
-    } else {
+    } else if (devPeek) {
       $('#pwOk').onclick = async () => {
         const v = $('#pw').value, h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v + 'sx'));
         const hex = [...new Uint8Array(h)].map(b => b.toString(16).padStart(2,'0')).join('');

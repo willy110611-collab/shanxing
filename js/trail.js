@@ -1247,9 +1247,13 @@ S.nearby = function(){
   return best ? { type:best.o.type, m:best.o.m, x:best.cx, y:best.top } : null;
 };
 S.charPos = function(){ return { x:hero.sx, y:hero.top }; };
-S.snapshot = function(){
-  if (!cv) return '';
+// 拍照：先用「這一刻的位置」重畫一格再取畫面（遊戲在背景補進度、或不在登山畫面時，畫布可能是空的 → 拍出全黑）
+S.snapshot = function(dist){
+  if (!cv || !curS) return '';
   try {
+    S.render(Object.assign({}, curS, { dt:0, dist:dist != null ? dist : curS.dist, frac:(dist != null ? dist : curS.dist) / total }));
+    const px = ctx.getImageData(cv.width >> 1, cv.height >> 2, 1, 1).data;
+    if (px[3] === 0) return '';        // 還是沒畫出東西：不要存一張黑照片
     const sw = cv.width, sh = cv.height, ch = Math.min(sh, Math.round(sw * 4 / 3));
     const bottom = Math.min(sh, Math.round((hero.sy + H * 0.07) * DPR)), top = clamp(bottom - ch, 0, sh - ch);
     const ow = Math.min(600, sw), oh = Math.round(ow * ch / sw), c = mk(ow, oh);
