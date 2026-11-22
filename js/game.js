@@ -21,8 +21,9 @@
   // 資料形狀先照之後接後端的樣子放：userPhotos、cairns、bag、quests 都是可以直接同步的清單／對照表
   const blank = () => ({ cur:null, prog:{}, done:{}, photos:[], stamps:{}, lots:[], bagLog:{},   // bagLog：寶物 id → { first 第一次拿到的日期, mt 在哪座山, last 最近一次 }
     bag:{}, quests:{}, titles:[], title:null, pets:['shiba'], pet:null, userPhotos:[], cairns:{}, unlockAll:false, daily:null,
+    born:null,   // 開始登山的日子（個人紀錄用）
     badges:{}, encSeen:{},   // 徽章：{ 徽章id: { t:等級, d:日期 } }；奇遇圖鑑：{ 奇遇id: { n:次數, first:第一次日期 } }
-    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, bestStreak:0 },
+    stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, bestStreak:0, walkSec:0 },   // walkSec：真的在走的秒數（個人紀錄用）
     set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false } });
   let SV = blank();
   const KEY_IMG = KEY + '-img';   // 照片很大，另存一個 key，只有照片變動時才重寫（避免每 10 秒序列化好幾 MB）
@@ -42,6 +43,8 @@
       if (SV.cur && !SX.M[SV.cur]) SV.cur = null;
     }
   } catch(e){ SV = blank(); }
+  // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
+  if (!SV.born) { const ds = [...Object.values(SV.stamps), ...Object.values(SV.bagLog).map(x => x && x.first), ...Object.values(SV.encSeen).map(x => x && x.first), ...SV.photos.map(p => p.date)].filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d)); SV.born = ds.length ? new Date(Math.min(...ds)).toLocaleDateString('zh-TW') : today(); }
   let saveWarned = false;
   const skipImg = function(k, v){ return (this === SV && (k === 'photos' || k === 'userPhotos')) ? undefined : v; };
   let resetting = false;
@@ -321,7 +324,7 @@
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
     if (p.stopAt != null && p.stopAt - 1 - p.dist <= d) { d = Math.max(0, p.stopAt - 1 - p.dist); stop = true; }
-    p.dist += d; if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) daily('walk', d); } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
+    p.dist += d; if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) { daily('walk', d); SV.stats.walkSec = (SV.stats.walkSec || 0) + dt; } } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
     p.temp = clamp(p.temp + ((boost ? 0.15 : 0) - chill(m, p.dist / m.dist, wx) * 0.08) * dt, 0, 100);
     if (stop) { p.rest = true; p.stopAt = null; p.stam = Math.max(0, p.stam); return d; }
     if (p.stam <= 0 || p.temp <= 0) { p.stam = Math.max(0, p.stam); p.sleep = true; }
@@ -985,6 +988,37 @@
     $('#dyX').onclick = () => { A.pop(); closeModal(); };
   }
 
+  // ───────── 個人紀錄（點地圖左上的標題、登山畫面的臉）─────────
+  function openProfile(){
+    // 走了多久：舊存檔還沒開始記秒數，用距離估（山友平均約每秒 0.7 公尺），前面加「約」
+    const S = SV.stats, km = (S.walked || 0) / 1000, est = (S.walked || 0) / 0.7, guess = (S.walkSec || 0) < est * 0.5, sec = guess ? est : S.walkSec;
+    const days = Math.max(1, Math.floor((Date.now() - new Date(SV.born)) / 864e5) + 1);
+    const tops = Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), peaks = SX.MOUNTAINS.filter(m => SV.done[m.id]);
+    const high = peaks.reduce((a, m) => Math.max(a, m.alt), 0);
+    const hm = sec >= 3600 ? `${Math.floor(sec / 3600)} 小時 ${Math.floor(sec % 3600 / 60)} 分` : `${Math.floor(sec / 60)} 分`;
+    const bTot = SX.BADGES.reduce((a, b) => a + b.tiers.length, 0), bGot = SX.BADGES.reduce((a, b) => a + (SV.badges[b.id] ? SV.badges[b.id].t + 1 : 0), 0);
+    const row = (name, n, tot) => `<div class="pfRow"><span>${name}</span><div class="dyBar"><i style="width:${tot ? Math.min(100, n / tot * 100) : 0}%"></i></div><b>${n} / ${tot}</b></div>`;
+    const who = (SX.social && SX.social.acct && SX.social.acct.name) || '山友';
+    modal(`<button class="rc-x mX" id="pfX" aria-label="關閉">✕</button><h3>我的山行紀錄</h3>
+      <div class="pfHead">${petSvg(SV.pet)}<div><b>${who}</b>${SV.title ? `<small>${SV.title}</small>` : ''}<small>${SV.born} 開始登山・第 ${days} 天</small></div></div>
+      <div class="ic-meta pfStats">
+        <div class="paper"><small>累積步行</small><b>${km >= 100 ? km.toFixed(0) : km.toFixed(1)} km</b></div>
+        <div class="paper"><small>走了多久</small><b>${guess && sec ? '約 ' : ''}${hm}</b></div>
+        <div class="paper"><small>登頂</small><b>${tops} 次・${peaks.length} 座山</b></div>
+        <div class="paper"><small>到過最高</small><b>${high ? high.toLocaleString('en-US') + ' m' : '還沒登頂'}</b></div>
+        <div class="paper"><small>連續上山</small><b>${(SV.daily && SV.daily.streak) || 0} 天</b></div>
+        <div class="paper"><small>最長連續</small><b>${Math.max(S.bestStreak || 0, (SV.daily && SV.daily.streak) || 0)} 天</b></div>
+      </div>
+      <div class="grp">成就</div>
+      ${row('徽章', bGot, bTot)}
+      ${row('寶物', SX.TREASURES.filter(x => SV.bag[x.id] > 0).length, SX.TREASURES.length)}
+      ${row('奇遇圖鑑', SX.ENCOUNTERS.filter(e => SV.encSeen[e.id]).length, SX.ENCOUNTERS.length)}
+      ${row('集印帳', SX.MOUNTAINS.filter(m => SV.stamps[m.id]).length, SX.MOUNTAINS.length)}
+      ${row('隱藏任務', Object.keys(SV.quests).length, SX.QUESTS.length)}
+      <p class="summitBig pfMore">拍了 ${SV.photos.length} 張照片・休息 ${S.rests || 0} 次・疊了 ${S.cairns || 0} 座石堆</p>`);
+    $('#pfX').onclick = () => { A.pop(); closeModal(); };
+  }
+
   // ───────── 登頂 ─────────
   function arrive(){
     arrived = true; st.dist = M.dist; st.fin = true; st.rest = false; st.stopAt = null;
@@ -1021,6 +1055,8 @@
 
   // ───────── HUD ─────────
   try { HUD.mount($('#hudRoot')); } catch(e){ console.error('hud', e); }
+  // 個人紀錄的入口：登山畫面點自己的臉、地圖點左上標題
+  document.addEventListener('click', e => { if (e.target.closest('.hudFace') || e.target.closest('#scrMap .logo')) { A.pop(); openProfile(); } });
   { const bag = $('.i-bag'); if (bag) bag.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'><path d='M10 7c0-6 10-6 10 0' fill='none' stroke='${INK}' stroke-width='2'/><rect x='6' y='6.5' width='18' height='17.5' rx='5' fill='#f0a444' stroke='${INK}' stroke-width='2'/><path d='M6 12h18' stroke='${INK}' stroke-width='1.4'/><rect x='10' y='14.5' width='10' height='6.5' rx='2' fill='#ffe1a0' stroke='${INK}' stroke-width='1.6'/></svg>`) + '")'; }
   function hudTick(){
     if (!st || !M) return;
