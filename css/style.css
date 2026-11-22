@@ -160,7 +160,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .gpsTag{position:absolute;right:12px;top:calc(124px + env(safe-area-inset-top));z-index:3;background:#fff1c0;color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:2px 10px;font-size:12px;display:none;box-shadow:0 2px 0 var(--ink)}
 .gpsTag.on{display:block}
 
-.dock{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:7px}
+.dock{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3;display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:7px}
 .dbtn{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12.5px;padding:5px 0;border-radius:12px 14px 11px 15px/14px 11px 15px 12px;transition:transform .08s;color:#fff7e4;text-shadow:var(--txo)}
 .dbtn:active{transform:scale(.92);background:rgba(58,42,32,.25)}
 .dbtn.on{background:rgba(255,231,168,.35);box-shadow:inset 0 0 0 2px var(--ink)}
@@ -645,3 +645,12 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 @keyframes ldRun{to{background-position:-224px -43px}}
 @keyframes ldHop{to{transform:translateY(-3px)}}
 @media (prefers-reduced-motion:reduce){.ldDog{animation:none}}
+
+/* 新手教學：地圖頂列設定旁的小「?」木牌（只有一個字，比其他按鈕窄）、登山畫面下方選單的「教學」圓圈、教學視窗的翻頁圓點 */
+.topBtns .cbtn.qBtn{min-width:0;padding-left:4px;padding-right:4px;font-weight:bold;font-size:16px}
+@media (max-width:460px){ .topBtns .cbtn.sm.qBtn{padding-left:3px;padding-right:3px;font-size:15px} }
+.dbtn i.i-help{width:24px;height:24px;margin:1px 0;border:2px solid var(--ink);border-radius:50%;background:#fff3d0;color:var(--ink);font-style:normal;font-weight:bold;font-size:15px;line-height:20px;text-align:center;text-shadow:none;filter:none}
+.tutL li span b{display:block;font-weight:normal;font-family:var(--fontT);font-size:15.5px;margin-bottom:1px}
+.tutDots{display:flex;justify-content:center;gap:7px;margin:12px 0 2px}
+.tutDots i{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);background:transparent}
+.tutDots i.on{background:#8fcf6e}

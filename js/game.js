@@ -96,7 +96,7 @@
     moodNow();
   }
   document.addEventListener('click', e => {
-    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else go(g.dataset.go); }
+    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else go(g.dataset.go); }
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
 
@@ -409,9 +409,22 @@
     SV.intro = today();
     if (SV.stats.walked > 0) return;
     modal(`<h3>開始登山囉</h3>
-      <ul class="introL"><li>放著不管，角色會自己走</li><li>關掉遊戲，也會繼續走</li><li>長按畫面，走快一點</li></ul>
+      <ul class="introL">${tutIntro().map(x => `<li>${x.t}</li>`).join('')}</ul>
       <div class="mBtns"><button class="cbtn go" id="inOk">好，出發！</button></div>`);
     $('#inOk').onclick = () => { A.pop(); closeModal(); };
+  }
+  // 新手教學（地圖頂列、登山畫面下方的「?」）：內容在 data.js 的 SX.TUTORIAL，一頁一個主題，左右翻頁
+  const tutIntro = () => SX.TUTORIAL.flatMap(p => p.items).filter(x => x.intro);
+  function openHelp(page = 0){
+    const P = SX.TUTORIAL, pg = P[page], last = page >= P.length - 1;
+    modal(`<button class="cbtn sm mBack" id="tuX">← 返回</button><h3>新手教學・${pg.title}</h3>
+      <ul class="awayL tutL">${pg.items.map(x => `<li>${awIco(x.icon)}<span><b>${x.h}</b>${x.t}</span></li>`).join('')}</ul>
+      <div class="tutDots">${P.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="mBtns">${page ? '<button class="cbtn" id="tuPrev">‹ 上一頁</button>' : ''}<button class="cbtn go" id="tuNext">${last ? '開始登山吧' : '下一頁 ›'}</button></div>`);
+    stagger($('#mCard'), '.tutL li');
+    $('#tuX').onclick = () => { A.pop(); closeModal(); };
+    if (page) $('#tuPrev').onclick = () => { A.pop(); openHelp(page - 1); };
+    $('#tuNext').onclick = () => { A.pop(); if (last) closeModal(); else openHelp(page + 1); };
   }
   const wxHere = () => calcWx(M ? M.id : null, 0, st && M ? st.dist / M.dist : 1);   // 登山客現在所在位置的天氣（雪線以下不會下雪）
   function buildMarks(){
@@ -1765,7 +1778,7 @@
       <div class="setRow"><h4>通知<button class="tgl ${SX.social && SX.social.pushOn ? 'on' : ''}" id="sPush"></button></h4>
         <p>山友邀你一起爬、對方接受邀請，或關掉遊戲後快到山頂時，手機會跳通知。iPhone 要先「加入主畫面」，從主畫面打開才收得到。</p></div>
       <div class="setRow"><h4 id="tipsH">操作小抄</h4>
-        <p>放著不管，角色會照山友實際紀錄的速度慢慢走，關掉遊戲也會繼續。長按畫面（或按住 W／↑）可以走快一點，但比較累。點長椅或觀景台可以休息、拍照、疊石頭。</p></div>
+        <p>${tutIntro().map(x => x.t).join('')}</p><button class="cbtn sm" data-go="help">看新手教學</button></div>
       ${s.dev || devPeek ? `<div class="setRow"><h4>開發者選項</h4>
         ${s.dev ? `<p>已解鎖</p><div class="devBtns">
           <button class="cbtn sm" id="dFast">${s.devOn && s.fast ? '關閉' : '開啟'}快轉 ×20</button>
