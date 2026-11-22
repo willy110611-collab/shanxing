@@ -625,9 +625,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .loading.done .ldBox{visibility:hidden}
 /* 相簿（百岳帳、徽章…內容很長）：紙張跟著內容一路捲到底，不會捲到一半就露出底下的木桌 */
 #scrAlbum .pBody{margin:0 8px calc(8px + env(safe-area-inset-bottom));padding-bottom:20px;background:linear-gradient(180deg,rgba(252,245,226,.97),rgba(243,229,196,.97)) local;border:1.5px solid rgba(106,78,58,.35);border-radius:6px 9px 7px 8px;box-shadow:0 4px 12px rgba(40,25,10,.28)}
-/* 說明文字換行時不要只剩一個字孤單掉到最後一行（寶物說明、卡片、日記…全部適用） */
-p,li,small,.rc-feat,.summitBig{text-wrap:pretty}
-.tzDesc{text-wrap:balance}
+/* 段落文字不設 text-wrap（pretty／balance 在 iPhone 會整段重排，還沒到右邊就換行）；只有一兩行的提示（toast、署名）才用 balance */
 
 /* 標題用霞鶩文楷（字型定義在 :root --fontT） */
 h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family:var(--fontT)}
