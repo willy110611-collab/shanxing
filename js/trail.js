@@ -31,7 +31,8 @@ let SPR = {}, signSpr = {}, VG = {}, hazeCss = '#dfe6e2', hazeRgb = [223,230,226
 let smallTab = [], treeTab = [], edgeTab = [], hedgeTab = [];
 const EDGE_J = 40, EDGE_P = 0.55;   // 路緣草叢：幾段以內畫、每邊每段出現的機率
 const PASS_P = 0.035, PASS_IN = 0.9;   // 鏡頭前掠過的芒草／蕨類：每段出現的機率（約 45 公尺一叢）、內緣離路中心至少幾公尺（在登山客那個深度已經在他身邊，不會擋到人）
-const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1;   // 植物牆：幾段以內畫、每段幾個位置、每個位置出現的機率（再乘上 theme.wall）
+const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1, TRUNK_P = 0.2;   // TRUNK_P：森林步道每段有貼近鏡頭高樹幹的機率（再乘上 theme.wall）
+   // 植物牆：幾段以內畫、每段幾個位置、每個位置出現的機率（再乘上 theme.wall）
 // 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
 // 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
 const SCALE = {
@@ -158,7 +159,7 @@ function artSpr(id, hm){
 // 樹埋進土裡：Gemini 的樹圖底部畫了一整圈樹根，照圖底貼在地面上，樹根就整片浮在地表上。
 // 每張圖往下埋「圖高的幾成」（量的是樹幹和樹根交界往下多少，只留樹幹底和樹根最上面一點點）；沒列的圖不埋。
 // 程式畫的樹沒有樹根，只埋一點點（SINK_DEF），樹幹底才不會像切齊的紙片
-const SINK = { tree_pine:0.06, tree_pine_snow:0.06, tree_broad:0.13, tree_big:0.12, tree_sakura:0.09, wish_tree:0.03, bush_rhodo:0.03, rock_moss:0.03 };
+const SINK = { tree_pine:0.06, tree_pine_snow:0.06, tree_broad:0.13, tree_big:0.12, tree_sakura:0.09, wish_tree:0.03, bush_rhodo:0.03, rock_moss:0.03, trunk_close:0.01 };
 const SINK_DEF = 0.03;
 const SINK_SOFT = 0.04;   // 切口往上這麼高（佔留下來的高度）慢慢變透明，像被土和草蓋住，不會有一條切齊的線
 // 把圖底部 s 那一截切掉（只做一次，存起來；原圖釋放），切口淡出
@@ -180,6 +181,18 @@ function groundShade(c){
 }
 // 有美術圖就用圖（一張），沒有就用程式畫的那組
 function artOr(id, hm, list){ const a = artSpr(id, hm); return a ? [a] : list; }
+// 貼近鏡頭的高樹幹：trunk_close 只畫了一小截（約 2 公尺），去掉上下切口、一截正一截倒疊成整棵樹那麼高（只做一次）
+// 樹冠在畫面上緣外面，所以只在樹幹頂端超出畫面上緣時才看得到（畫的時候依頂端位置慢慢淡入）
+const TRUNK_TILES = 11;
+function trunkSpr(hm){
+  const o = keep('trunk:tall', function(){
+    const e = ART.get('trunk_close'); if (!e) return null;
+    const f = e.frames[0], sy = f.y + f.h * 0.09, sh = f.h * 0.84, w = Math.round(Math.min(160, f.w)), th = Math.round(w * sh / f.w), c = mk(w, th * TRUNK_TILES), g = c.getContext('2d');
+    for (let k = 0; k < TRUNK_TILES; k++) { g.save(); g.translate(0, k * th + (k & 1 ? th : 0)); g.scale(1, k & 1 ? -1 : 1); g.drawImage(e.img, f.x, sy, f.w, sh, 0, 0, w, th); g.restore(); }
+    return { c:sunk(c, SINK.trunk_close), k:1 - SINK.trunk_close };
+  });
+  return o ? { c:o.c, h:hazed(o), w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;
+}
 // 路面／草地貼圖（俯視、可無縫拼接）：m 是一張圖代表幾公尺
 const TRAIL_TEX = { dirt:'ground_dirt', stairs:'ground_stone', scree:'ground_scree' };
 let TEX = {};
@@ -538,6 +551,8 @@ function buildSprites(){
   SPR.view = artOr('deck_view', SCALE.view, [sprite(SCALE.view * 2.1, SCALE.view, 70, pView)]);
   SPR.fall = artOr('waterfall', SCALE.fall, []);      // 只有美術圖：路旁小瀑布
   SPR.railPost = artOr('rail_post', SCALE.railPost, null); SPR.railBar = artOr('rail_bar', SCALE.railBar, null);   // 兩張都有才用美術圖欄杆，不然照舊程式畫
+  SPR.hedgeFern = artOr('hedge_fern', SCALE.hedgeFern, null); SPR.bambooT = artOr('bamboo_tall', SCALE.bambooTall, null);   // 植物牆：森林的蕨類叢、高山的高箭竹（只有美術圖）
+  const tk = TH.alpine ? null : trunkSpr(SCALE.trunk); SPR.trunk = tk ? [tk] : null;   // 森林步道貼近鏡頭的高樹幹
   SPR.treasure = artOr('treasure_box', SCALE.treasure, [sprite(SCALE.treasure * 1.17, SCALE.treasure, 80, pTreasure)]);
   SPR.summit = [artSummitSpr((M && M.name) || '山頂') || sprite(SCALE.summit * 0.76, SCALE.summit, 80, function(g){ pSummit(g, (M && M.name) || '山頂'); })];
   // 依山的主題決定路旁植物比例
@@ -545,8 +560,8 @@ function buildSprites(){
   smallTab = mkTab([[SPR.rhodo, al ? 3 : 1.4], [SPR.rock, (al || th.rocks || th.trail === 'scree') ? 3 : 1], [SPR.bamboo, al ? 3 : 0.5], [SPR.fern, al ? 0.3 : 2.5], [SPR.grass, 3], [SPR.flower, 1.5], [SPR.silver, th.grass ? 3 : 0.3]]);
   edgeTab = mkTab([[SPR.grass, 3], [SPR.fern, al ? 0.6 : 2], [SPR.flower, 1]]);   // 蓋過路緣的矮草（不放灌木、石頭，才不會擋路）
   // 路旁植物牆：森林是蕨類＋灌木＋箭竹擠成一道綠牆；高山是玉山箭竹＋杜鵑貼著步道
-  hedgeTab = mkTab(al ? [[SPR.bamboo, 5], [SPR.rhodo, 2], [SPR.rock, th.trail === 'scree' ? 1.5 : 0.6], [SPR.grass, 1], [SPR.silver, th.grass ? 1.5 : 0]]
-    : [[SPR.fern, 4], [SPR.bamboo, 1.6], [SPR.rhodo, 1.1], [SPR.silver, th.grass ? 2 : 0.4], [SPR.grass, 1], [SPR.rock, th.rocks ? 0.8 : 0.3]]);
+  hedgeTab = mkTab((al ? [[SPR.bamboo, 5], [SPR.bambooT, 2.5], [SPR.rhodo, 2], [SPR.rock, th.trail === 'scree' ? 1.5 : 0.6], [SPR.grass, 1], [SPR.silver, th.grass ? 1.5 : 0]]
+    : [[SPR.fern, 4], [SPR.hedgeFern, 3.5], [SPR.bamboo, 1.6], [SPR.rhodo, 1.1], [SPR.silver, th.grass ? 2 : 0.4], [SPR.grass, 1], [SPR.rock, th.rocks ? 0.8 : 0.3]]).filter(e => e[0]));   // 沒有美術圖的那幾種拿掉
   const paintedPine =!!ART.get('tree_pine') && !ART.get('tree_broad');   // 手繪松樹旁邊放太多卡通圓樹會很不搭
   a.push([SPR.conifer, al ? 3 : (paintedPine ? 3 : 1.6)], [SPR.broad, al ? 0.01 : (paintedPine ? 0.5 : 2.4)]);
   if (SPR.bigtree) a.push([SPR.bigtree, 0.5]);
@@ -1796,6 +1811,14 @@ function drawWorld(b, t){
       // 伸進路面的植物走到登山客旁邊時慢慢變透明（從他身後 1 公尺到身前 0.2 公尺），才不會擋到人；以前是一走到他前面就整株消失
       const intr = clamp((RW + 0.3 - (xo - sp.w * sc * 0.5)) / 0.4, 0, 1), fa = 1 - intr * (1 - clamp((gz - HZ + 0.2) / 1.2, 0, 1));
       drawSpr(sp, gx + side * xo * gs, gy - terrH(i, side, xo) * gs, gs * sc, fq, farA(j, 50, 8), hA * fa);
+    }
+    // 森林步道貼近鏡頭的高樹幹：樹冠在畫面外，只有樹幹頂端超出畫面上緣時才看得到（依頂端離畫面上緣多遠慢慢淡入，不會突然冒出來）
+    if (SPR.trunk && hA > 0.005 && Hh(i, 230) < TRUNK_P * wl) {
+      const sp = SPR.trunk[0], side = Hh(i, 231) < 0.5 ? -1 : 1, xo = RW + 1.5 + Hh(i, 232) * 2.4, f = Hh(i, 233);
+      if (!heroDone && !benchO && (j < jhG || (j === jhG && f <= fhG))) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+      proj(j, f, false);
+      const sc = gs * (0.9 + 0.25 * Hh(i, 234)), y = gy - terrH(i, side, xo) * gs, ta = clamp((sp.hm * sc - y) / (90 * U), 0, 1);
+      if (ta > 0.01) drawSpr(sp, gx + side * xo * gs, y, sc, fq, farA(j, 50, 8), hA * ta);
     }
     if (!below && farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq);
     // 路緣的草叢／蕨類：故意往路面內側蓋過路緣 15～25% 的寬度，路邊才不會是一條筆直的線
