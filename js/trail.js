@@ -15,7 +15,7 @@ const RW = 1.3;         // 步道半寬
 const GW = 30;          // 稜線地面半寬
 const FOGN = 24;        // 霧色階數
 const STRIDE = 1.45;    // 一個完整步伐循環（兩步）的距離
-const NEAR_Z = 0.3;     // 地面最近畫到鏡頭前幾公尺（以前是 1.2：最下面那段的近端被硬推到 1.2 公尺，貼圖被擠壓，走路時畫面最下面一段一段跳）
+const NEAR_Z = 1.2;     // 地面最近畫到鏡頭前幾公尺（畫面最下緣大約是 2.7 公尺，1.2 公尺一定在畫面外）。最近那段的近端被推到這裡時，貼圖要用 zAt() 算真正的世界位置，不然會被擠壓、走路時畫面最下面一段一段跳
 const CREST = 0.00045; // 遠處地面往下彎（每公尺平方掉幾公尺，從登山客那裡開始算）：遠方的路像翻過一個坡頂，後面露出天空和遠山，不會一路往上蓋滿畫面
 const TWL = 720;        // 背景圖塊邏輯寬度
 const FONT = getComputedStyle(document.documentElement).getPropertyValue('--fontB').trim() || 'sans-serif';   // 字型在 css/style.css 的 --fontB
@@ -232,7 +232,7 @@ function mirTex(id, m, r, mx, my, px){
 }
 // 階梯立面（面對鏡頭那一面）的貼圖：石階用花崗岩石塊（約 5 排石頭）、土路和木棧道的陡段用木頭階梯（約 3 根橫木）
 // m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
-const RISER_J = 40;
+const RISER_J = 28;
 const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95] } };
 function buildTex(){
   const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
@@ -272,7 +272,7 @@ function riserFill(T, xl, yt, s, k, a){
 // 透視下「1/距離」在畫面上是線性的：一段切成幾條約 SUB_PX 高的薄橫條，每條各自算縮放、跟著中心線斜切，
 // 相鄰兩條、相鄰兩段在接縫上位置、比例都對得起來（以前一段只用近端的比例貼到底，遠端比下一段大好幾倍，近處一段一段像拼起來的色塊）
 // 橫條的上下緣對齊整數像素：半透明的貼圖兩條各蓋半個像素時會透出一條細線
-const SUB_PX = 6, SUB_GRASS = 14;   // 路面、踏面每條約 6 像素；草地貼圖本來就亂，切粗一點（省效能）
+const SUB_PX = 8, SUB_GRASS = 20;   // 路面、踏面每條約 8 像素；草地貼圖本來就亂，切粗一點（省效能）
 function texRun(T, uc, xA, yA, sA, xB, yB, sB, zA, a, path, sub){
   if (!T || a < 0.01) return;
   const h = yA - yB, n = clamp(Math.ceil(h / (sub || SUB_PX)), 1, 24), dzA = F / sA;
@@ -311,7 +311,7 @@ const mipN = k =>Math.min(6, Math.max(0, Math.floor(-Math.log2(k * DPR))));
 // step：0＝這一級（回傳要跟下一級交叉淡換多少 w），1＝下一級（疊在上面）。兩次的不透明度算好，讓底色露出來的比例跟只畫一次一樣
 function texAff(T, uc, xn, yn, sn, xf, yf, sf, zn, zf, a, step){
   const r = T.w / T.m, dv = Math.max(1e-4, (zf - zn) * r), kx = (sn + sf) * 0.5 / r, d = -(yn - yf) / dv, c = (xf - xn) / dv;
-  const fy = clamp(-Math.log2(-d * DPR), 0, 6), ny0 = Math.floor(fy), w = ny0 < 6 ? fy - ny0 : 0;
+  const fy = clamp(-Math.log2(-d * DPR), 0, 6), ny0 = Math.floor(fy), w = ny0 === 0 ? clamp((fy - 0.7) / 0.3, 0, 1) : 0;   // 只有最近那一次換級（原圖→縮一半）交叉淡換：那條分界在登山客腳邊最明顯，更遠的換級只剩幾像素看不出來（省效能）
   const nx = mipN(kx), ny = ny0 + (step ? 1 : 0), L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1;
   const v0 = (((zn % T.m) + T.m) % T.m) * r, u0 = uc * r, m = TEX_MTX || new DOMMatrix();
   m.a = kx * sx; m.b = 0; m.c = c * sy; m.d = d * sy; m.e = xn - kx * u0 - c * v0; m.f = yn - d * v0;
@@ -1859,7 +1859,7 @@ function drawWorld(b, t){
             ctx.stroke(); ctx.globalAlpha = fade;
           }
         }
-        const sha = farA(j, 90, 12);
+        const sha = farA(j, 40, 8);   // 路面橫向明暗：40 段以外路窄到看不出來，慢慢淡掉（省效能）
         if (sha > 0 && RSH) {
           // 路面立體感：右邊土坎擋住右上來的光投下影子，左邊貼著土坎暗一點，中間微微受光。用一條橫向漸層（邊緣柔和），以前三塊硬邊色塊會在路上畫出直條紋
           texAff(RSH, RW, x1, y1, s1, x2, y2, s2, zA, zA + SEG, fade * sha); quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2, x2 - w2, y2);
