@@ -464,3 +464,18 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | 檔名 | 比例 | 內容 |
 |---|---|---|
 | `shiba_run` | 16:9 | 洋紅底。The same shiba (柴犬設定, with its small red saddlebags) seen **from the side, running to the right**, shown as a **4-frame running cycle sprite sheet**: four poses side by side in a single row, evenly spaced, same size and same ground line in every frame, ears up, tail curled, happy bouncy trot. |
+
+## 第 18 批：人物動作細節（放進 `01.風格`，全部洋紅底，畫主角都要貼「主角設定」）
+
+讓登山客跟著體力、地形有不同的樣子。八格的都是**兩排、每排四格**（上排 1～4、下排 5～8），每格大小、腳底線一樣；單張的就是一個姿勢。登山杖一定要**銀灰色**。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `hiker_stairs8` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind, slightly from above, **8-frame stair-climbing cycle in 2 rows of 4**: lifting each knee high to step up onto the next stone step, body leaning forward, trekking poles planted on the higher step, backpack bouncing slightly. Same size and foot baseline in every frame. Silver-grey trekking poles. |
+| `hiker_tired_walk8` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind, **8-frame tired walking cycle in 2 rows of 4**: back bent forward, head lowered, shoulders sagging under the heavy pack, short slow dragging steps, leaning on the trekking poles. Same size and foot baseline in every frame. Silver-grey trekking poles. |
+| `hiker_hop4` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind, **4-frame happy little hop in a single row**: crouch → small joyful jump with both feet off the ground and one trekking pole raised → landing → standing tall again. Same size, same ground line (the jump frame floats above it). Silver-grey trekking poles. |
+| `hiker_turn_walk8` | 16:9 | 洋紅底。The hiker (主角設定) seen from behind but **turned about 25 degrees to the right**, as if walking around a right-hand bend, **8-frame walking cycle in 2 rows of 4**, body leaning slightly into the turn. Same size and foot baseline in every frame. Silver-grey trekking poles. (Left turns will mirror this.) |
+| `hiker_breath` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind, stopped on a slope, bent over with both hands resting on the trekking poles, catching breath, shoulders raised. Silver-grey trekking poles. |
+| `hiker_drink` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind and slightly to the side, standing and drinking from a water bottle, head tilted back, trekking poles held in the other hand. |
+| `hiker_look` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind, standing still and looking out to the side at the view, one hand shading the eyes, trekking poles in the other hand. |
+| `hiker_wipe` | 1:1 | 洋紅底。The hiker (主角設定) seen from behind and slightly to the side, wiping sweat from the forehead with the back of the hand, a little tired but smiling. |
