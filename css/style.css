@@ -415,3 +415,55 @@ input[type=range]{width:100%;accent-color:#6fb257}
   .topBtns{gap:5px}
   .topBtns .cbtn.sm{padding-left:8px;padding-right:8px;font-size:13px}
 }
+
+/* ───── 相簿第二排分頁、徽章、奇遇圖鑑 ───── */
+.tabs.tabs3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tabs3 .tab{white-space:nowrap}
+.colHead{margin:4px 0 10px;text-align:center;font-size:15px;color:#fff7e4;text-shadow:var(--txo)}
+.colHead b{font-size:19px;font-weight:normal;color:#ffe27a}
+.medal{position:relative;flex:none;display:grid;place-items:center;width:58px;height:58px;border-radius:50%;background:radial-gradient(circle,rgba(255,250,235,.9) 55%,var(--tc) 56%,var(--tc) 66%,transparent 67%)}
+.medal>img,.medal>svg{width:100%;height:100%;object-fit:contain;min-width:0}
+.medal.tier0>img,.medal.tier0>svg{filter:sepia(1) saturate(2.2) hue-rotate(-18deg) brightness(.82)}
+.medal.tier1>img,.medal.tier1>svg{filter:grayscale(1) brightness(1.3) contrast(1.05)}
+.medal.tier2>img,.medal.tier2>svg{filter:sepia(.45) saturate(2.3) brightness(1.1)}
+.medal.tier3>img,.medal.tier3>svg{filter:grayscale(1) brightness(1.45) drop-shadow(0 0 4px #bfeaf5)}
+.medal.off{background:none}
+.medal.off>img,.medal.off>svg{filter:grayscale(1) brightness(.5);opacity:.4}
+.medal i{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:rgba(255,248,230,.92);border:1.5px solid var(--ink);font-style:normal;font-size:14px;line-height:1;color:var(--ink);text-shadow:none}
+.medal.off i{background:rgba(220,210,195,.8);color:rgba(58,42,32,.55);border-color:rgba(58,42,32,.5)}
+.bdgRow{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:9px;padding:8px 10px;text-align:left;font:inherit;background:var(--paperBg);color:var(--ink);text-shadow:none;border:2.5px solid var(--ink);border-radius:var(--irrS);box-shadow:0 3px 0 var(--ink),inset 0 0 12px rgba(150,100,50,.18)}
+.bdgRow.off{background:linear-gradient(170deg,#efe6d6,#ddd0b8)}
+.bdgTxt{flex:1;min-width:0;display:flex;flex-direction:column}
+.bdgTxt b{font-size:15px;font-weight:normal;white-space:nowrap}
+.bdgTxt em{margin-left:6px;padding:0 7px;border:1.5px solid var(--ink);border-radius:999px;font-style:normal;font-size:12px;vertical-align:2px}
+.bdgTxt small{font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bdgTxt .dyBar{display:block}
+.bdgDots{flex:none;display:flex;flex-direction:column;gap:4px}
+.bdgDots i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);background:rgba(58,42,32,.15)}
+.bdgBig{display:flex;justify-content:center;margin:2px 0 8px}
+.bdgBig .medal{width:110px;height:110px}
+.bdgBig .medal i{width:40px;height:40px;font-size:24px}
+.badgePop{position:absolute;z-index:28;left:50%;top:calc(70px + env(safe-area-inset-top));width:min(330px,calc(100% - 32px));transform:translateX(-50%);padding:10px 12px;background:var(--paperBg);color:var(--ink);border:2.5px solid var(--ink);border-radius:var(--irrS);box-shadow:0 4px 0 var(--ink),0 0 0 3px var(--gold),0 8px 22px rgba(40,25,10,.4);animation:bpIn .5s cubic-bezier(.34,1.7,.5,1),bpOut .45s ease-in 4.6s forwards}
+.bpHead{text-align:center;font-size:17px;margin-bottom:6px}
+.bpRow{display:flex;align-items:center;gap:10px;margin-top:4px}
+.bpRow span{display:flex;flex-direction:column;min-width:0}
+.bpRow b{font-weight:normal;font-size:15px}
+.bpRow small,.bpMore{font-size:12px;color:var(--ink2)}
+.bpMore{display:block;text-align:center;margin-top:6px}
+@keyframes bpIn{from{transform:translateX(-50%) translateY(-30px) scale(.7);opacity:0}to{transform:translateX(-50%);opacity:1}}
+@keyframes bpOut{to{transform:translateX(-50%) translateY(-24px);opacity:0}}
+.encLog{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.encCard{display:flex;flex-direction:column;gap:3px;padding:6px 6px 8px;text-align:left;font:inherit;min-width:0;background:var(--paperBg);color:var(--ink);text-shadow:none;border:2.5px solid var(--ink);border-radius:var(--irrS);box-shadow:0 3px 0 var(--ink)}
+.encCard.rare{box-shadow:0 3px 0 var(--ink),0 0 0 2px var(--gold)}
+.encCard.hid{background:linear-gradient(170deg,#e4dccd,#cfc3ad)}
+.encPic{width:100%;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#f3e6c8;display:grid;place-items:center;border:1.5px solid rgba(58,42,32,.4)}
+.encPic>img,.encPic>svg{width:100%;height:100%;object-fit:cover;min-width:0}
+.encPic>svg{object-fit:contain}
+.encCard.hid .encPic{background:rgba(58,42,32,.28)}
+.encCard.hid .encPic span{font-size:30px;color:rgba(255,248,230,.75)}
+.encCard b{font-size:13px;font-weight:normal;white-space:nowrap}
+.encCard small{font-size:11.5px;line-height:1.45;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.encCard em{font-style:normal;font-size:11.5px;color:var(--leaf2)}
+.encMk{margin-left:5px;padding:0 6px;border:1.5px solid var(--ink);border-radius:999px;font-size:11px;background:#bfdcf5;vertical-align:1px}
+.encMk.sup{background:#ffe08a}
+.bdgTiers li.done{opacity:1;text-decoration:none}

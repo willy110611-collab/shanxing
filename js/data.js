@@ -252,6 +252,19 @@ SX.ENCOUNTERS = [
   { id:'e32', text:'在涼亭裡遇到一位爺爺，他正在下棋，還很熱情地招你過去坐。', where:{ mountains:['xiangshan','qixing','guanyin','alishan'] }, choices:[
       { label:'坐下來看他下棋', result:'爺爺贏了你一步，他笑得很開心。', effect:{ temp:3 } },
       { label:'禮貌道謝，繼續走', result:'爺爺說：「下次再來找我下棋喔！」', effect:{ temp:1 } } ] },
+  // 極稀有奇遇：weight 是抽中的權重（一般 1、稀有 0.3），這幾個很小，玩很久才可能遇到一次
+  { id:'e33', text:'遠遠的對面山坡上，一團黑影慢慢移動。是台灣黑熊！胸前的白色 V 字在陽光下很清楚。', where:{ minFrac:0.3, mountains:['taiping','jiaming','xueshan','yushan'] }, rare:true, weight:0.25, choices:[
+      { label:'停在原地，用相機遠遠記錄', result:'黑熊抬頭聞了聞風，慢慢走進樹林。你的手還在發抖，但心裡很感動。', effect:{ photo:true, temp:3 } },
+      { label:'輕聲說話，慢慢往後退', result:'黑熊知道有人在，安靜地繞開了。山裡的鄰居，彼此尊重就好。', effect:{ temp:2 } } ] },
+  { id:'e34', text:'太陽在背後，濃霧在前方。霧裡出現你的影子，影子周圍有一圈彩虹光環，這就是傳說中的「佛光」。', where:{ minFrac:0.5, mountains:['alishan','hehuan','jiaming','xueshan','yushan'], time:['dawn','day'] }, wx:['fog','cloud'], rare:true, weight:0.9, choices:[
+      { label:'對著光環揮揮手', result:'霧裡的影子也對你揮手，彩虹跟著你一起動。這一刻好像在作夢。', effect:{ photo:true, temp:3 } },
+      { label:'雙手合十，許一個願', result:'光環慢慢淡去，你覺得心裡有什麼東西被輕輕放下了。', effect:{ stam:20, temp:2 } } ] },
+  { id:'e35', text:'對面的雲海越過稜線，像瀑布一樣緩緩往山谷傾瀉，整片山都安靜了下來。', where:{ minFrac:0.4, mountains:['alishan','taiping','hehuan','matcha','xueshan'] }, wx:['cloud','fog'], rare:true, weight:0.5, choices:[
+      { label:'坐下來看雲瀑流完', result:'雲一直流、一直流，你把這一幕收進了小瓶子裡。', effect:{ item:'t_cloud_bottle', temp:2 } },
+      { label:'拍下流動的雲', result:'照片裡的雲像白色的河，安安靜靜。', effect:{ photo:true } } ] },
+  { id:'e36', text:'抬頭的瞬間，一顆、兩顆、好多顆流星劃過銀河，是流星雨！', where:{ mountains:['alishan','hehuan','jiaming','xueshan','yushan'], time:['night'] }, wx:['clear'], rare:true, weight:0.6, choices:[
+      { label:'趕快許願', result:'願望還沒說完，又一顆流星劃過去。這次你說完了。', effect:{ item:'t_starlight_stamp', temp:2 } },
+      { label:'關掉頭燈，躺下來數', result:'你數到第十七顆的時候，覺得整片天空都是你的。', effect:{ stam:15, temp:3 } } ] },
 ];
 
 // 寶物：rarity 為 普通 / 稀有 / 傳說；drop 可為山 id 陣列或 'any'；多為照片、卡片、紀念章、拓印，不取走自然物
@@ -299,6 +312,30 @@ SX.QUESTS = [
   { id:'q14', name:'藍鵲的報告', hint:'牠總是站在你前面，告訴你好天氣。', desc:'在三座以上不同的山上遇見藍鵲。', cond:{ type:'items', n:3, kind:'magpie' }, reward:{ pet:'magpie' } },
   { id:'q15', name:'石虎的眼睛', hint:'夜裡的草叢，有一雙亮亮的眼睛。', desc:'在夜晚的步道上遇見一次山羌。', cond:{ type:'wx', kind:'night', n:1 }, reward:{ pet:'leopardcat' } },
   { id:'q16', name:'玉山的呼喚', hint:'最高的那座山，等你去看日出。', desc:'登頂玉山主峰。', cond:{ type:'mountain', id:'yushan', n:1 }, reward:{ item:'t_summit_dawn' } },
+];
+
+// 徽章：每一條有銅、銀、金、白金幾個等級（tiers 由小到大，最多四個）；stat 是 game.js 的 badgeValue 要算的數值
+// tiers 寫 'all' 代表「全部蒐集完」（數量跟著寶物、奇遇、山的總數走）；unit 是進度條後面的單位
+// 節奏目標：銅 1～2 週、銀 1～3 個月、金 3～6 個月、白金 1～2 年（以每天打開 3～10 分鐘估算）
+SX.BADGE_TIERS = [
+  { name:'銅', color:'#c27a3e' },
+  { name:'銀', color:'#a9b4bf' },
+  { name:'金', color:'#e8b730' },
+  { name:'白金', color:'#9fd8e8' },
+];
+SX.BADGES = [
+  { id:'walk',    name:'步行里程',   glyph:'步', stat:'walked',      unit:'km', tiers:[40, 250, 600, 2000], desc:'累積走過的路' },
+  { id:'summit',  name:'登頂次數',   glyph:'頂', stat:'summits',     unit:'次', tiers:[10, 50, 120, 400], desc:'所有山加起來的登頂次數' },
+  { id:'fav',     name:'老朋友',     glyph:'山', stat:'favMountain', unit:'次', tiers:[3, 15, 40, 120], desc:'同一座山登頂的次數（算最常去的那座）' },
+  { id:'streak',  name:'連續上山',   glyph:'日', stat:'bestStreak',  unit:'天', tiers:[7, 30, 100, 365], desc:'連續上山的天數（算最長的一次）' },
+  { id:'night',   name:'夜登',       glyph:'夜', stat:'night',       unit:'次', tiers:[3, 15, 40, 120], desc:'在夜晚登頂的次數' },
+  { id:'rain',    name:'雨中行',     glyph:'雨', stat:'rain',        unit:'次', tiers:[2, 8, 20, 60], desc:'在下雨天登頂的次數' },
+  { id:'fog',     name:'霧中行',     glyph:'霧', stat:'fogTop',      unit:'次', tiers:[2, 10, 25, 80], desc:'在起霧時登頂的次數' },
+  { id:'rest',    name:'長椅常客',   glyph:'憩', stat:'rests',       unit:'次', tiers:[10, 60, 150, 500], desc:'在長椅或觀景台休息的次數' },
+  { id:'cairn',   name:'疊石人',     glyph:'石', stat:'cairns',      unit:'座', tiers:[5, 30, 80, 250], desc:'疊出的許願石堆' },
+  { id:'treasure',name:'寶物收藏',   glyph:'寶', stat:'treasureKinds', unit:'種', tiers:[10, 18, 'all'], desc:'蒐集到的寶物種類' },
+  { id:'enc',     name:'奇遇見聞',   glyph:'遇', stat:'encKinds',    unit:'種', tiers:[10, 20, 32, 'all'], desc:'遇過的奇遇種類' },
+  { id:'stamp',   name:'集印帳',     glyph:'印', stat:'stamps',      unit:'座', tiers:[3, 6, 'all'], desc:'集印帳蓋到章的山' },
 ];
 
 // 世界區域：目前只有台灣。之後可以加入世界名山（例如富士山、少女峰、吉力馬札羅），現在先不啟用。

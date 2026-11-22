@@ -246,6 +246,15 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `enc_e31` | The hiker slipping and grabbing a tree trunk, a little scared |
 | `enc_e32` | A grandpa playing Chinese chess in a trail pavilion, inviting the hiker to sit |
 
+極稀有奇遇（玩很久才會遇到一次，畫得特別用心一點）：
+
+| 檔名 | 場景 |
+|---|---|
+| `enc_e33` | Far across a forested valley, a Formosan black bear with the white V mark on its chest walking slowly on a sunny slope, the hiker small in the foreground watching quietly from a safe distance |
+| `enc_e34` | A Brocken spectre on a high mountain ridge: the hiker's shadow cast onto a wall of mist, surrounded by a soft rainbow-colored glory ring, sun behind the hiker |
+| `enc_e35` | A cloud waterfall: a sea of clouds spilling over a mountain ridge and flowing slowly down into the valley like a white waterfall, soft golden light |
+| `enc_e36` | A meteor shower over the Milky Way above dark alpine ridges at night, many shooting stars, the hiker lying on the grass looking up |
+
 ## 放進 `07.奇遇`：登頂插圖（16:9，不用去背，抵達山頂時顯示）
 
 | 檔名 | 場景 |
