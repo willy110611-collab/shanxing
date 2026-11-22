@@ -57,7 +57,7 @@
   }
   A.on = SV.set.sound; A.vol = SV.set.vol;
 
-  const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160 });
+  const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null });
   const P = id => { const p = SV.prog[id] || (SV.prog[id] = newProg()), d = newProg(); for (const k in d) if (p[k] === undefined) p[k] = d[k]; if (!p.got || typeof p.got !== 'object') p.got = {}; ['dist','stam','temp','ms','last','encT'].forEach(k => { if (typeof p[k] !== 'number' || !isFinite(p[k])) p[k] = d[k]; }); return p; };
 
   // ───────── 畫面切換 ─────────
@@ -130,11 +130,12 @@
   const TIME_NAMES = { dawn:'清晨', day:'', dusk:'黃昏', night:'夜晚' };
   const WXD = { sunny:'clear', cloudy:'cloud', fog:'fog', rain:'rain' };   // 對應 data.js 奇遇用的天氣名稱
   const wxText = w => (TIME_NAMES[w.time] ? TIME_NAMES[w.time] + '・' : '') + WX_NAMES[w.kind];
-  function calcWx(id){
-    const d = new Date(), h = d.getHours() + d.getMinutes()/60;
+  function calcWx(id, ts){   // ts：算某個時間點的天氣（離開時的日記用），不給就是現在
+    ts = ts || Date.now();
+    const d = new Date(ts), h = d.getHours() + d.getMinutes()/60;
     const time = h >= 5 && h < 7 ? 'dawn' : h >= 7 && h < 17 ? 'day' : h >= 17 && h < 18.6 ? 'dusk' : 'night';
     id = id || SV.cur || 'x';
-    const rr = C.rng(C.hash(id + Math.floor(Date.now() / 1200000)))();
+    const rr = C.rng(C.hash(id + Math.floor(ts / 1200000)))();
     const fogBias = SX.M[id] && SX.M[id].theme.fog ? 0.15 : 0;
     const kind = rr < 0.16 ? 'rain' : rr < 0.3 + fogBias ? 'fog' : rr < 0.52 + fogBias ? 'cloudy' : 'sunny';
     return { kind, time };
@@ -328,14 +329,97 @@
     p.last = now;
     if (sec < 3 || p.dist >= m.dist - 2) return;
     const before = p.dist, total = sec;
-    while (sec > 0 && p.dist < m.dist - 2) { const dt = Math.min(5, sec); sec -= dt; simulate(p, m, dt, false, true); }
+    let naps = 0, rests = 0;
+    while (sec > 0 && p.dist < m.dist - 2) { const dt = Math.min(5, sec), z = p.sleep, r = p.rest; sec -= dt; simulate(p, m, dt, false, true); if (!z && p.sleep) naps++; if (!r && p.rest) rests++; }
     if (total >= 60) {
       SV.stats.away = Math.max(SV.stats.away || 0, total / 60);
       const gained = p.dist - before;
-      if (gained > 1) setTimeout(() => toast(p.dist >= m.dist - 2.5 ? '你不在的時候，已經走到山頂前面了' : `你不在的時候，自己走了 ${Math.round(gained)} 公尺`, 3200), 600);
+      if (gained > 1 && total >= AWAY_DIARY) {
+        noteAway(p, m, before, total, now, naps, rests);   // 寫進離開時的日記，回到這座山的登山畫面就會打開
+        if (!(screen === 'climb' && M === m)) setTimeout(() => toast(`你不在的時候，自己走了 ${Math.round(gained).toLocaleString('en-US')} 公尺，回山上看看日記吧`, 3200), 600);
+      } else if (gained > 1) setTimeout(() => toast(p.dist >= m.dist - 2.5 ? '你不在的時候，已經走到山頂前面了' : `你不在的時候，自己走了 ${Math.round(gained)} 公尺`, 3200), 600);
       setTimeout(checkQuests, 1500);
     }
     save();
+  }
+
+  // ───────── 離開時的日記＋路上的包裹 ─────────
+  const AWAY_DIARY = 600;      // 離開幾秒以上才寫日記（短的只跳提示）
+  const AWAY_PARCEL = 5;       // 一次包裹最多幾件（保護長期節奏）
+  const AWAY_SHOTS = 3;        // 離線經過的 500 公尺點，最多補拍幾張
+  // 奇遇圖鑑也用這個：記下看過哪個奇遇、第幾次、第一次是哪天
+  function noteEncounterSeen(id){ const s = SV.encSeen || (SV.encSeen = {}), o = s[id] || {}; s[id] = { n:(o.n || 0) + 1, first:o.first || today() }; }
+  // catchUp 補走完：把這段記下來（存在進度裡，關掉再開也不會不見）；連續幾次回來還沒看，就併成同一篇
+  function noteAway(p, m, from, sec, now, naps, rests){
+    const a = p.away || (p.away = { from, to:from, sec:0, t0:now - sec * 1000, naps:0, rests:0, marks:[], shot:[], parcel:[], enc:null, v:0 });
+    a.to = p.dist; a.sec += sec; a.t1 = now; a.naps += naps; a.rests += rests; a.v++;
+    for (let k = Math.floor(from / 500) * 500 + 500; k <= p.dist && k < m.dist; k += 500) if (!a.marks.includes(k)) a.marks.push(k);
+    if (a.marks.length) p.ms = Math.max(p.ms || 0, a.marks[a.marks.length - 1]);   // 回來時不要再跳一次「走了 X 公里，拍一張」
+  }
+  // 登山畫面畫好之後才整理日記（要用到這座山的路旁道具和拍照）；奇遇、補拍、包裹只做一次，重開也一樣
+  function composeAway(a){
+    const m = M;
+    if (!a.enc) {
+      a.enc = [];
+      const n = a.sec >= 4 * 3600 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const ts = a.t0 + Math.random() * (a.t1 - a.t0), f = (a.from + Math.random() * (a.to - a.from)) / m.dist;
+        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts), a.enc);
+        if (e) { a.enc.push(e.id); noteEncounterSeen(e.id); }
+      }
+    }
+    a.marks.filter(k => !a.shot.includes(k)).slice(-AWAY_SHOTS).forEach(k => { const n = SV.photos.length; takePhoto(k, true); a.shot.push(k); if (SV.photos.length > n) a.pics = (a.pics || 0) + 1; });
+    SC.props(a.from, a.to).forEach(o => { const k = Math.round(o.m); if (o.type === 'treasure' && !st.got['t' + k] && !a.parcel.includes(k) && a.parcel.length < AWAY_PARCEL) a.parcel.push(k); });
+    save();
+  }
+  const awIco = (id, cls) => `<span class="awI${cls ? ' ' + cls : ''}">${SX.art.img(id, `<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="#f2c35a" stroke="${INK}" stroke-width="1.8"/></svg>`)}</span>`;
+  const WX_ART = { sunny:'wx_sun', cloudy:'wx_cloud', fog:'wx_fog', rain:'wx_rain' };
+  function awayLines(a){
+    const m = M, L = [], km = x => (x / 1000).toFixed(1);
+    const up = Math.round(altAt(m, a.to / m.dist) - altAt(m, a.from / m.dist)), summit = a.to >= m.dist - 2.5;
+    L.push([ 'sign_wood', `慢慢走了 ${Math.round(a.to - a.from).toLocaleString('en-US')} 公尺${up > 0 ? `，爬升 ${up} 公尺` : ''}，現在在海拔 ${Math.round(altAt(m, a.to / m.dist)).toLocaleString('en-US')} 公尺。` ]);
+    const ps = SC.props(a.from, a.to), cnt = t => ps.filter(o => t.includes(o.type)).length, nb = cnt(['bench']), nv = cnt(['view']), nn = cnt(['note', 'btree', 'cairn']);
+    if (nb || nv || a.naps) L.push([ nv ? 'deck_view' : nb ? 'bench' : 'icon_rest', [nb > 3 ? '沿路坐了好幾張長椅喝熱茶' : nb ? `在 ${nb} 張長椅坐下來喝口熱茶` : '', nv ? `${nb ? '，' : ''}在觀景台看了好一會兒風景` : '', a.naps ? `${nb || nv ? '，' : ''}走累了還窩進睡袋睡了一下` : ''].join('') + '。' ]);
+    if (a.marks.length) L.push([ 'icon_camera', `經過 ${a.marks.slice(-3).map(k => km(k) + ' 公里').join('、')}的路標${a.pics ? `，拍了 ${a.pics} 張照片收進相簿` : ''}。` ]);
+    if (nn) L.push([ 'note_post', `路過 ${nn} 處山友留下的便條和疊石，順手拍掉上面的落葉。` ]);
+    const seq = [];
+    for (let ts = a.t0; ts <= a.t1; ts += 1200000) { const w = calcWx(m.id, ts), s = wxText(w) || '晴'; if (!seq.length || seq[seq.length - 1].s !== s) seq.push({ s, w }); }
+    const sh = (seq.length > 3 ? [seq[0], seq[seq.length >> 1], seq[seq.length - 1]] : seq).filter((x, i, l) => !i || l[i - 1].s !== x.s);   // 變很多次：只寫開頭、中間、現在
+    if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ w.time === 'night' ? 'wx_night' : WX_ART[w.kind], `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
+    (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${e.text.split('。')[0]}。` ]); });
+    if (summit) L.push([ 'emo_cheer', '已經走到山頂前面了，就等你一起踏上山頂！' ]);
+    // 不超過 6 行，手機一頁看得完：先省便條那一行，再省第二個小插曲（登頂那行一定留著）
+    for (const id of ['note_post', 'face_happy']) { const i = L.map(x => x[0]).lastIndexOf(id); if (L.length > 6 && i >= 0) L.splice(i, 1); }
+    return L;
+  }
+  let awayShownV = 0;
+  function showAway(){
+    const a = st.away; if (!a) return;
+    if (!a.enc) composeAway(a);
+    awayShownV = a.v; A.paper();
+    const left = a.parcel.filter(k => !st.got['t' + k]), h = Math.floor(a.sec / 3600), mi = Math.round(a.sec % 3600 / 60);
+    const pics = a.pics ? SV.photos.filter(p => p.id === M.id && a.shot.includes(p.m)).slice(-3) : [];
+    modal(`<h3>你不在的時候</h3><div class="awayD">
+      <p class="awayT">${M.name}・離開了 ${h ? `${h} 小時${mi ? ` ${mi} 分` : ''}` : `${mi} 分鐘`}</p>
+      <ul class="awayL">${awayLines(a).map(([ic, tx]) => `<li>${awIco(ic)}<span>${tx}</span></li>`).join('')}</ul>
+      ${pics.length ? `<div class="awayPics">${pics.map((p, i) => `<img src="${p.img}" alt="" style="transform:rotate(${(i - 1) * 4}deg)">`).join('')}</div>` : ''}
+      ${left.length ? `<div class="awayParcel">${awIco('treasure_box', 'big')}<span>路上撿到 <b>${left.length}</b> 件東西，<br>都收在包裹裡了。</span></div>` : ''}</div>
+      <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="awGo">${left.length ? '打開包裹' : '繼續走'}</button></div>`);
+    stagger($('#mCard'), '.awayL li');
+    $('#awGo').onclick = () => { A.pop(); if (left.length) openParcel(left, 0); else endAway(); };
+  }
+  // 包裹裡的東西一件一件拿出來（用跟路上撿到一樣的寶物卡）
+  function openParcel(list, i){
+    const k = list[i]; st.got['t' + k] = 1;
+    gainTreasure(rollTreasure(M.id), 'show');
+    const b = $('#trOk'), last = i >= list.length - 1;
+    if (!b) return endAway();
+    if (!last) b.textContent = `下一件（${i + 1}/${list.length}）`;
+    b.onclick = () => { A.pop(); if (last) { closeModal(); endAway(); } else openParcel(list, i + 1); };
+  }
+  function endAway(){
+    if (st.away && st.away.v === awayShownV) st.away = null;   // 看日記時又補走了一段：留著，等一下再寫一篇
+    closeModal(); save(); checkQuests();
   }
 
   const cv = $('#cv'); SC.init(cv); cv.style.webkitUserSelect = 'none'; cv.style.webkitTouchCallout = 'none';
@@ -528,10 +612,12 @@
     else g = `<path d="M58 104v-70h6v70z" fill="#a8743f" ${o}/><path d="M30 40h54l10 9-10 9h-54z" fill="#e2b877" ${o}/><path d="M40 49h34" stroke="${INK}" stroke-width="2" stroke-linecap="round" opacity=".5"/><path d="M36 70h50v14h-50l-8-7z" fill="#d7a660" ${o}/><ellipse cx="60" cy="106" rx="26" ry="5" fill="rgba(58,42,32,.22)"/>`;
     return SX.art.img('enc_' + e.id, `<svg viewBox="0 0 120 120"><path d="M120 0L70 0 20 120 80 120z" fill="rgba(255,220,130,.3)"/>${g}</svg>`, 'artImg encArt');
   }
-  function pickEncounter(){
-    const f = st.dist / M.dist, k = WXD[wx.kind];
+  const pickEncounter = () => pickEncounterAt(M.id, st.dist / M.dist, wx, [lastEnc]);
+  // 依山、走到幾成、天氣時段挑一個奇遇（skip：這次不要重複的）
+  function pickEncounterAt(mid, f, wx, skip){
+    const k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return e.id !== lastEnc && (!e.season || seasonOk(e.season, M.id)) && (!w.mountains || w.mountains.includes(M.id)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     let sum = 0; pool.forEach(e => { sum += e.rare ? 0.3 : 1; });
@@ -951,6 +1037,7 @@
       say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
     wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = calcWx(M.id); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
     SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist });
+    if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
     updTag();
     hudT -= dt; if (hudT <= 0) { hudT = 0.2; hudTick(); }
   }
