@@ -448,7 +448,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .frRow select{font:inherit;font-size:13px;max-width:84px;padding:4px;border-radius:8px;border:2px solid var(--ink);background:#fffdf4}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#bdb3a6;border:1.5px solid var(--ink)}
 .dot.on{background:#6fcf5a}
-.partyBox{position:absolute;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 92px);display:none;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
+.partyBox{position:absolute;left:10px;max-width:calc(100% - 20px);top:calc(env(safe-area-inset-top) + 150px);display:none;transition:opacity .3s;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
 .partyBox.on{display:flex}
 .partyBox b{flex:none}
 .partyBox span{flex:1;min-width:0;color:var(--ink2)}
@@ -622,7 +622,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 
 /* 收合畫面資訊（#hudTog）：收起時狀態面板、小地圖、下方選單淡出，按鈕移到右下角 */
 #scrClimb .hud,#scrClimb .dock{transition:opacity .3s}
-#scrClimb.clean .hud,#scrClimb.clean .dock{opacity:0;pointer-events:none!important}
+#scrClimb.clean .hud,#scrClimb.clean .dock,#scrClimb.clean .partyBox{opacity:0;pointer-events:none!important}   /* 隊友卡片也跟著收起 */
 .hudTog{position:absolute;right:12px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:4;width:38px;height:38px;padding:0;border-radius:50%;background:rgba(255,247,228,.88);border:2px solid var(--ink);color:var(--ink);font-size:16px;line-height:1;box-shadow:0 2px 4px rgba(40,25,10,.3);transition:bottom .3s}
 .hudTog::before{content:"▾"}
 #scrClimb.clean .hudTog{bottom:calc(14px + env(safe-area-inset-bottom));background:rgba(255,247,228,.6)}
