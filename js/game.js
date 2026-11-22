@@ -1103,7 +1103,7 @@
       <p class="summitBig" id="bagInfo" style="margin-top:10px;min-height:52px">${have ? '點寶物看故事；點淡淡的影子，看哪裡找得到。' : '步道上閃閃發亮的地方，點一下看看。'}</p>
       <div class="grp">隱藏任務 ${Object.keys(SV.quests).length} / ${SX.QUESTS.length}</div>
       <ul class="quest">${SX.QUESTS.map(q => SV.quests[q.id] ? `<li class="done"><span>${q.name}<small>${q.desc}</small></span></li>` : `<li class="hid"><span>？？？<small>${q.hint}</small></span></li>`).join('')}</ul>`);
-    $('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop, b.getBoundingClientRect()); });
+    $$('#mCard [data-tr]').forEach(b => b.onclick = () => { A.pop(); treasureCard(b.dataset.tr, $('#mCard').scrollTop, b.getBoundingClientRect()); });
     $$('#mCard [data-hint]').forEach(b => b.onclick = () => {
       A.pop(); $$('#mCard .slot.pick').forEach(k => k.classList.remove('pick')); b.classList.add('pick');
       toast(bagHint(SX.TREASURES.find(x => x.id === b.dataset.hint)), 3000);   // 提示框浮在最上面，格子在背包下面也看得到
@@ -1160,7 +1160,7 @@
       $('#tzBack').onclick = () => { A.pop(); const f = $('#mCard .tzFrame'); openBag(bagScroll, { id:owned[i].id, rect:f && f.getBoundingClientRect() }); };
     };
     show(0);
-    if (fromRect) { MO.flip($('#mCard .tzFrame'), fromRect); MO.fadeIn($('#mCard h3, #mCard .tzTags, #mCard .tzDesc, #mCard .tzFirst, #mCard .tzBtns')); }
+    if (fromRect) { MO.flip($('#mCard .tzFrame'), fromRect); MO.fadeIn($$('#mCard h3, #mCard .tzTags, #mCard .tzDesc, #mCard .tzFirst, #mCard .tzBtns')); }
   }
 
   // ───────── 每日任務與連續上山天數 ─────────

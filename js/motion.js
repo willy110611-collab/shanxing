@@ -244,7 +244,7 @@
   function petals(kind, n = 32){
     if (calm()) return;
     const L = layer(), W = L.clientWidth, H = L.clientHeight + 40, list = KINDS[kind] || KINDS.leaf;
-    n = Math.min(40, n);
+    n = Math.min(n, 40 - L.querySelectorAll('.pt:not(.burst)').length);   // 畫面上同時最多 40 片（登頂和任務完成同時飄也不會加倍）
     for (let i = 0; i < n; i++) {
       const p = document.createElement('i'), k = list[i % list.length];
       p.className = 'pt ' + k;
