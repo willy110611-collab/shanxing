@@ -36,6 +36,7 @@ let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積�
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
 const cSkyT = [0,0,0], cSkyB = [0,0,0], cGrade = [255,255,255], cSun = [0.8,0.12], cSunCol = [255,246,216];
 let SHADOW = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
+const SHOW_FG = false;   // 畫面上下兩端的前景花草（frame_top／frame_bottom）：玩家意見先拿掉，想恢復改成 true
 const WARM_A = 0.5;     // 午後暖光濾鏡強度（soft-light，再乘上太陽可見度）
 const RIM_A = 0.75;     // 前景框（杜鵑、蕨葉）輪廓光強度
 let FGRIM = {};         // 前景框輪廓光貼圖快取（依尺寸）
@@ -800,7 +801,7 @@ S.resize = function(){
   if (w === W && h === H && d === DPR && RAYS && cv.width === Math.round(w * d)) return;
   W = w; H = h; DPR = d; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * HORF); CAMH = FOOTF * H * HZ / F; U = H / 812;   // 鏡頭高度由「登山客腳底在畫面的位置」反推
-  buildRays(); buildFG(); FGRIM = {};
+  buildRays(); if (SHOW_FG) buildFG(); FGRIM = {};
   // 暗角：中心放在登山客和前方步道之間，四角壓暗一點，視線自然落在人和路上
   vig = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.3, W / 2, H * 0.55, H * 0.74);
   vig.addColorStop(0, 'rgba(48,30,24,0)'); vig.addColorStop(0.6, 'rgba(48,30,24,0.14)'); vig.addColorStop(1, 'rgba(48,30,24,0.46)');
@@ -1625,7 +1626,7 @@ S.render = function(s){
   drawWorld(b, t);
   drawFlyers(t, dt, sp);
   if (isFog) fogBands(t, dist);
-  drawFG(t);
+  if (SHOW_FG) drawFG(t);
   // 整體調色（時間／天氣），之後再疊發光的東西
   if (cGrade[0] < 250 || cGrade[1] < 250 || cGrade[2] < 250) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = css(cGrade); ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   // 午後暖光濾鏡：整個世界（含前景框）蓋一層從右上來的暖金柔光，不同批美術圖才會在同一個色溫裡；晚上、雨天不加

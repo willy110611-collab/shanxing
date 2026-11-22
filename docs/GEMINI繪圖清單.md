@@ -317,3 +317,53 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `t_cloudfall_photo` | 夏日雲瀑照片 | 夏日雲瀑 | a polaroid photo of white clouds pouring over a green mountain ridge like a waterfall after a summer afternoon storm |
 | `t_maple_postcard` | 楓紅明信片 | 楓紅芒草季 | a postcard of an autumn hillside, half red maple leaves and half silvery-white silver grass |
 | `t_cloudsea_card` | 冬日雲海明信片 | 雲海季 | a postcard of a calm winter dawn sea of clouds with distant blue mountain peaks like islands |
+
+## 第 12 批：新奇遇與寶物
+
+為了長期收集新增的奇遇和寶物。奇遇插圖跟第九批「`07.奇遇`」一樣（16:9，不用去背）；寶物跟第四批一樣（放進 `04.背包`，1:1、洋紅底，提示詞前面加 `Isolated single collectible item illustration for a cozy game inventory, `）。稀有的加一點淡淡的光，傳說的加金色邊框或金光。**檔名 = 前面的英文 id**。
+
+### 放進 `07.奇遇`（16:9，不用去背）
+
+| 檔名 | 場景 |
+|---|---|
+| `enc_e37` | Dusk on the big boulders of Elephant Mountain in Taipei, the city lights below slowly switching on, the hiker sitting on a rock watching quietly |
+| `enc_e38` | A colorful Taiwan barbet (green, blue, red and yellow head) peeking out of a tree hole in a lowland forest, the hiker smiling from a distance |
+| `enc_e39` | Menghuan Pond on Qixing Mountain in thin mist, small tufts of Taiwan quillwort in the shallow water, a wooden boardwalk with the hiker looking gently |
+| `enc_e40` | The Lengshuikeng public foot bath steaming in light rain, a few hikers soaking their feet and chatting, misty volcanic hills behind |
+| `enc_e41` | Many grey-faced buzzards circling high in the sky above Guanyin Mountain, the river mouth far below, the hiker looking up with binoculars |
+| `enc_e42` | A small mountain lodge (Holy Mother Lodge) on a green ridge in drizzle, the hiker resting on a bench under the eaves with a warm cup |
+| `enc_es_maple` | An autumn ridge covered in silvery-white silver grass swaying in the wind, the hiker's hat just peeking above the grass |
+| `enc_e43` | The small red Alishan forest train climbing slowly through tall cypress forest, a child waving from the window, the hiker waving back from a viewpoint |
+| `enc_e44` | A gigantic ancient red cypress tree beside a wooden boardwalk, sunlight falling from the high canopy, the hiker tiny at its base looking up |
+| `enc_e45` | Pre-dawn at the Zhushan sunrise platform, a crowd of small figures, golden light just appearing behind a distant blue mountain ridge |
+| `enc_e46` | The tiny Taipingshan bong-bong forest train rolling slowly along a forest track, smiling passengers, the hiker waving beside the rails |
+| `enc_e47` | Cuifeng Lake in soft fog, the still water mirroring a cypress forest perfectly, the hiker standing on the shore |
+| `enc_e48` | A small wine-red Taiwan rosefinch perched on dwarf bamboo on an alpine slope, the hiker crouching far away with a camera |
+| `enc_e49` | A white-whiskered laughingthrush with golden wing patches singing at the edge of a dwarf bamboo trail, the hiker walking slowly |
+| `enc_es_rime` | Fir branches covered in white rime ice like sugar frosting in a snowy mountain forest, soft fog, sparkling ice crystals |
+| `enc_e50` | A few sambar deer grazing on a distant alpine grass slope at dusk, big ears turning, the hiker standing still far away |
+| `enc_e51` | Night at Jiaming Lake, the deep blue oval lake (Angel's Tears) holding the reflection of a full moon, the hiker sitting quietly on the grassy shore |
+| `enc_e52` | A mountain guide cooking a big pot of steaming soup outside a mountain cabin at evening, handing a bowl to the hiker |
+| `enc_e53` | The Black Forest of Snow Mountain: tall dark fir trees, thick moss on the ground, misty light, the hiker walking softly |
+| `enc_e54` | Sunset at the 369 Lodge with its yellow roof on a wide grassy slope, hikers sitting at the door watching the orange sky |
+| `enc_e55` | A tiny glistening Taiwan salamander near a rock crevice on a misty glacial cirque scree slope, the hiker kneeling far back just watching, not touching |
+| `enc_e56` | Before dawn at Paiyun Lodge, hikers with headlamps gathering at the door under the stars, ready to set off for the sunrise |
+| `enc_e57` | A silvery-white forest of dead trees (white wood forest) in mist, low twisted Yushan junipers hugging the slope, the hiker walking slowly |
+
+### 放進 `04.背包`（1:1、洋紅底）
+
+| 檔名 | 名稱 | 內容 |
+|---|---|---|
+| `t_mengxiang_card` | 夢幻湖水韭圖鑑卡 | a small field-guide card illustrating tufts of Taiwan quillwort in a pond, soft glow (rare) |
+| `t_sacredmother_stamp` | 聖母山莊紀念章 | a round green stamp impression of a small mountain lodge on a ridge, ink slightly blurred by rain |
+| `t_train_ticket` | 小火車紀念車票 | an old-style hard cardboard train ticket printed with a small red forest train and cypress trees (no readable text) |
+| `t_bongbong_ticket` | 蹦蹦車紀念車票 | a cute paper souvenir ticket printed with a tiny bong-bong forest rail car (no readable text) |
+| `t_cuifeng_card` | 翠峰湖倒影明信片 | a postcard of a misty lake mirroring a cypress forest above and below, soft glow (rare) |
+| `t_rosefinch_photo` | 酒紅朱雀的一瞥 | a polaroid photo of a small wine-red rosefinch on dwarf bamboo, soft glow (rare) |
+| `t_whitebrow_card` | 金翼白眉圖鑑卡 | a small field-guide card of a laughingthrush with golden wing patches and music-note doodles, soft glow (rare) |
+| `t_369_stamp` | 369山莊紀念章 | a round orange stamp impression of a yellow-roofed lodge on a grassy slope |
+| `t_paiyun_stamp` | 排雲山莊紀念章 | a round red stamp impression of a stone mountain lodge under a high peak and stars |
+| `t_whitewood_photo` | 白木林照片 | a polaroid photo of silvery-white dead trees in mist, like an ink painting, soft glow (rare) |
+| `t_salamander_card` | 雪山山椒魚圖鑑卡 | a field-guide card of a tiny brown salamander beside a mossy rock crevice, golden border and golden glow (legendary) |
+| `t_moon_lake_photo` | 天使的眼淚月光照片 | a polaroid photo of a deep blue alpine lake at night reflecting the full moon, silver sparkles, golden border and golden glow (legendary) |
+| `t_rime_photo` | 霧淞照片 | a polaroid photo of fir branches covered in white rime ice like sugar frosting, frosty sparkles, soft glow (rare, snow season) |
