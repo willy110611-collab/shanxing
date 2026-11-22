@@ -30,7 +30,7 @@ const S = {
   T:null, dirty:true, running:false, raf:0, last:0, t:0,
   cb:null, bgCb:null, hits:[], pos:{}, hover:null, sel:null, anim:{}, tw:{},
   sprites:null, shadowSp:null, rays:null, tb1:null, tb2:null,
-  ripples:[], puffs:[], drift:[], paths:[], ro:null, lastTap:{t:0,x:0,y:0},
+  ripples:[], puffs:[], drift:[], ro:null, lastTap:{t:0,x:0,y:0},
   bx:{x0:0, x1:WW, y0:0, y1:WH}      // 相機可以看的範圍（有立體地圖美術圖時＝圖的範圍）
 };
 
@@ -290,28 +290,10 @@ function buildTerrain(D){
 }
 
 // ───────── 資料套用 ─────────
-function chainOf(ms){
-  if (!ms.length) return [];
-  const rem = ms.slice().sort((a, b) => a.diff - b.diff || a.alt - b.alt); let cur = rem.shift(); const out = [cur];
-  while (rem.length){
-    const p = S.T.P(cur.lon, cur.lat); let bi = 0, bd = 1e9;
-    rem.forEach((m, i) => { const q = S.T.P(m.lon, m.lat), d = Math.hypot(p[0] - q[0], p[1] - q[1]) + 22 * Math.abs(m.diff - cur.diff); if (d < bd) { bd = d; bi = i; } });
-    cur = rem.splice(bi, 1)[0]; out.push(cur);
-  }
-  return out;
-}
 function buildScene(){
-  const T = S.T, D = S.data;
+  const T = S.T;
   S.pos = {};
-  D.mountains.forEach(m => { const p = T.P(m.lon, m.lat); S.pos[m.id] = { gx:p[0], gy:p[1], x:p[0], y:p[1] - T.hAt(p[0], p[1]) * LIFT }; });
-  // 路徑（貼地的取樣折線）
-  S.paths = []; const ch = chainOf(D.mountains);
-  for (let i = 0; i + 1 < ch.length; i++){
-    const a = S.pos[ch[i].id], b = S.pos[ch[i+1].id], len = Math.hypot(b.gx - a.gx, b.gy - a.gy), nx = -(b.gy - a.gy) / len, ny = (b.gx - a.gx) / len, bow = len * .1 * (i % 2 ? 1 : -1), pts = [];
-    for (let k = 0; k <= 28; k++){ const t = k / 28, w = Math.sin(Math.PI * t) * bow, gx = lerp(a.gx, b.gx, t) + nx * w, gy = lerp(a.gy, b.gy, t) + ny * w;
-      pts.push([gx, gy - T.hAt(gx, gy) * LIFT]); }
-    S.paths.push({ a:ch[i].id, b:ch[i+1].id, pts });
-  }
+  S.data.mountains.forEach(m => { const p = T.P(m.lon, m.lat); S.pos[m.id] = { gx:p[0], gy:p[1], x:p[0], y:p[1] - T.hAt(p[0], p[1]) * LIFT }; });
   // 海面漣漪
   const r = rng(5); S.ripples = [];
   for (let i = 0; i < 240; i++) S.ripples.push({ x:r() * (WW + 40), y:40 + r() * (WH - 40), l:8 + r() * 16, sp:.6 + r() * 1.6, ph:r() * TAU, g:i % 3 ? 0 : 1 });
@@ -458,9 +440,28 @@ function drawCairn(c, x, y){
   c.lineWidth = .8; c.strokeStyle = INK;
   [[0, 0, 5, 2.6, '#a9a29a'], [.4, -4, 3.8, 2.2, '#c2bbb0'], [-.2, -7.4, 2.6, 1.8, '#f2c94c']].forEach(s => { c.fillStyle = s[4]; c.beginPath(); c.ellipse(x + s[0], y + s[1] - s[3] * .5, s[2], s[3], 0, 0, TAU); c.fill(); c.stroke(); });
 }
-function drawLock(c, x, y){
-  c.lineWidth = .9; c.strokeStyle = INK; c.beginPath(); c.arc(x, y - 1.6, 2.2, Math.PI, TAU); c.stroke();
-  c.fillStyle = '#d9a566'; irr(c, x - 3, y - 1.6, 6, 5, 1.2, 77); c.fill(); c.stroke();
+// 還不能爬的山：木牌右端掛一個明顯的鎖頭（有 icon_lock 美術圖就用，沒有就畫黃銅掛鎖）；(x, y) 是鎖的中心，h 是整個鎖的高度
+const LOCK_ART = 'icon_lock';
+const LOCK_H = 16;           // 鎖頭高度（地圖單位）
+const LOCK_HAZE = [[-14, 3, 40], [13, 2, 44]];   // 還不能爬的山腳薄霧：[x, y, 寬]（本地座標）
+const LOCK_HAZE_A = .45;     // 薄霧透明度
+const LOCK_DIM_A = .85;      // 還不能爬的路標整體淡一點（名字還要看得清楚）
+const LOCK_GRAY = 'grayscale(.55)';   // 還不能爬的路標褪色程度
+function drawLock(c, x, y, h){
+  c.fillStyle = 'rgba(40,25,10,.28)'; c.beginPath(); c.ellipse(x + h * .08, y + h * .5, h * .38, h * .1, 0, 0, TAU); c.fill();   // 小影子
+  if (SX.art && SX.art.drawFrame(c, LOCK_ART, 0, x, y + h / 2, h)) return;
+  const bw = h * .78, bh = h * .56, bx = x - bw / 2, by = y + h / 2 - bh, sr = bw * .3;
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  // 鎖環：先粗墨線、再細的鋼色
+  c.beginPath(); c.moveTo(x - sr, by + 1); c.lineTo(x - sr, by - sr * .5); c.arc(x, by - sr * .5, sr, Math.PI, TAU); c.lineTo(x + sr, by + 1);
+  c.strokeStyle = INK; c.lineWidth = h * .17; c.stroke(); c.strokeStyle = '#c9c3b6'; c.lineWidth = h * .08; c.stroke();
+  // 鎖身：黃銅賽璐璐（亮面、暗面、高光）
+  irr(c, bx, by, bw, bh, h * .12, 91); c.fillStyle = '#e9b847'; c.fill();
+  c.save(); c.clip(); c.fillStyle = '#b9822e'; c.fillRect(x + bw * .12, by, bw, bh); c.fillStyle = 'rgba(255,244,190,.85)'; c.fillRect(bx + bw * .12, by + bh * .14, bw * .12, bh * .6); c.restore();
+  irr(c, bx, by, bw, bh, h * .12, 91); c.strokeStyle = INK; c.lineWidth = h * .07; c.stroke();
+  // 鑰匙孔
+  c.fillStyle = '#4a2f1a'; c.beginPath(); c.arc(x, by + bh * .4, bh * .13, 0, TAU); c.fill();
+  c.beginPath(); c.moveTo(x - bh * .07, by + bh * .45); c.lineTo(x + bh * .07, by + bh * .45); c.lineTo(x + bh * .1, by + bh * .75); c.lineTo(x - bh * .1, by + bh * .75); c.closePath(); c.fill();
 }
 // 路標美術圖 map_pin（裁掉透明邊後量的比例，換圖要重量）
 const PIN_ART = 'map_pin';
@@ -522,7 +523,7 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.fillStyle = 'rgba(40,25,10,.22)'; c.beginPath(); c.ellipse(0, 0, 12, 4.4, 0, 0, TAU); c.fill();
   c.fillStyle = 'rgba(40,25,10,.38)'; c.beginPath(); c.ellipse(0, 0, 7, 2.6, 0, 0, TAU); c.fill();
   if (cur) drawWalkers(c, t);
-  if (locked) c.globalAlpha = .72;
+  if (locked) c.globalAlpha = LOCK_DIM_A;
   if (done) drawCairn(c, -9, 0);
   // 木樁（偏移時變成一根斜斜的引線木樁，從山頂連到木牌；美術圖自己有木樁，只在偏移時接到圖的樁底）
   if (!G.art || ox || oy){ c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(ox, oy + (G.art ? 0 : py + ph / 2));
@@ -530,14 +531,13 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.translate(ox, oy);
   c.lineWidth = 1; c.strokeStyle = INK; c.lineJoin = 'round';
   if (G.art){
-    if (locked) c.filter = 'grayscale(.7)';   // 還沒解鎖：旗子、木牌褪色
+    if (locked) c.filter = LOCK_GRAY;   // 還沒解鎖：旗子、木牌褪色
     drawPinArt(c, G); c.filter = 'none';
     c.save(); c.translate(G.cx, py); c.rotate(G.tilt);
     c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-G.need / 2 + 8.4, 0, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke();
     c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, .6);
     c.restore();
     if (done) drawCrown(c, G.cx - w / 4, py - ph / 2 + 2);
-    if (locked) drawLock(c, G.cx + w / 2 - 4, py + ph / 2 - 1);
   } else {
   // 旗桿與小旗
   const fx = w / 2 - 5, wave = Math.sin(t * 3 + idx) * 1.6;
@@ -552,7 +552,6 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-w / 2 + 8.4, py, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke();
   c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, py + .6);
   if (done) drawCrown(c, 0, py - ph / 2 + .6);
-  if (locked) drawLock(c, w / 2 - 1, py + ph / 2 + 1);
   }
   const bx = G.cx + w / 2 - 1, byT = py - ph / 2 + Math.tan(G.tilt) * w / 2;   // 照片數徽章：木牌右上角
   const ph2 = D.photos[id]; if (ph2 > 0){ c.fillStyle = '#4f9fd6'; c.beginPath(); c.arc(bx, byT, 4.2, 0, TAU); c.fill(); c.lineWidth = .7; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#fff'; c.font = `bold 6px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ph2 > 99 ? '99+' : ph2, bx, byT + .3); }
@@ -560,25 +559,13 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
     c.fillStyle = '#fbf0d5'; irr(c, -11, 4, 22, 3.6, 1.6, 55); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke(); c.fillStyle = '#8fcf6e'; c.fillRect(-10, 5, 20 * f, 1.6); }
   c.globalAlpha = 1;
   c.translate(-ox, -oy);
-  if (locked){ // 手繪霧：半透明雲團覆蓋
-    [[-15, -6, 58], [14, -8, 60], [0, -22, 64], [-4, 2, 56], [20, -20, 46]].forEach((f, i) => {
-      const dx = Math.sin(t * .5 + i * 1.7) * 3; c.globalAlpha = .86; drawCloud(c, i, f[0] + dx, f[1], f[2]); });
+  if (locked){ // 還不能爬：山腳一層淡淡的薄霧，鎖頭掛在木牌右端（鎖才是主要提示，不被霧蓋住）
+    LOCK_HAZE.forEach((f, i) => { const dx = Math.sin(t * .5 + i * 1.7) * 3; c.globalAlpha = LOCK_HAZE_A; drawCloud(c, i, f[0] + dx, f[1], f[2]); });
     c.globalAlpha = 1;
+    drawLock(c, ox + G.cx + w / 2 - 3, oy + py + ph / 2 - 2, LOCK_H);
   }
   c.restore();
   S.hits.push({ id, x0:x + Math.min(-12, ox + G.x0 - 4) * ps, x1:x + Math.max(cur ? 26 : 12, ox + G.x1) * ps, y0:y + (oy + G.y0) * ps, y1:y + 8 * ps, y });
-}
-function drawPaths(c, t, ps){
-  const D = S.data;
-  for (const p of S.paths){
-    const both = D.done[p.a] && D.done[p.b];
-    c.beginPath(); p.pts.forEach((q, i) => { const s = w2s(q[0], q[1]); i ? c.lineTo(s.x, s.y) : c.moveTo(s.x, s.y); });
-    c.lineCap = 'round'; c.lineJoin = 'round'; c.setLineDash([7 * ps, 6 * ps]); c.lineDashOffset = -t * 6 * ps;
-    c.strokeStyle = 'rgba(58,42,32,.4)'; c.lineWidth = 4.4 * ps; c.stroke();
-    c.strokeStyle = both ? '#f2c94c' : '#df4f3f'; c.lineWidth = 2.6 * ps; c.stroke();
-    c.strokeStyle = both ? '#fff4b8' : '#ffd9a0'; c.lineWidth = .9 * ps; c.stroke();
-  }
-  c.setLineDash([]);
 }
 
 function makeRays(){
@@ -628,7 +615,6 @@ function render(t){
   drawDrift(c, t);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   S.hits = [];
-  drawPaths(c, t, ps);
   const order = S.data.mountains.map((m, i) => ({ m, i, p:S.pos[m.id] })).filter(o => o.p).sort((a, b) => a.p.y - b.p.y);
   order.forEach(o => o.q = w2s(o.p.x, o.p.y));
   const lay = layoutPins(c, order, ps);
