@@ -1,7 +1,7 @@
 // 山行小日子：離線快取。程式與頁面「先抓網路、失敗才用快取」，所以更新會馬上生效；音樂圖示則先用快取。
 // 兩個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
 // 玩家只會下載有換過的圖和新圖（美術圖網址帶 ?v=檔案指紋，圖換了網址才會變）。
-const CACHE = 'shanxing-v59';
+const CACHE = 'shanxing-v62';
 const ART_CACHE = 'shanxing-art';
 const isArt = u => /\/(audio|art)\//.test(u.pathname) && !/manifest\.json$/.test(u.pathname);
 self.addEventListener('install', e => { self.skipWaiting(); });
@@ -48,7 +48,7 @@ self.addEventListener('push', e => {
     let notes = [];
     try { const sub = await self.registration.pushManager.getSubscription(); if (sub) notes = (await (await fetch(self.SX_API + '/push/pending?e=' + encodeURIComponent(sub.endpoint))).json()).notes || []; } catch (x) {}
     if (!notes.length) notes = [{ title: '山行小日子', body: '山上有新消息，打開看看吧。' }];
-    for (const n of notes) await self.registration.showNotification(n.title, { body: n.body, tag: n.tag || undefined, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' });
+    for (const n of notes) await self.registration.showNotification(n.title, { body: n.body, tag: n.tag || undefined, icon: 'icons/shiba-192.png', badge: 'icons/shiba-192.png' });
   })());
 });
 self.addEventListener('notificationclick', e => {

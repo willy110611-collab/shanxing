@@ -282,12 +282,12 @@ SX.MOUNTAINS.forEach(m => {
 
 // 官方登山分級（一般季節）：need 是要先登頂過哪一級（或更難）的百岳才開放
 // 遊戲裡還沒有 need 那一級的百岳時，改看再下一級（SX.gradeNeed 算，例如還沒有 C 級的山，C+ 就先要 B 級）
-// snow：雪季時卡片上的提醒（只提醒、不擋）
+// snowParty：雪季（SX.SEASONS 的 snow）要幾人以上組隊才能出發（跟真實入山申請一樣；寫在這裡一個地方，SX.permitNeed 讀它）
 SX.GRADES = {
   'A':  { need:null, text:'一般健行路線：步道清楚、沒有危險地形，從當天來回到兩三天的都有' },
   'B':  { need:'A',  text:'中級縱走，大約 4～5 天，或 1～3 天但有危險地形' },
   'C':  { need:'B',  text:'高級縱走，大約 5 天以上' },
-  'C+': { need:'C',  text:'高級縱走，有垂降和攀岩地形', snow:'雪季管制中：真實世界這時要三人以上組隊才能申請' },
+  'C+': { need:'C',  text:'高級縱走，有垂降和攀岩地形', snowParty:3 },
 };
 SX.GRADE_ORDER = ['A', 'B', 'C', 'C+'];
 SX.gradeOf = id => { const m = SX.M[id], b = m && m.by && SX.BY[m.by]; return b ? b.grade : null; };   // 不是百岳的山沒有分級
@@ -324,6 +324,13 @@ SX.mdNum = s => +s.replace('-', '');   // '03-31' → 331
 SX.seasonsAt = function(d){
   const t = new Date(d.getTime() + 8 * 3600e3), md = (t.getUTCMonth() + 1) * 100 + t.getUTCDate();
   return SX.SEASONS.filter(s => { const a = SX.mdNum(s.from), b = SX.mdNum(s.to); return a <= b ? md >= a && md <= b : md >= a || md <= b; });
+};
+// 入山管制（只在這裡判斷）：這座山在這一天出發要幾人以上組隊；不用就回 null
+// 雪季裡、分級有寫 snowParty 的山（C+）→ { minParty, reason }。卡片和出發（game.js 的 permitBlock）都只看這裡
+SX.permitNeed = function(id, date){
+  const g = SX.gradeOf(id), n = g && SX.GRADES[g].snowParty;
+  if (!n || !SX.seasonsAt(date).some(s => s.id === 'snow' && s.mountains.includes(SX.groupOf(id)))) return null;
+  return { minParty:n, reason:`雪季管制：要${'零一二三四五六七八九十'[n] || n}人以上組隊才能出發` };
 };
 
 // 隨機遭遇：where 可限制海拔比例（minFrac/maxFrac 0..1）、山、天氣(wx)、時段(time)；rare 為稀有遭遇
