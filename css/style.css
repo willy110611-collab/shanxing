@@ -645,3 +645,7 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 @keyframes ldRun{to{background-position:-224px -43px}}
 @keyframes ldHop{to{transform:translateY(-3px)}}
 @media (prefers-reduced-motion:reduce){.ldDog{animation:none}}
+.ldSlow{text-align:center;color:#5a3a22}
+.ldSlow p{margin:0 0 12px;font-size:14px;line-height:1.6}
+.ldBtns{display:flex;gap:10px;justify-content:center}
+.ldBtns .cbtn{white-space:nowrap}

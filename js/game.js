@@ -1871,11 +1871,26 @@
   // 美術圖和兩套手寫字型都到了才收起讀取畫面（畫布上的字和木牌會用到字型；字型載入失敗也會往下走）
   const fontsReady = document.fonts && document.fonts.load ? Promise.all(['16px Iansui', '16px "LXGW WenKai TC"'].map(f => document.fonts.load(f, '山行').catch(() => {}))) : Promise.resolve();
   // 收起後去哪裡（開場只在這裡決定一次）：正在爬山的人直接回到步道（離開時走的路在進登山畫面時補算、打開日記），其他人先到山友大廳
-  SX.art.whenReady(() => fontsReady.then(() => {
+  // 美術圖還沒到齊就進去（玩家按「先進去看看」）也沒關係：沒到的圖先用程式畫，圖到了各畫面會自己換上
+  let entered = false;
+  function enterGame(){
+    if (entered) return; entered = true; clearTimeout(slowLoadT);
     const L = $('#loading'); if (L) { ldSet(100); L.classList.add('done'); }
     const tr = onTrail(); if (tr) startClimb(tr, true); else go('lobby');
     pumpNotice();
-  }));
+  }
+  // 網路太慢：讀取超過 LOAD_TIMEOUT_MS 還沒好，在讀取畫面告訴玩家，讓他選「再試一次」或「先進去看看」（小柴犬繼續跑）
+  const LOAD_TIMEOUT_MS = 30000;
+  const slowLoadT = setTimeout(showSlowLoad, LOAD_TIMEOUT_MS);
+  SX.art.whenReady(() => fontsReady.then(enterGame));
+  function showSlowLoad(){
+    const box = $('.ldBox'); if (entered || !box || $('#ldSlow')) return;
+    const tip = $('.ldTip'); if (tip) tip.remove();
+    box.insertAdjacentHTML('beforeend', `<div id="ldSlow" class="ldSlow"><p>連線好像有點慢，無法順利載入。建議確認網路狀況後再試一次。</p>
+      <div class="ldBtns"><button class="cbtn" id="ldRetry">再試一次</button><button class="cbtn go" id="ldGo">先進去看看</button></div></div>`);
+    $('#ldRetry').onclick = () => location.reload();
+    $('#ldGo').onclick = () => { A.unlock(); enterGame(); };
+  }
   requestAnimationFrame(loop);
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
