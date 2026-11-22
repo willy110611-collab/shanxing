@@ -456,6 +456,10 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 |---|---|---|
 | `hiker_walk8` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind, slightly from above, full body, shown as an **8-frame walking cycle sprite sheet arranged in 2 rows of 4** (frames 1–4 on the top row, 5–8 on the bottom row, read left to right), evenly spaced in a grid, same size and same foot baseline in every frame. One full stride: left foot contact → passing → right foot contact → passing, with the trekking poles swinging opposite to the legs, the backpack bouncing slightly, natural uphill walking posture leaning a little forward. |
 | `hiker_rain_walk8` | 16:9 | 洋紅底。Same as hiker_walk8 (same grid, same 8 poses, same size and baseline), but the hiker wears a yellow rain poncho over the backpack. |
+| `hiker_walk16` | 16:9 | 洋紅底。16 格正背面走路循環（遊戲以 2 列 × 8 欄切）；左右腳交替，格序在 art.js SHEETS 用 order 重排。 |
+| `hiker_rain_walk16` | 16:9 | 洋紅底。同 hiker_walk16，穿黃色雨衣、深綠色背包套，姿勢完全相同。 |
+| `hiker_stairs16` | 16:9 | 洋紅底。16 格正背面爬石階循環（2 列 × 8 欄）：前 8 格抬左膝、後 8 格抬右膝。 |
+| `hiker_rain_stairs16` | 16:9 | 洋紅底。同 hiker_stairs16，穿黃色雨衣。 |
 
 ## 第 17 批：讀取畫面跑步的柴犬（放進 `05.寵物`）
 

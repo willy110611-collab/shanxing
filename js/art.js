@@ -11,10 +11,14 @@ const listeners = [];
 let loaded = false;
 // 多格動作圖怎麼切：名字符合哪一條就切成 欄 × 列 格（由左到右、上排再下排）。新的動作圖只改這張表
 // air：有跳起來的格子（hiker_hop4）：每格保留離地的高度、不把腳底拉到同一條線；畫的高度以最後一格（站直）為準
+// order：Gemini 畫的格子順序不對（左右腳沒輪流）時，播放順序照這串（0 起算的原圖格號）
+// hiker_walk16 原圖左右腳沒照順序畫：挑出「左腳抬起 → 落地 → 右腳抬起 → 落地」的播放順序
+const WALK16 = [8, 6, 1, 4, 14, 5, 0, 15, 9, 2, 11, 3, 13, 7, 12, 10];
 const SHEETS = [
   [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
   [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
-  [/_hop4$/, 4, 1, { air:true }]  // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
+  [/_hop4$/, 4, 1, { air:true }], // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
+  [/_walk16$/, 8, 2, { order:WALK16 }]   // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
 ];
 const POSE = /^hiker_/;   // 登山客的圖：單張動作也用上半身置中（見 prep）
 function sheetOf(id){ for (let i = 0; i < SHEETS.length; i++) if (SHEETS[i][0].test(id)) return SHEETS[i]; return null; }
@@ -110,7 +114,7 @@ function prep(name, img){
     fr.forEach((f, i) => { const x0 = (i % cols) * cw, w = Math.min(W, cw), by = bys[i]; f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.y = Math.max(y0s[i], by - H); f.w = w; f.h = by - f.y; });
     if (air) e.hk = fr[0].h / stand;   // 畫的時候給的高度是「人站直多高」：整格要再放大這麼多倍（多出來的是跳起來的空間）
   }
-  e.frames = fr;
+  e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => fr[i]) : fr;
   return toBitmap(c).then(b => { e.img = b; return e; });
 }
 // 一格裡身體的左右重心：只看外框高度 20%～55% 那一段（頭到腰，不含腳和登山杖尖），用不透明度加權

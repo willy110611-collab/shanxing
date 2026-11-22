@@ -146,9 +146,9 @@ const GAIT = {
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
 };
 // 走路圖的高度修正：每張圖量「帽頂到鞋底」佔整格多高（量出來都在 97～100%），用一般走路圖當基準換算，換圖時人不會忽大忽小。重畫了圖要重新量
-// 一般走路：正背面重畫的八格圖（舊的八格版身體往右轉，已換掉）；八格圖沒載入時用四格圖
-const WALK_DRY = 'hiker_walk8', WALK_RAIN = 'hiker_rain_walk8';
-const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
+// 一般走路：正背面十六格圖（格子播放順序在 art.js 的 WALK16 重排，左右腳輪流）
+const WALK_DRY = 'hiker_walk16', WALK_RAIN = 'hiker_rain_walk16';
+const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
 const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
@@ -1482,7 +1482,7 @@ function rainy(id){ const r = RAIN_OF[id]; return isRain && r && ART.get(r) ? r 
 function gaitSheet(){
   gait.sf = false;
   if (gait.act) { gait.sid = gait.act; gait.sf = gait.aflip; return; }
-  // 一般走路：正背面八格圖（WALK_DRY／WALK_RAIN），下雨天穿黃色雨衣
+  // 一般走路：正背面十六格圖（WALK_DRY／WALK_RAIN），下雨天穿黃色雨衣
   const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;
   // 階梯、累了：重畫成正背面直直走的版本（雨天換雨衣版）；彎道：轉身圖（往右前方，左彎鏡射），沒有雨衣版所以雨天照舊一般走路
   const m = gait.mode, id = m === 'stairs' ? rainy('hiker_stairs8') : m === 'tired' ? rainy('hiker_tired_walk8') : null;   // 轉彎也用一般走路圖（側面大跨步的轉彎圖腳張太開，跟正背面走路對不起來，不用）
