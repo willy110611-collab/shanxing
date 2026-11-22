@@ -639,9 +639,9 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .infoCard .ic-h{padding-right:0}
 .mCard .mBack{position:sticky;top:0;z-index:3;display:flex;width:fit-content;margin:-4px 0 6px -4px;font-size:13px;white-space:nowrap}
 
-/* 讀取畫面：進度條上一隻小柴犬跟著進度往前跑（shiba_walk 四格，一步一步換格、輕輕跳） */
-.ldTrack{position:relative;width:100%;padding-top:46px}
-.ldDog{position:absolute;bottom:9px;left:0;width:40px;height:50px;margin-left:-20px;background:url("../art/shiba_walk.webp") 0 -21px/160px auto no-repeat;animation:ldRun .48s steps(4) infinite,ldHop .24s ease-in-out infinite alternate;transition:left .25s ease;pointer-events:none}
-@keyframes ldRun{to{background-position:-160px -21px}}
+/* 讀取畫面：進度條上一隻側面的小柴犬跟著進度往右跑（shiba_run 一排四格，每格 180×402，狗在 y145～265；顯示寬 56px＝縮 0.311 倍） */
+.ldTrack{position:relative;width:100%;padding-top:42px}
+.ldDog{position:absolute;bottom:9px;left:0;width:56px;height:40px;margin-left:-40px;background:url("../art/shiba_run.webp") 0 -43px/224px auto no-repeat;animation:ldRun .44s steps(4) infinite,ldHop .22s ease-in-out infinite alternate;transition:left .25s ease;pointer-events:none}
+@keyframes ldRun{to{background-position:-224px -43px}}
 @keyframes ldHop{to{transform:translateY(-3px)}}
 @media (prefers-reduced-motion:reduce){.ldDog{animation:none}}
