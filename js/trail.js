@@ -67,7 +67,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
 const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
-const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_A = 0.09, TURN_X = 0.07;   // 轉彎傾身：看腳下往前幾段的彎度、彎到多少算全傾、最多傾幾弧度（約 5 度）、腳往內側偏幾公尺
+const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
 // 最近 win 格裡慢的那四分之一（p75）超過這個目標格數的預算就降一級；最慢的一成都在順的範圍內、順了一陣子才升一級
@@ -1792,7 +1792,7 @@ let benchO = null;
 // bx、by、bs：坐在長椅上時，椅面中間的畫面位置和那裡的比例（每公尺幾像素）；沒給就站在路中間
 function drawHero(s, t, bx, by, bs){
   proj(jhG, fhG, false);
-  const onB = bx != null, sit = s.rest || s.sleep, tn = onB || sit ? 0 : hero.turn;   // tn：轉彎傾身（坐著不傾）
+  const onB = bx != null, sit = s.rest || s.sleep, tn = onB || sit ? 0 : hero.turn;   // tn：轉彎時腳往內側偏（坐著不偏）
   const X = onB ? bx : gx + tn * TURN_X * gs, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100;     // 角色座標單位：公分
   hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
   ctx.globalAlpha = 1;
@@ -1802,7 +1802,7 @@ function drawHero(s, t, bx, by, bs){
   if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
   else ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
-  ctx.save(); ctx.translate(X, Y); if (tn) ctx.rotate(tn * TURN_A); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 轉彎往內側傾（以腳底為軸）；爬階梯：身體往前傾，從背後看起來矮一點點
+  ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
   if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
   ctx.restore();
 }
