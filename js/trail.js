@@ -65,18 +65,23 @@ const hits = []; let hitN = 0;
 const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_A = 0.09, TURN_X = 0.07;   // 轉彎傾身：看腳下往前幾段的彎度、彎到多少算全傾、最多傾幾弧度（約 5 度）、腳往內側偏幾公尺
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
-// 自動畫質：量真正每一格花多久（最近 win 格），一直太慢就一級一級降、很順就一級一級升；兩次調整至少隔 gap 秒，升上去又變慢的話下次等久一倍
-// 第 0 級最好；往下依序：解析度 2→1.5→1.25 倍、遠處植物少一點、草叢畫近一點、樹影和光斑不畫。後面三項都是慢慢淡掉，不會一下子不見
+// 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
+// 最近 win 格裡慢的那四分之一（p75）超過這個目標格數的預算就降一級；最慢的一成都在順的範圍內、順了一陣子才升一級
+// 兩次調整至少隔 gap 秒，升上去又變慢的話下次等久一倍。走路要 60 格、休息 30 格，預算跟著目標格數算
+// 第 0 級最好；往下依序：解析度 2→1.5→1.25→1→0.85 倍（畫布小一點、交給瀏覽器放大，手繪風看不太出來；狀態列是網頁文字不受影響）、
+// 遠處植物少一點、草叢畫近一點、樹影和光斑不畫。後面三項都是慢慢淡掉，不會一下子不見
 const QUAL = {
-  budget:20, ok:17.6,                 // 每格超過 20 毫秒（約 50 fps 以下）算太慢；最慢的一成都在 17.6 毫秒內算順
+  slow:1.2, ok:1.06,                  // 慢的四分之一超過「一格該花的時間」的 1.2 倍算太慢；最慢的一成都在 1.06 倍內算順
   win:90, gap:3, upAfter:8, upMax:64, // 看最近幾格、最少隔幾秒、順了幾秒才升一級（最多等幾秒）
-  dpr:[2, 1.5, 1.25, 1.25, 1.25, 1.25],
-  plant:[0, 0, 0, 1, 1, 1], plantJ:55, // 第 3 級起：55 段（約 90 公尺）以外每段少畫兩個植物位置
-  turf:[0, 0, 0, 0, 1, 1], turfCut:10, // 第 4 級起：草叢少畫 10 段
-  light:[0, 0, 0, 0, 0, 1],           // 第 5 級：樹影、光斑不畫
+  dpr:[2, 1.5, 1.25, 1.25, 1, 0.85],
+  plant:[0, 0, 0.5, 1, 1, 1], plantJ:55, // 第 2 級起：55 段（約 90 公尺）以外每段少畫兩個植物位置
+  turf:[0, 0, 0, 1, 1, 1], turfCut:10,   // 第 3 級起：草叢少畫 10 段
+  light:[0, 0, 0, 0, 1, 1],              // 第 4 級起：樹影、光斑不畫
+  phone:1,                            // 手機（觸控＋小螢幕）從第 1 級（1.5 倍）開始，順的話才往上升
   ease:0.8                            // 植物、草叢、光影跟著畫質慢慢變（每秒變多少）
 };
-const qs = { lvl:0, ring:new Float32Array(90), n:0, i:0, chgT:-99, okT:0, wait:8, upT:-99, cnt:0, plant:0, turf:0, light:0, sort:new Float32Array(90) };
+const PHONE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && Math.min(screen.width || 9999, screen.height || 9999) <= 540;
+const qs = { lvl:PHONE ? QUAL.phone : 0, ring:new Float32Array(90), n:0, i:0, chgT:-99, okT:0, wait:8, upT:-99, cnt:0, plant:0, turf:0, light:0, sort:new Float32Array(90), last:0, fps:60 };
 function turfJ(){ return TURF_J - qs.turf * QUAL.turfCut; }
 function qualSet(l, now){
   if (l === qs.lvl) return;
@@ -85,19 +90,21 @@ function qualSet(l, now){
   qs.lvl = l; qs.chgT = now; qs.n = 0; qs.okT = 0;
   S.resize();   // 解析度跟著換（這一格馬上重畫，畫面不會閃）
 }
-// ft：上一格到這一格真正隔了幾毫秒；fps：遊戲現在要的格數（休息時 30，不拿來判斷）
-function qualTick(ft, fps, dt){
-  const now = performance.now() / 1000, Q = QUAL;
+// 每畫一格量一次：離上一次畫隔了幾毫秒（從 requestAnimationFrame 呼叫進來，所以就是真正的畫面間隔）；fps：遊戲現在要的格數（走路 60、休息 30）
+function qualTick(fps, dt){
+  const nowMs = performance.now(), now = nowMs / 1000, Q = QUAL, ft = qs.last ? nowMs - qs.last : 0;
+  qs.last = nowMs;
   qs.plant += (Q.plant[qs.lvl] - qs.plant) * Math.min(1, dt * Q.ease);
   qs.turf += (Q.turf[qs.lvl] - qs.turf) * Math.min(1, dt * Q.ease);
   qs.light += (Q.light[qs.lvl] - qs.light) * Math.min(1, dt * Q.ease);
-  if (fps !== 60 || !(ft > 0) || ft > 250) return;   // 休息、暫停、切回分頁的那一格不算
+  if (fps !== qs.fps) { qs.fps = fps; qs.n = 0; qs.okT = 0; }   // 走路和休息的目標不同：換了就重新量
+  if (!(ft > 0) || ft > 250) return;   // 切回分頁、暫停後的第一格不算
   qs.ring[qs.i] = ft; qs.i = (qs.i + 1) % Q.win; if (qs.n < Q.win) qs.n++;
   if (++qs.cnt % 15 || qs.n < 60 || now - qs.chgT < Q.gap) return;
-  const a = qs.sort.subarray(0, qs.n); a.set(qs.ring.subarray(0, qs.n)); a.sort();
-  const med = a[qs.n >> 1], p90 = a[Math.floor(qs.n * 0.9)];
-  if (med > Q.budget && qs.lvl < Q.dpr.length - 1) { qualSet(qs.lvl + 1, now); return; }
-  qs.okT = p90 < Q.ok ? qs.okT + 15 * ft / 1000 : 0;
+  const a = qs.sort.subarray(0, qs.n), per = 1000 / (fps || 60); a.set(qs.ring.subarray(0, qs.n)); a.sort();
+  const p75 = a[Math.floor(qs.n * 0.75)], p90 = a[Math.floor(qs.n * 0.9)];
+  if (p75 > per * Q.slow && qs.lvl < Q.dpr.length - 1) { qualSet(qs.lvl + 1, now); return; }
+  qs.okT = p90 < per * Q.ok ? qs.okT + 15 * ft / 1000 : 0;
   if (qs.okT > qs.wait && qs.lvl > 0) qualSet(qs.lvl - 1, now);
 }
 // 換山後把用得到的縮圖、合成影子、貼圖縮小版、路標牌子先做好：每格只花 WARM_MS 毫秒慢慢做，走到哪裡第一次看到時不會卡一下
@@ -1179,7 +1186,7 @@ S.resize = function(){
   if (!cv) return;
   const p = cv.parentElement, bw = p ? p.clientWidth : 0, bh = p ? p.clientHeight : 0, rc = (bw && bh) ? null : cv.getBoundingClientRect();
   const w = Math.max(1, Math.round(bw || (rc && rc.width) || 375)), h = Math.max(1, Math.round(bh || (rc && rc.height) || 812));
-  const d = Math.min(QUAL.dpr[qs.lvl], window.devicePixelRatio || 1);   // 解析度：自動畫質那一級的上限（最高 2 倍）
+  const d = Math.min(Math.max(QUAL.dpr[qs.lvl], snapDpr), window.devicePixelRatio || 1);   // 解析度：自動畫質那一級的上限（最高 2 倍）；拍照那一格至少 snapDpr
   if (w === W && h === H && d === DPR && RAYS && cv.width === Math.round(w * d)) return;
   W = w; H = h; DPR = d; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * HORF); CAMH = FOOTF * H * HZ / F; U = H / 812;   // 鏡頭高度由「登山客腳底在畫面的位置」反推
@@ -2275,7 +2282,7 @@ S.render = function(s){
   const t = s.t || 0, dt = clamp(s.dt || 0.016, 0, 0.05), dist = Math.max(0, s.dist || 0), sp = s.speed || 0, wx = s.wx || DEFWX;
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
-  if (s.dt > 0) qualTick(s.ft, s.fps, dt);   // 拍照時重畫那一格（dt = 0）不算
+  if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
   updPalette(wx, frac, dt); updHero(s, t, dt, dist, sp); stepMates(dt);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
@@ -2338,10 +2345,13 @@ const PHOTO_COMPS = [
   { lens:0.7, zw:0.75, fx:0.66, fy:0.86 },  // 登山客偏右，左邊留風景
 ];
 // 拍照：先用「這一刻的位置」重畫一格再取畫面（遊戲在背景補進度、或不在登山畫面時，畫布可能是空的 → 拍出全黑）
+const SNAP_DPR = 1.5;   // 拍照那一格的解析度至少這麼多倍（自動畫質把畫面降到 1 倍以下時，照片才不會糊）
+let snapDpr = 0;
 S.snapshot = function(dist){
   if (!cv || !curS) return '';
   const F0 = F;
   try {
+    if (DPR < SNAP_DPR) { snapDpr = SNAP_DPR; S.resize(); }
     // 構圖依拍照的位置固定挑一種（同一個地方拍，構圖每次一樣）：寬景、中景、登山客偏左／偏右；登頂用寬景把山頂標誌拍進去
     const d = dist != null ? dist : curS.dist, comp = d >= total - 1 ? PHOTO_COMPS[0] : PHOTO_COMPS[Math.abs(Math.round(d / 100) * 7919) % PHOTO_COMPS.length];
     F = F0 * comp.lens;   // 只為這張照片換鏡頭，下面 finally 一定換回來，下一格畫面照舊
@@ -2359,7 +2369,7 @@ S.snapshot = function(dist){
     const url = px[3] === 0 ? '' : c.toDataURL('image/jpeg', 0.74);   // 還是沒畫出東西：不要存一張黑照片
     free(c);
     return url;
-  } catch (e) { return ''; } finally { F = F0; }
+  } catch (e) { return ''; } finally { F = F0; if (snapDpr) { snapDpr = 0; S.resize(); } }
 };
 S.SEG = SEG;
 })();
