@@ -151,11 +151,11 @@
   }
   // ───────── 季節限定（真實日期，台灣時間；資料在 SX.SEASONS）─────────
   let testDate = null;   // 只給測試掛鉤 SXG.date() 用
-  const snowSeasonAt = (id, ts) => SX.seasonsAt(testDate || new Date(ts)).some(s => s.id === 'snow' && s.mountains.includes(id));
+  const snowSeasonAt = (id, ts) => SX.seasonsAt(testDate || new Date(ts)).some(s => s.id === 'snow' && s.mountains.includes(SX.groupOf(id)));
   let wx = calcWx();
   const seasonNow = (date = testDate || new Date()) => SX.seasonsAt(date);
   // w、date：要判斷的天氣時段和日期（離開時的日記用「當時」的），不給就是現在
-  const seasonOk = (sid, mid, w = wx, date) => { const s = seasonNow(date).find(x => x.id === sid); return !!s && s.mountains.includes(mid) && (!s.time || s.time.includes(w.time)); };
+  const seasonOk = (sid, mid, w = wx, date) => { const s = seasonNow(date).find(x => x.id === sid); return !!s && s.mountains.includes(SX.groupOf(mid)) && (!s.time || s.time.includes(w.time)); };
   const mdText = md => `${+md.slice(0, 2)}/${+md.slice(3)}`;   // '03-31' → '3/31'
   const seasonEnd = s => mdText(s.to);
   const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'snow',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
@@ -197,8 +197,16 @@
 
   // ───────── 地圖 ─────────
   let selId = null, mapInit = false;
-  // 解鎖規則：難度 1–2 一開始就開放；其他要先登頂任何一座「難度 ≥ 自己 − 1」的山
-  const unlocked = m => m.diff <= 2 || SV.unlockAll || SX.MOUNTAINS.some(x => SV.done[x.id] && x.diff >= m.diff - 1);
+  // 解鎖規則：山群裡的山看山群主峰（lead）的難度；難度 1–2 一開始就開放，其他要先登頂任何一座「難度 ≥ 自己 − 1」的山
+  // 百岳再加官方分級（跟真實入山申請一樣）：B 級要先登頂過 A 級以上的百岳，C 要 B 以上、C+ 要 C 以上（SX.GRADES 的 need）
+  const leadOf = m => (m.group && SX.M[SX.GROUP[m.group].lead]) || m;
+  const diffOpen = m => { const L = leadOf(m); return L.diff <= 2 || SX.MOUNTAINS.some(x => SV.done[x.id] && x.diff >= L.diff - 1); };
+  const gradeRank = id => SX.GRADE_ORDER.indexOf(SX.gradeOf(id));   // 不是百岳 → -1
+  const gradeNeed = m => { const g = SX.gradeOf(m.id); return g ? SX.GRADES[g].need : null; };
+  const gradeOpen = m => { const n = gradeNeed(m); return !n || SX.MOUNTAINS.some(x => SV.done[x.id] && gradeRank(x.id) >= SX.GRADE_ORDER.indexOf(n)); };
+  const unlocked = m => SV.unlockAll || (diffOpen(m) && gradeOpen(m));
+  const lockText = m => !diffOpen(m) ? `先登頂任何一座難度 ${leadOf(m).diff - 1} 顆星以上的山，這裡就會開放。`
+    : `這是官方分級 ${SX.gradeOf(m.id)} 級的百岳，要先登頂過任何一座 ${gradeNeed(m)} 級以上的百岳才能申請。`;
   // 建議挑戰順序：已開放、還沒爬過的山裡，難度最低、時間最短的那座；全都爬過就推爬最少次的。正在爬的那座不推
   function recommendNext(){
     const going = id => { const p = SV.prog[id]; return id === SV.cur && p && p.dist > 0 && !p.fin; };
@@ -212,19 +220,27 @@
     const top = Math.max(2, ...SX.MOUNTAINS.filter(x => SV.done[x.id]).map(x => x.diff));
     return m.diff <= top ? '適合現在的你' : '有點挑戰，記得量力而為、多休息';
   }
+  // 地圖旗子（SX.PINS）：山群一根旗子，狀態由山群裡的山合起來——有一座登頂就戴皇冠、全部都鎖住才算鎖、正在爬其中一座就算這根
   function renderMap(){
-    const locked = {}, photos = {};
-    SX.MOUNTAINS.forEach(m => { if (!unlocked(m)) locked[m.id] = true; });
-    SV.userPhotos.forEach(p => { photos[p.mountainId] = (photos[p.mountainId] || 0) + 1; });
+    const done = {}, prog = {}, locked = {}, photos = {};
+    SV.userPhotos.forEach(p => { const k = SX.groupOf(p.mountainId); photos[k] = (photos[k] || 0) + 1; });
+    SX.PINS.forEach(pin => {
+      const ps = pin.isGroup ? SX.peaksOf(pin.id) : [pin];
+      done[pin.id] = ps.reduce((a, m) => a + (SV.done[m.id] || 0), 0);
+      if (!ps.some(unlocked)) locked[pin.id] = true;
+      const f = Math.max(0, ...ps.map(m => { const p = SV.prog[m.id]; return p && !p.fin ? p.dist / m.dist : 0; }));   // 進度條：走最遠、還沒走完的那座
+      if (f > 0) prog[pin.id] = { dist:f * pin.dist };
+    });
+    const cur = SV.cur && SX.M[SV.cur] ? SX.groupOf(SV.cur) : null, rec = recommendNext();
     try {
-      WM.setData({ mountains:SX.MOUNTAINS, coast:SX.COAST, ridge:SX.RIDGE, done:SV.done, prog:SV.prog, current:SV.cur, locked, photos, pet:SV.pet || null, rec:(recommendNext() || {}).id || null });
+      WM.setData({ mountains:SX.PINS, coast:SX.COAST, ridge:SX.RIDGE, done, prog, current:cur, locked, photos, pet:SV.pet || null, rec:rec ? SX.groupOf(rec.id) : null });
       WM.start(); if (!mapInit) { mapInit = true; WM.reset(); }
     } catch(e){ console.error('worldmap', e); }
   }
   const hideRoute = () => { $('#routeCard').classList.remove('on'); selId = null; try { WM.clearSelection(); } catch(e){} };
   try {
     WM.init($('#mapWrap'));
-    WM.onSelect(id => { A.unlock(); A.pop(); selId = id; showRoute(id); });
+    WM.onSelect(id => { A.unlock(); A.pop(); selId = id; if (SX.GROUP[id]) showGroup(id); else showRoute(id); });   // 旗子是山群：先開群峰卡片
     WM.onBackground(hideRoute);
   } catch(e){ console.error('worldmap', e); }
 
@@ -248,12 +264,13 @@
     const w = wxOverride || calcWx(id), nPh = SV.photos.filter(x => x.id === id).length, nUp = SV.userPhotos.filter(x => x.mountainId === id).length;
     const pet = SX.PETS.find(x => x.id === SV.pet) || PET_NONE;
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
-    const seas = seasonNow().filter(s => s.mountains.includes(id));
+    const grade = SX.gradeOf(id), g = m.group && SX.GROUP[m.group];
     const card = $('#routeCard');
     card.innerHTML = `<button class="rc-x" id="rcX">✕</button>
+      ${g ? `<button class="chip rc-back" id="rcBack">← ${g.full}</button>` : ''}
       <div class="ic-h"><b>${m.name}</b><span class="ic-alt">${m.area}・${m.alt.toLocaleString('en-US')} m</span><span class="stars">${stars}</span></div>
       <div class="ic-wx paper"><canvas id="rcWx"></canvas><span>現在山上：${wxText(w) || '晴'}${done ? `　已登頂 ${done} 次` : ''}</span></div>
-      ${seas.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${seas.map(s => `<span class="chip" style="background:#ffd9e4;font-size:12px;white-space:nowrap">季節限定：${s.name}${s.time ? '・' + s.time.map(t => TIME_NAMES[t]).join('、') : ''}（到 ${seasonEnd(s)}）</span>`).join('')}</div>` : ''}
+      ${seasonChips(id)}
       <div class="ic-meta">
         <div class="paper"><small>路程</small><b>${(m.dist/1000).toFixed(1)} km</b></div>
         <div class="paper"><small>山友實際時間</small><b>${fmtMin(m.recMin)}</b></div>
@@ -264,17 +281,45 @@
       <div class="rc-feat"><em>紀錄：</em>${m.recNote}</div>
       <div class="rc-feat"><em>沿途：</em>${m.feat}</div>
       <div class="rc-feat"><em>終點：</em>${m.end}${m.temple ? '（可以擲筊、求籤）' : ''}</div>
+      ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
       ${ok ? `<div class="rc-btns"><button class="cbtn sm" id="rcPet">同行夥伴：${pet.name}</button></div>
         <div class="rc-btns"><button class="cbtn go" id="rcGo">${going ? `繼續爬（${(p.dist/1000).toFixed(2)} km）` : done ? '再爬一次' : '出發登山'}</button></div>`
-      : `<div class="rc-feat"><em>還沒開放：</em>先登頂任何一座難度 ${m.diff - 1} 顆星以上的山，這裡就會開放。</div>
+      : `<div class="rc-feat"><em>還沒開放：</em>${lockText(m)}</div>
         <div class="rc-btns"><button class="cbtn go" disabled>尚未解鎖</button></div>`}`;
-    card.classList.add('on');
+    card.classList.add('on'); card.scrollTop = 0;
     wxIcon($('#rcWx'), w.kind, w.time);
     $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
+    if (g) $('#rcBack').onclick = e => { e.stopPropagation(); A.pop(); showGroup(g.id); };
     if (ok) {
       $('#rcPet').onclick = () => openPets(id);
       $('#rcGo').onclick = () => { A.unlock(); A.chime(); startClimb(id); };
     }
+  }
+  // 正在進行的季節小標籤（山群的山跟著山群的季節走）
+  function seasonChips(id){
+    const seas = seasonNow().filter(s => s.mountains.includes(SX.groupOf(id)));
+    return seas.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${seas.map(s => `<span class="chip" style="background:#ffd9e4;font-size:12px;white-space:nowrap">季節限定：${s.name}${s.time ? '・' + s.time.map(t => TIME_NAMES[t]).join('、') : ''}（到 ${seasonEnd(s)}）</span>`).join('')}</div>` : '';
+  }
+  const gradeChip = g => `<span class="grd g${SX.GRADE_ORDER.indexOf(g)}">${g}</span>`;   // 官方分級小牌（A 綠、B 藍、C 橘、C+ 紅）
+  const LOCK_SVG = `<svg viewBox="0 0 20 22"><path d="M5.5 10V7a4.5 4.5 0 0 1 9 0v3" fill="none" stroke="${INK}" stroke-width="2.2"/><rect x="2.5" y="9.5" width="15" height="11" rx="3" fill="#d9a441" stroke="${INK}" stroke-width="1.8"/><circle cx="10" cy="15" r="1.6" fill="${INK}"/></svg>`;
+  // 群峰卡片：點地圖上的山群旗子先開這張，列出每一座山；點一列打開那座山的卡片（卡片裡有「← 群峰」回來）
+  function showGroup(gid){
+    const g = SX.GROUP[gid]; if (!g) return;
+    const ps = SX.peaksOf(gid).slice().sort((a, b) => a.recMin - b.recMin), L = SX.M[g.lead], nDone = ps.filter(m => SV.done[m.id]).length;
+    const w = wxOverride || calcWx(g.lead), card = $('#routeCard');
+    card.innerHTML = `<button class="rc-x" id="rcX">✕</button>
+      <div class="ic-h"><b>${g.full}</b><span class="ic-alt">${L.area}・已登頂 ${nDone}／${ps.length}</span></div>
+      <div class="ic-wx paper"><canvas id="rcWx"></canvas><span>現在山上：${wxText(w) || '晴'}</span></div>
+      ${seasonChips(gid)}
+      <div class="pkList">${ps.map(m => {
+        const p = SV.prog[m.id], d = SV.done[m.id], lk = !unlocked(m), f = p && !p.fin && p.dist > 0 ? p.dist / m.dist : 0, gr = SX.gradeOf(m.id);
+        return `<button class="pkRow paper${lk ? ' lk' : ''}" data-pk="${m.id}"><span class="pkN"><b>${m.name}</b><small>${(m.dist / 1000).toFixed(1)} km・${fmtMin(m.recMin)}</small>${f ? `<span class="dyBar"><i style="width:${f * 100}%"></i></span>` : ''}</span>
+          ${gr ? gradeChip(gr) : ''}<span class="pkS">${d ? '<i class="pkOk">✓</i>' : lk ? SX.art.img('icon_lock', LOCK_SVG) : '<i class="pkGo">›</i>'}</span></button>`; }).join('')}</div>
+      <div class="rc-feat"><em>小提醒：</em>點一座山看路線、出發登山。</div>`;
+    card.classList.add('on'); card.scrollTop = 0;
+    wxIcon($('#rcWx'), w.kind, w.time);
+    $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
+    $$('#routeCard [data-pk]').forEach(b => b.onclick = e => { e.stopPropagation(); A.pop(); showRoute(b.dataset.pk); });
   }
   function openPets(backId){
     const list = [PET_NONE].concat(SX.PETS);
@@ -605,7 +650,7 @@
     return `<svg viewBox="0 0 60 60"><g transform="rotate(5 30 30)"><rect x="8" y="14" width="44" height="33" rx="3" fill="#fff7e2" ${o} stroke-width="2.5"/><rect x="8" y="14" width="44" height="9" fill="${col}" ${o} stroke-width="2"/><path d="M14 30h20M14 36h26M14 41h14" stroke="${INK}" stroke-width="1.5" stroke-linecap="round" opacity=".55"/><path d="M43 29l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="${col}" ${o} stroke-width="1.2"/></g></svg>`;
   }
   function rollTreasure(mid){
-    const pool = SX.TREASURES.filter(x => (x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(mid))) && (!x.season || seasonOk(x.season, mid)));
+    const pool = SX.TREASURES.filter(x => (x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) &&(!x.season || seasonOk(x.season, mid)));
     let sum = 0; pool.forEach(x => { sum += RAR_W[x.rarity] || 30; });
     let r = Math.random() * sum;
     for (const x of pool) { r -= RAR_W[x.rarity] || 30; if (r <= 0) return x; }
@@ -653,7 +698,7 @@
   function pickEncounterAt(mid, f, wx, skip, date){
     const k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(SX.groupOf(mid))) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     const wt = e => encWeight(e) * (e.wxPref && e.wxPref.includes(wx.kind) ? WXPREF_X : 1);   // wxPref：在這種天氣比較容易遇到
@@ -1058,7 +1103,7 @@
       const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width/2, r.top + r.height*0.4, 24); confetti();
       const wall = SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) >= M.dist);
       const nx = recommendNext(), nxt = nx && nx.id !== M.id ? nx : null;   // 登頂後推薦下一座
-      modal(`${SX.art.img('summit_' + M.id, '', 'artImg summitArt')}<h3>抵達終點！</h3>
+      modal(`${SX.art.img(groupArt('summit_', M.id), '', 'artImg summitArt')}<h3>抵達終點！</h3>
         <div class="summitBig"><b>${M.name} ${M.alt.toLocaleString('en-US')} m</b>${M.end}</div>
         ${img ? `<div class="pol"><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
@@ -1067,7 +1112,7 @@
         ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
         <div class="mBtns">${M.temple ? '<button class="cbtn red" id="aTemple">去福德祠</button>' : ''}<button class="cbtn ${M.temple ? '' : 'go'}" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`);
       if (M.temple) $('#aTemple').onclick = () => { closeModal(); openTemple(); };
-      $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { selId = nxt.id; try { WM.focus(nxt.id); } catch(e){} showRoute(nxt.id); } };
+      $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { selId = nxt.id; try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
       checkQuests();
     }, 1400);
   }
@@ -1279,8 +1324,10 @@
     <div class="poem">${f.poem.join('<br>')}</div><div class="say">${f.say}</div><div class="tw">「${f.tw}」</div></div>`; }
   function showLot(f){ modal(`<h3>你的籤詩</h3>${lotHtml(f)}<div class="mBtns"><button class="cbtn go" id="lOk">收進籤詩冊</button></div>`); $('#lOk').onclick = () => { A.pop(); $('#modal').classList.remove('on'); }; }
 
+  // 每座山自己的插圖（登頂、集印章）還沒畫的話，先用山群主峰的那張
+  const groupArt = (pre, id) => SX.art.has(pre + id) ? pre + id : pre + (SX.GROUP[SX.groupOf(id)] ? SX.GROUP[SX.groupOf(id)].lead : id);
   function stampSvg(id, date){
-    const m = SX.M[id], u = SX.art.url('stamp_' + id);
+    const m = SX.M[id], u = SX.art.url(groupArt('stamp_', id));
     // 有印章美術圖：圖上壓一塊紅框小牌寫山名和日期，讀起來還是一枚有日期的章
     if (u) return `<div class="stampArt"><img src="${u}" alt="" draggable="false"><span><b>${m.name}</b><i>${(date || '').replace(/\//g,'.')}</i></span></div>`;
     return `<svg viewBox="0 0 100 100"><g transform="rotate(-8 50 50)" opacity=".9">
@@ -1306,6 +1353,7 @@
     const body = $('#albumBody');
     if (albumTab === 'badges') return renderBadges(body);
     if (albumTab === 'enc') return renderEncLog(body);
+    if (albumTab === 'baiyue') return renderBaiyue(body);
     if (albumTab === 'photos') {
       if (!SV.photos.length) { body.innerHTML = '<div class="empty">還沒有照片。<br>每走 500 公尺會自動拍一張拍立得，<br>在長椅和觀景台也可以自己拍。</div>'; return; }
       let html = '';
@@ -1340,6 +1388,36 @@
     }
   }
 
+  // ───────── 百岳帳（相簿分頁）：100 座百岳照 23 個山群排，登頂過的蓋章、遊戲裡還沒有的變淡 ─────────
+  const byPlay = r => SX.MOUNTAINS.find(m => m.by === r);   // 百岳排名 → 遊戲裡的山（連結只寫在山身上的 by）
+  function renderBaiyue(body){
+    const isDone = r => { const m = byPlay(r); return !!(m && SV.done[m.id]); };
+    const n = SX.BAIYUE.filter(p => isDone(p.rank)).length, open = SX.BAIYUE.filter(p => byPlay(p.rank)).length;
+    body.innerHTML = `<div class="colHead">百岳 <b>${n}</b>／${SX.BAIYUE.length}・遊戲裡能爬 ${open} 座</div>` + SX.BAIYUE_GROUPS.map(g => {
+      const rs = g.peaks.map(p => SX.BY[p[0]]);
+      return `<div class="grp byG">${g.name}<small>${rs.filter(p => isDone(p.rank)).length}／${rs.length}</small></div><div class="byGrid">` + rs.map(p => {
+        const s = isDone(p.rank) ? 'done' : byPlay(p.rank) ? 'open' : 'soon';
+        return `<button class="byCell ${s}" data-by="${p.rank}"><b>${p.name}</b><span class="byMeta"><small>${p.alt.toLocaleString('en-US')} m</small>${gradeChip(p.grade)}</span>${s === 'soon' ? '<em>尚未開放</em>' : ''}${s === 'done' ? '<i class="byStamp">登頂</i>' : ''}</button>`;
+      }).join('') + '</div>';
+    }).join('');
+    stagger(body, '.byG');
+    $$('#albumBody [data-by]').forEach(el => el.onclick = () => { A.pop(); openBaiyue(+el.dataset.by); });
+  }
+  function openBaiyue(rank){
+    const p = SX.BY[rank], m = byPlay(rank), G = SX.GRADES[p.grade];
+    const state = !m ? '尚未開放，之後的更新會加進遊戲' : SV.done[m.id] ? `已登頂 ${SV.done[m.id]} 次` : unlocked(m) ? '遊戲裡可以爬，還沒登頂' : '遊戲裡有這座山，還沒解鎖';
+    modal(`<h3>${p.name}</h3><div class="byInfo paper">
+        <div><span>百岳排名</span><b>第 ${p.rank} 名</b></div>
+        <div><span>海拔</span><b>${p.alt.toLocaleString('en-US')} m</b></div>
+        <div><span>官方分級</span><b>${gradeChip(p.grade)}</b></div>
+        <p>${p.grade} 級：${G.text}。${G.need ? `要先登頂過 ${G.need} 級以上的百岳才能申請。` : '不用先有登山經驗。'}</p>
+        <div><span>山群</span><b>${p.group}</b></div>
+        <div><span>狀態</span><b>${state}</b></div></div>
+      <div class="mBtns" style="margin-top:12px">${m ? '<button class="cbtn" id="byMap">到地圖看看</button>' : ''}<button class="cbtn go" id="byOk">好</button></div>`);
+    $('#byOk').onclick = () => { A.pop(); closeModal(); };
+    if (m) $('#byMap').onclick = () => { A.pop(); closeModal(); go('map'); selId = m.id; try { WM.focus(SX.groupOf(m.id)); } catch(e){} showRoute(m.id); };
+  }
+
   // ───────── 徽章與奇遇圖鑑 ─────────
   const encWeight = e => e.weight != null ? e.weight : e.rare ? 0.3 : 1;   // 抽奇遇的權重：一般 1、稀有 0.3、極稀有看 data.js 的 weight
   const WXPREF_X = 6;   // 奇遇的 wxPref 天氣剛好出現時，權重乘幾倍
@@ -1367,11 +1445,12 @@
       case 'treasureKinds': return SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
       case 'encKinds': return SX.ENCOUNTERS.filter(e => SV.encSeen[e.id]).length;
       case 'stamps': return SX.MOUNTAINS.filter(m => SV.stamps[m.id]).length;
+      case 'groupPeaks': return SX.peaksOf(b.group).filter(m => SV.done[m.id]).length;   // 山群徽章：這個山群登頂過幾座
     }
     return 0;
   }
-  const BADGE_ALL = { treasureKinds:() => SX.TREASURES.length, encKinds:() => SX.ENCOUNTERS.length, stamps:() => SX.MOUNTAINS.length };   // tiers 寫 'all' 時的總數
-  const tierGoal = (b, i) => b.tiers[i] === 'all' ? BADGE_ALL[b.stat]() : b.tiers[i];
+  const BADGE_ALL = { treasureKinds:() => SX.TREASURES.length, encKinds:() => SX.ENCOUNTERS.length, stamps:() => SX.MOUNTAINS.length, groupPeaks:b => SX.peaksOf(b.group).length };   // tiers 寫 'all' 時的總數
+  const tierGoal = (b, i) => b.tiers[i] === 'all' ? BADGE_ALL[b.stat](b) : b.tiers[i];
   function checkBadges(){
     SV.stats.bestStreak = badgeValue({ stat:'bestStreak' });
     const got = [];
@@ -1432,8 +1511,8 @@
     if (e.wxPref) out.push(e.wxPref.map(x => WX_NAMES[x] || x).join('或') + '時比較容易遇到');
     if (ts) out.push('只在' + ts.map(x => TN[x] || x).join('或'));
     if (ws) out.push(ws.map(x => WN[x] || x).join('或') + '時');
-    if (mts) { const ms = mts.map(id => SX.M[id]).filter(Boolean);
-      out.push(ms.length > 2 && ms.every(m => m.alt >= 2000) ? '高山上' : ms.length > 3 ? `${ms[0].name}等 ${ms.length} 座山` : ms.map(m => m.name).join('、')); }
+    if (mts) { const ms = mts.filter(id => SX.M[id]);   // 山群寫的是山群代號，名字用山群名（合歡山），不是主峰名
+      out.push(ms.length > 2 && ms.every(id => SX.M[id].alt >= 2000) ? '高山上' : ms.length > 3 ? `${SX.placeName(ms[0])}等 ${ms.length} 座山` : ms.map(SX.placeName).join('、')); }
     if (w.minFrac >= 0.85) out.push('山頂附近'); else if (w.minFrac >= 0.5) out.push('後半段的路上'); else if (w.minFrac >= 0.3) out.push('走了一段路之後'); else if (w.maxFrac != null && w.maxFrac <= 0.3) out.push('登山口附近');
     return out.length ? out.join('・') : '哪座山都可能遇到';
   }
@@ -1560,7 +1639,7 @@
   // 開場讀取畫面：美術圖全部載完才收起來（玩家不會看到程式畫的備用圖），收起後先到山友大廳
   SX.art.onProgress((d, t) => { const f = $('#ldFill'); if (f && t) f.style.width = Math.round(d / t * 100) + '%'; });
   SX.art.whenReady(() => { const L = $('#loading'); if (L) L.classList.add('done'); go('lobby'); });
-  if (SV.cur && SX.M[SV.cur]) { const p = P(SV.cur); if (p.dist > 0 && !p.fin) setTimeout(() => { if (screen !== 'map') return; selId = SV.cur; try { WM.focus(SV.cur); } catch(e){} showRoute(SV.cur); }, 700); }
+  if (SV.cur && SX.M[SV.cur]) { const p = P(SV.cur); if (p.dist > 0 && !p.fin) setTimeout(() => { if (screen !== 'map') return; selId = SV.cur; try { WM.focus(SX.groupOf(SV.cur)); } catch(e){} showRoute(SV.cur); }, 700); }
   requestAnimationFrame(loop);
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
