@@ -384,3 +384,13 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `trunk_close` | 9:16 | 洋紅底。One tall straight Taiwan hemlock trunk with rough bark, moss and a little ivy, only a few small branches near the top, whole trunk visible from roots to top, lit from the upper right. |
 
 參考感覺：台灣步道的陡石階一路往上爬、兩側被森林包住、一側或兩側有木頭欄杆（就像你之前給的那幾張照片）。
+## 第 14 批：合歡群峰登頂插圖（放進 `07.奇遇`，16:9，不用去背，抵達山頂時顯示）
+
+合歡山拆成五座百岳（合歡群峰）。合歡主峰沿用上面的 `summit_hehuan`；下面四座還沒畫之前，遊戲會先借用 `summit_hehuan`。畫法跟上面的登頂插圖一樣。
+
+| 檔名 | 場景 |
+|---|---|
+| `summit_hh_shimen` | Shimen Mountain (Hehuan range) summit: a gentle dwarf-bamboo grass slope right above a winding mountain highway, the rounded Hehuan main peak across the valley, clear blue sky |
+| `summit_hh_east` | Hehuan East Peak summit after a very steep stone-step climb, looking down at a small alpine lodge far below and the jagged Qilai ridges to the east |
+| `summit_hh_north` | Hehuan North Peak summit with a stone triangulation marker, wide green dwarf-bamboo ridges, pink alpine rhododendron bushes, Qilai and Xueshan ranges on the horizon |
+| `summit_hh_west` | Hehuan West Peak summit at the end of a long remote bamboo ridge, a lonely triangulation stone, rolling ridgelines and a sea of clouds in the late afternoon light |
