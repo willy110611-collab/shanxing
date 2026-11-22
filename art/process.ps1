@@ -29,7 +29,7 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
   if ($name -match $opaque) {
     $out = Join-Path $here "$name.jpg"
     # 長邊不超過 $max（直式的地圖以高度算）
-    $max = if ($name -like 'ground_*') { 768 } elseif ($name -like 'map_*') { 2048 } else { 1600 }
+    $max = if ($name -like 'ground_*') { 768 } elseif ($name -like 'map_*') { 2048 } elseif ($name -like 'enc_*') { 960 } else { 1600 }   # 奇遇插圖在卡片上只有約 300 像素寬
     ffmpeg -v error -y -i $_.FullName -vf "scale='min(iw,$max)':'min(ih,$max)':force_original_aspect_ratio=decrease" -q:v 4 $out
   } else {
     # 透明圖存 WebP（同畫質比 png 小十倍左右）
