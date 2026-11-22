@@ -300,7 +300,8 @@
     const grade = SX.gradeOf(id), g = m.group && SX.GROUP[m.group];
     // 雪季管制：人數不夠時，大綠鈕換成「還差幾人」並多一顆「邀請山友」（還在別座山上也一樣，免得先下山歸零才發現出不了發）
     const permit = ok && permitBlock(id);
-    const permitBtns = lead => `<div class="rc-btns">${lead}<button class="cbtn sm" id="rcInv">邀請山友</button></div>
+    // 「邀請山友」自己一排：跟「回到某某山繼續爬」擠同一排時，375 寬會被擠成兩行
+    const permitBtns = lead => `<div class="rc-btns">${lead}</div><div class="rc-btns"><button class="cbtn sm" id="rcInv">邀請山友</button></div>
         <div class="rc-btns"><button class="cbtn go" disabled>還差 ${permit.minParty - permit.have} 人才能出發</button></div>`;
     const card = $('#routeCard');
     card.innerHTML = `${g ? `<button class="cbtn sm cBack" id="rcBack">← ${g.full}</button>` : '<button class="cbtn sm cBack" id="rcX">← 返回</button>'}
