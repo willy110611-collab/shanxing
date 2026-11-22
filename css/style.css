@@ -364,6 +364,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .plzEmoMenu.on{display:flex}
 .plzEmoMenu .cbtn{white-space:nowrap;display:flex;align-items:center;gap:6px;justify-content:flex-start}
 .plzEmoMenu .cbtn span{font-size:18px}
+.plzEmoMenu .cbtn span .artImg{width:24px;height:24px}
 .frRow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:14px;color:var(--ink)}
 .frRow:first-of-type{border-top:0}
 .frRow>span:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
