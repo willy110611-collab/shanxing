@@ -72,7 +72,7 @@ const OUT = (() => { try { const c = document.createElement('canvas'); c.width =
 A.url = function(id){
   const e = lib[id]; if (!e || !urls[id]) return null;
   if (e.opaque) return urls[id];
-  if (!trimmed[id]) trimmed[id] = A.crop(id, 0).toDataURL(OUT, 0.9);
+  if (!trimmed[id]) { const c = A.crop(id, 0); trimmed[id] = c.toDataURL(OUT, 0.9); c.width = c.height = 0; }   // 暫用的畫布馬上釋放
   return trimmed[id];
 };
 // 有圖就回 <img>，沒有就回 fallback（原本程式畫的 SVG）
@@ -94,6 +94,8 @@ function filtered(e, fl){
   if (!fx[fl]) { const c = document.createElement('canvas'); c.width = e.img.width; c.height = e.img.height; const g = c.getContext('2d'); g.filter = fl; g.drawImage(e.img, 0, 0); fx[fl] = c; }
   return fx[fl];
 }
+// 給別的畫面用：某張圖套了濾鏡的版本（例如地圖上還不能爬的山路標褪色）；沒有這張圖回 null
+A.filtered = function(id, fl){ const e = lib[id]; return e && !e.lazy ? filtered(e, fl) : null; };
 // 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）；fl：要套的濾鏡（可省略）
 A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
   const e = lib[id]; if (!e) return false;

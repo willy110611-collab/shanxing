@@ -119,12 +119,25 @@ function sprite(wm, hm, ppm, fn){
 }
 // Gemini 美術圖做成同樣格式的貼圖；hm 是實際高度（公尺）。沒有這張圖就回 null
 const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, onLoad(){} };
+// 跟哪座山無關的貼圖（美術圖裁好、底部壓暗的版本、路面貼圖）只做一次，換山時重複用
+// 以前每換一座山就重做一百多張大畫布（約 50 MB），手機要等回收才放掉，越玩越吃記憶體、越卡
+const KEEP = {};
+function keep(key, make){ let v = KEEP[key]; if (!v) { v = make(); if (v) KEEP[key] = v; } return v; }
+// 不再用的畫布馬上釋放（連同縮圖鏈）：iPhone 的畫布記憶體有上限，等自動回收太慢
+function free(c){ if (!c || !c.getContext) return; if (c._mip) for (let i = 1; i < c._mip.length; i++) c._mip[i].width = c._mip[i].height = 0; c._mip = null; c.width = c.height = 0; }
+// 霧化剪影：跟著這座山的霧色，霧色換了才重做（舊的那張釋放）
+function hazed(o){
+  if (o.hk !== hazeCss) {
+    free(o.h);
+    const c = o.c, h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
+    hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
+    o.h = h; o.hk = hazeCss;
+  }
+  return o.h;
+}
 function artSpr(id, hm){
-  const c = ART.crop(id); if (!c) return null;
-  groundShade(c);
-  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
-  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
-  return { c:c, h:h, w:hm * c.width / c.height, hm:hm, ax:0.5 };
+  const o = keep('spr:' + id, function(){ const c = ART.crop(id); if (!c) return null; groundShade(c); return { c:c }; });
+  return o ? { c:o.c, h:hazed(o), w:hm * o.c.width / o.c.height, hm:hm, ax:0.5, shared:true } : null;   // shared：換山時不能釋放
 }
 // 底部壓暗：物件靠近地面的地方比較暗（環境遮蔽），才不會像貼在地上的紙片
 function groundShade(c){
@@ -138,8 +151,9 @@ function artOr(id, hm, list){ const a = artSpr(id, hm); return a ? [a] : list; }
 const TRAIL_TEX = { dirt:'ground_dirt', stairs:'ground_stone', scree:'ground_scree' };
 let TEX = {};
 function mkTex(id, m){
-  const c = ART.crop(id); if (!c || !ctx) return null;
-  const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, m:m, c:c, lv:{} } : null;
+  if (!ctx) return null;
+  const T = keep('tex:' + id, function(){ const c = ART.crop(id); if (!c) return null; const p = ctx.createPattern(c, 'repeat'); return p && p.setTransform ? { p:p, w:c.width, c:c, lv:{} } : null; });
+  return T ? { p:T.p, w:T.w, m:m, c:T.c, lv:T.lv } : null;
 }
 // 貼圖的縮小版（橫、直各自縮 2^nx、2^ny 倍；用重複貼圖去縮，接縫才接得起來）：遠處的路面、草地一個像素蓋好幾個貼圖點時用
 function texLevel(T, nx, ny){
@@ -174,7 +188,8 @@ const TEX_A = 0.85;       // 地面貼圖整體不透明度
 const TURF_J = 26;        // 幾段以內蓋草（約 40 公尺；再遠草葉只剩幾個像素，貼圖就夠了，也省手機效能）
 const TURF_NEAR = 14;     // 這段以內用近景草帶（草葉大、少），以外用遠景草帶（寬、密）
 let TURF = [];            // [近/遠][明暗 0..2] → 幾張變化
-function texAvg(id){
+function texAvg(id){ return keep('avg:' + id, function(){ return texAvg0(id); }); }
+function texAvg0(id){
   const c = ART.crop(id); if (!c) return null;
   const t = mk(8, 8), g = t.getContext('2d'); g.drawImage(c, 0, 0, 8, 8);
   const d = g.getImageData(0, 0, 8, 8).data, s = [0, 0, 0];
@@ -206,6 +221,7 @@ function turfSpr(core, hm, ppm, n, base, lv, r){
 function buildTurf(){
   const r = mkrng(seed ^ 0x2b1d), near = TH.near || '#86c06a', av = texAvg('ground_grass');
   const base = av ? mix(near, av, GRASS_A * TEX_A) : rgb(near);
+  TURF.forEach(a => a.forEach(b => b.forEach(s => free(s.c))));   // 上一座山的草帶（顏色不同）釋放
   TURF = [[0.9, 0.3, 240, 26], [2.4, 0.26, 90, 60]].map(function(d){
     return [0, 1, 2].map(function(lv){ return [0, 1].map(function(){ return turfSpr(d[0], d[1], d[2], d[3], base, lv, r); }); });
   });
@@ -383,9 +399,10 @@ function mkTab(list){ let sum = 0; for (let i = 0; i < list.length; i++) sum += 
 function pick(tab, r){ for (let i = 0; i < tab.length; i++) if (r < tab[i].p) return tab[i].arr; return tab[tab.length - 1].arr; }
 // 美術圖山頂三角點（summit_marker）：石柱正面直寫山名。正面位置是照這張圖量的（裁掉透明邊後的比例）
 const SUMMIT_FACE = { x:0.4, y0:0.3, y1:0.8, w:0.34 };
+// 路標、三角點的底圖（裁好、底部壓暗）只做一次，每塊牌子再抄一份寫字
+function shadedArt(id){ return keep('base:' + id, function(){ const c = ART.crop(id); if (c) groundShade(c); return c; }); }
 function artSummitSpr(name){
-  const c0 = ART.crop('summit_marker'); if (!c0) return null;
-  groundShade(c0);
+  const c0 = shadedArt('summit_marker'); if (!c0) return null;
   const c = mk(c0.width, c0.height), g = c.getContext('2d'), B = SUMMIT_FACE, n = Math.min(4, name.length); g.drawImage(c0, 0, 0);
   const fs = Math.min(c.width * B.w * 0.85, (B.y1 - B.y0) * c.height / n * 0.82);
   g.font = '700 ' + fs + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(120,30,26,.85)';
@@ -398,8 +415,7 @@ function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) ||
 // 美術圖路標（sign_wood）：上面那塊箭頭木板寫字。木板位置是照這張圖量的（裁掉透明邊後的比例）
 const SIGN_BOARD = { x:0.54, y:0.175, w:0.62, h:0.075, rot:-0.07 };
 function artSignSpr(txt){
-  const c0 = ART.crop('sign_wood'); if (!c0) return null;
-  groundShade(c0);
+  const c0 = shadedArt('sign_wood'); if (!c0) return null;
   const c = mk(c0.width, c0.height), g = c.getContext('2d'), B = SIGN_BOARD; g.drawImage(c0, 0, 0);
   g.save(); g.translate(c.width * B.x, c.height * B.y); g.rotate(B.rot);
   let fs = c.height * B.h; g.font = '700 ' + fs + 'px ' + FONT; const tw = g.measureText(txt).width; if (tw > c.width * B.w) { fs *= c.width * B.w / tw; g.font = '700 ' + fs + 'px ' + FONT; }
@@ -410,6 +426,10 @@ function artSignSpr(txt){
 }
 function buildSprites(){
   const r = mkrng(seed ^ 0x7f4a7c15), th = TH, a = [];
+  // 上一座山專用的貼圖（寫了字的路標、三角點、程式畫的植物）用完就釋放；共用的美術圖留著
+  const dropSpr = s => { if (s && s.c && !s.shared) { free(s.c); free(s.h); } };
+  for (const k in signSpr) dropSpr(signSpr[k]);
+  for (const k in SPR) if (Array.isArray(SPR[k])) SPR[k].forEach(dropSpr);
   SPR = {}; signSpr = {};
   const tL = VG.treeL, tS = VG.treeS;
   SPR.conifer = artOr('tree_pine', 6.8, [0, 1, 2].map(function(){ return sprite(3.6, 6.8, 44, function(g){ pConifer(g, r, tL, tS); }); }));
@@ -636,10 +656,11 @@ function cloudTile(k, P){
   }
   return c;
 }
+function freeTiles(T){ if (T) T.r.concat(T.c).forEach(free); }
 function getTiles(key){
   let T = tileSets[key]; if (T) return T;
   const ks = Object.keys(tileSets);
-  if (ks.length >= 3) for (let i = 0; i < ks.length; i++) if (ks[i] !== palA && ks[i] !== palB) delete tileSets[ks[i]];
+  if (ks.length >= 3) for (let i = 0; i < ks.length; i++) if (ks[i] !== palA && ks[i] !== palB) { freeTiles(tileSets[ks[i]]); delete tileSets[ks[i]]; }
   const P = PAL[key];
   T = tileSets[key] = { r:[ridgeTile(0, P), ridgeTile(1, P), ridgeTile(2, P)], c:[cloudTile(0, P), cloudTile(1, P)] };
   return T;
@@ -820,6 +841,7 @@ S.setMountain = function(m){
   setHaze();
   VG = { treeL:mixs(mid, '#4f9060', 0.35), treeS:mixs(mid, '#243f4a', 0.55), bushL:mixs(near, '#4f9a58', 0.5), bushS:mixs(mid, '#28484a', 0.45), grassL:mixs(near, '#d8e07a', 0.25), grassS:mixs(near, '#3f6f50', 0.5) };
   buildCurves(m); buildElev(m); cairns = []; buildProps(); buildPalettes(); buildSprites();
+  for (const k in tileSets) freeTiles(tileSets[k]);
   tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers();
 };
 // 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
@@ -1660,13 +1682,15 @@ S.snapshot = function(dist){
   if (!cv || !curS) return '';
   try {
     S.render(Object.assign({}, curS, { dt:0, dist:dist != null ? dist : curS.dist, frac:(dist != null ? dist : curS.dist) / total }));
-    const px = ctx.getImageData(cv.width >> 1, cv.height >> 2, 1, 1).data;
-    if (px[3] === 0) return '';        // 還是沒畫出東西：不要存一張黑照片
     const sw = cv.width, sh = cv.height, ch = Math.min(sh, Math.round(sw * 4 / 3));
     const bottom = Math.min(sh, Math.round((hero.sy + H * 0.07) * DPR)), top = clamp(bottom - ch, 0, sh - ch);
-    const ow = Math.min(600, sw), oh = Math.round(ow * ch / sw), c = mk(ow, oh);
-    c.getContext('2d').drawImage(cv, 0, top, sw, ch, 0, 0, ow, oh);
-    return c.toDataURL('image/jpeg', 0.74);
+    const ow = Math.min(600, sw), oh = Math.round(ow * ch / sw), c = mk(ow, oh), g = c.getContext('2d');
+    g.drawImage(cv, 0, top, sw, ch, 0, 0, ow, oh);
+    // 檢查有沒有畫出東西改讀這張小照片，不讀登山畫面本身：一直從主畫布讀像素，瀏覽器可能把它改成較慢的繪製方式
+    const px = g.getImageData(ow >> 1, oh >> 2, 1, 1).data;
+    const url = px[3] === 0 ? '' : c.toDataURL('image/jpeg', 0.74);   // 還是沒畫出東西：不要存一張黑照片
+    free(c);
+    return url;
   } catch (e) { return ''; }
 };
 S.SEG = SEG;

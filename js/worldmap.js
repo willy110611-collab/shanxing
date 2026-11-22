@@ -27,7 +27,7 @@ const S = {
   host:null, cv:null, ctx:null, dpr:1, vw:0, vh:0, base:1,
   cam:{x:280,y:400,z:1}, tgt:{x:280,y:400,z:1}, camInit:false,
   data:{ mountains:[], coast:[], ridge:[], done:{}, prog:{}, current:null, locked:{}, photos:{}, pet:null },
-  T:null, dirty:true, running:false, raf:0, last:0, t:0,
+  T:null, dirty:true, running:false, raf:0, last:0, t:0, drawn:0, input:0,
   cb:null, bgCb:null, hits:[], pos:{}, hover:null, sel:null, anim:{}, tw:{},
   sprites:null, shadowSp:null, rays:null, tb1:null, tb2:null,
   ripples:[], puffs:[], drift:[], ro:null, lastTap:{t:0,x:0,y:0},
@@ -480,15 +480,9 @@ function pinGeom(c, m){
     x0:left, x1:left + bw + 4, y0:-PIN_ART_H, y1:py + ph / 2 + 2 };
 }
 // 畫路標美術圖：腳底在原點；木牌那幾列切段，名字長時只拉寬純木牌的部分（木樁、小旗不變形）
-// 褪色版路標圖：只在第一次用到時套一次濾鏡存起來（每格對每支路標套 ctx.filter 在手機上非常慢）
-const grayPins = new WeakMap();
-function grayPinImg(img){
-  let g = grayPins.get(img);
-  if (!g){ g = mk(img.width, img.height); const x = g.getContext('2d'); x.filter = LOCK_GRAY; x.drawImage(img, 0, 0); grayPins.set(img, g); }
-  return g;
-}
+// gray：還不能爬的山用褪色版（art.js 第一次用到時套一次濾鏡存起來；每格對每支路標套 ctx.filter 在手機上非常慢）
 function drawPinArt(c, g, gray){
-  const f = g.f, k = g.k, img = gray ? grayPinImg(g.art.img) : g.art.img, ty = PIN_SLICE.top * f.h, x0 = -PIN_FOOT * f.w * k;
+  const f = g.f, k = g.k, img = (gray && SX.art.filtered(PIN_ART, LOCK_GRAY)) || g.art.img, ty = PIN_SLICE.top * f.h, x0 = -PIN_FOOT * f.w * k;
   c.drawImage(img, f.x, f.y, f.w, ty, x0, -PIN_ART_H, f.w * k, ty * k);
   const xs = [0].concat(PIN_SLICE.xs.map(v => v * f.w), [f.w]);
   let dx = g.left;
@@ -647,7 +641,11 @@ function frame(now){
   S.raf = requestAnimationFrame(frame);
   const dt = Math.min(.05, (now - S.last) / 1000 || .016); S.last = now; S.t += dt;
   if (!S.vw) resize(); if (!S.vw) return;
-  updateCam(dt); render(S.t);
+  updateCam(dt);
+  // 沒在拖、鏡頭也停好了：畫面上只剩慢慢飄的雲和光，改成每秒約 30 格就夠，手機比較不會發燙降速
+  const a = S.cam, b = S.tgt, still = !S.dragging && Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < .05 && Math.abs(a.z - b.z) < .002 && now - S.input > 600;
+  if (still && now - S.drawn < 30) return;
+  S.drawn = now; render(S.t);
 }
 function resize(){
   if (!S.host || !S.cv) return;
@@ -666,7 +664,7 @@ function hitAt(x, y){
   return best && best.id;
 }
 function select(id){
-  S.sel = id; focus(id);
+  S.sel = id; S.input = performance.now(); focus(id);
   clearTimeout(S.selT); S.selT = setTimeout(() => { if (S.cb) S.cb(id); }, 380);
 }
 function bindInput(cv){
@@ -677,12 +675,13 @@ function bindInput(cv){
     pinch = { d, z:S.tgt.z, w:screenToWorld(mx, my, S.tgt) }; };
   cv.style.touchAction = 'none';
   cv.addEventListener('pointerdown', e => {
+    S.input = performance.now();
     try { cv.setPointerCapture(e.pointerId); } catch (_) {}
     const p = pos(e); ptrs.set(e.pointerId, p); S.dragging = true; clearTimeout(S.selT);
     if (ptrs.size === 1){ down = { x:p.x, y:p.y, t:performance.now() }; moved = 0; vel.x = vel.y = 0; } else { moved = 99; startPinch(); }
   });
   cv.addEventListener('pointermove', e => {
-    const p = pos(e), old = ptrs.get(e.pointerId);
+    const p = pos(e), old = ptrs.get(e.pointerId); S.input = performance.now();
     if (!old){ if (e.pointerType === 'mouse'){ const id = hitAt(p.x, p.y); if (id !== S.hover){ S.hover = id; cv.style.cursor = id ? 'pointer' : 'grab'; } } return; }
     const dx = p.x - old.x, dy = p.y - old.y; old.x = p.x; old.y = p.y;
     if (ptrs.size === 1){
@@ -696,7 +695,7 @@ function bindInput(cv){
     }
   });
   const up = e => {
-    const p = pos(e), had = ptrs.delete(e.pointerId); if (!had) return;
+    const p = pos(e), had = ptrs.delete(e.pointerId); if (!had) return; S.input = performance.now();
     if (ptrs.size < 2) pinch = null;
     if (ptrs.size === 0){
       S.dragging = false;
@@ -714,7 +713,7 @@ function bindInput(cv){
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && S.hover){ S.hover = null; cv.style.cursor = 'grab'; } });
   cv.addEventListener('wheel', e => {
-    e.preventDefault(); const p = pos(e), w = screenToWorld(p.x, p.y, S.tgt);
+    e.preventDefault(); S.input = performance.now(); const p = pos(e), w = screenToWorld(p.x, p.y, S.tgt);
     S.tgt.z = clamp(S.tgt.z * Math.exp(-e.deltaY * .0016), 1, 3.4); const s = S.base * S.tgt.z;
     S.tgt.x = w.x - (p.x - S.vw / 2) / s; S.tgt.y = w.y - (p.y - S.vh / 2) / s; clampCam(S.tgt);
   }, { passive:false });
@@ -750,9 +749,9 @@ SX.worldmap = {
   },
   onSelect(fn){ S.cb = fn; },
   onBackground(fn){ S.bgCb = fn; },       // 點到空白處（game.js 用來收起資訊卡）
-  focus(id){ S.sel = id; focus(id); },
-  reset(){ S.sel = null; reset(); },
-  clearSelection(){ S.sel = null; },
+  focus(id){ S.sel = id; S.input = performance.now(); focus(id); },
+  reset(){ S.sel = null; S.input = performance.now(); reset(); },
+  clearSelection(){ S.sel = null; S.input = performance.now(); },   // 路標縮回原大小的動畫要用滿格速度畫
   start(){
     if (S.running) return; S.running = true; S.last = performance.now(); resize(); ensure();
     S.raf = requestAnimationFrame(frame);

@@ -568,7 +568,9 @@
     if (n && n.type === 'treasure' && st.got['t' + Math.round(n.m)]) n = null;
     if (!n) { if (tagO) { tagO = null; tag.style.display = 'none'; } return; }
     if (!tagO || tagO.m !== n.m) { tag.textContent = n.type === 'bench' ? '坐一下' : n.type === 'view' ? '看風景' : '有東西！'; tag.style.display = 'block'; }
-    tagO = n; tag.style.left = n.x + 'px'; tag.style.top = (n.y - 6) + 'px';
+    const x = Math.round(n.x), y = Math.round(n.y - 6);   // 位置沒變就不寫（每格寫樣式會讓瀏覽器重排版面）
+    if (!tagO || tag._x !== x || tag._y !== y) { tag._x = x; tag._y = y; tag.style.left = x + 'px'; tag.style.top = y + 'px'; }
+    tagO = n;
   }
   tag.onclick = e => { e.stopPropagation(); if (!tagO || !st) return; A.unlock(); A.pop(); const r = tag.getBoundingClientRect(); useProp({ type:tagO.type, m:tagO.m }, r.left + r.width / 2, r.top + r.height); };
 
@@ -851,7 +853,7 @@
       $('#sgOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };
     }
     function tick(now){
-      if (!alive || !c.isConnected) return;
+      if (!alive || !c.isConnected || !$('#modal').classList.contains('on')) { alive = false; return; }   // 視窗被別的方式關掉也要停，不在背後一直畫
       requestAnimationFrame(tick);
       const tt = (now - t0) / 1000;
       g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, W, H); g.lineJoin = 'round';

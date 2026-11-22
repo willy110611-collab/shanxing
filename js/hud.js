@@ -267,6 +267,7 @@
       const o = i * 4; D[o] = r; D[o + 1] = gg; D[o + 2] = b; D[o + 3] = 255;
     }
     g.putImageData(img, 0, 0);
+    if (H.base) H.base.width = H.base.height = 0;   // 上一條路線的底圖馬上釋放（iPhone 畫布記憶體有上限）
     H.base = c;
   }
 
