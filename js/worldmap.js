@@ -409,7 +409,7 @@ function drawShiba(c, x, y, t){
   c.beginPath(); c.moveTo(x - 2, y - 1 - b); c.lineTo(x - 2, y); c.moveTo(x + 2, y - 1 - b); c.lineTo(x + 2, y); c.stroke();
 }
 // 目前挑戰的山旁邊：登山客和帶著的寵物（有美術圖就用背影走路圖，沒有就用程式畫的）
-const MAP_HIKER_H = 22, MAP_PET_H = 10;   // 地圖上登山客、寵物的高度（地圖單位）
+const MAP_HIKER_H = 40, MAP_PET_H = 17;   // 地圖上登山客、寵物的高度（地圖單位）：放大到一眼看得出正在爬哪座山
 const MAP_WALK_FPS = 4;                   // 走路圖每秒換幾格（慢慢走）
 let contactSp = null;
 function contactShadow(c, x, y, w){       // 腳底接觸影子：柔邊深色橢圓

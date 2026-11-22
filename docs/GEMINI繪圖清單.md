@@ -456,3 +456,11 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 |---|---|---|
 | `hiker_walk8` | 16:9 | 洋紅底。The hiker (主角設定) seen from directly behind, slightly from above, full body, shown as an **8-frame walking cycle sprite sheet arranged in 2 rows of 4** (frames 1–4 on the top row, 5–8 on the bottom row, read left to right), evenly spaced in a grid, same size and same foot baseline in every frame. One full stride: left foot contact → passing → right foot contact → passing, with the trekking poles swinging opposite to the legs, the backpack bouncing slightly, natural uphill walking posture leaning a little forward. |
 | `hiker_rain_walk8` | 16:9 | 洋紅底。Same as hiker_walk8 (same grid, same 8 poses, same size and baseline), but the hiker wears a yellow rain poncho over the backpack. |
+
+## 第 17 批：讀取畫面跑步的柴犬（放進 `05.寵物`）
+
+開遊戲時的讀取進度條上，會有一隻柴犬跟著進度往右跑。現在用的是背影走路圖，這張要**側面、往右跑**。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `shiba_run` | 16:9 | 洋紅底。The same shiba (柴犬設定, with its small red saddlebags) seen **from the side, running to the right**, shown as a **4-frame running cycle sprite sheet**: four poses side by side in a single row, evenly spaced, same size and same ground line in every frame, ears up, tail curled, happy bouncy trot. |
