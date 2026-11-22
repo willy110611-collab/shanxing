@@ -236,7 +236,7 @@ const RISER_J = 40;
 const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95] } };
 function buildTex(){
   const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
-  TEX = { road:mkTex(TRAIL_TEX[tr], RW * 2), grass:mkTex('ground_grass', 4), snow:mkTex('ground_snow', RW * 2),
+  TEX = { road:mkTex(TRAIL_TEX[tr], RW * 2), grass:mkTex('ground_grass', 4), snow:mirTex('ground_snow', RW * 4, [0, 0, 1, 1], true, true, 512),   // 雪地那張上下左右接不起來（每 2.6 公尺一條明暗分界），鏡射拼成無縫的一組
     steps:tr === 'stairs' ? null : mkTex('ground_steps', RW * 2),   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
     moss:tr === 'stairs' && !TH.alpine ? mirTex('ground_stone_moss', RW * 4.4, [0, 0, 1, 1], true, true, 512) : null,   // 鏡射拼成的一組 5.7 公尺寬：一半就比路寬，鏡射的對稱軸不會落在踏面中間   // 森林裡的石階：踏面一階石板、一階苔蘚石塊，才不會每階都同一種鋪面
     riser:rs ? (rs.r ? mirTex(rs.id, rs.m, rs.r, true, false, 640) : mkTex(rs.id, rs.m)) : null };
@@ -281,8 +281,9 @@ function texRun(T, uc, xA, yA, sA, xB, yB, sB, zA, a, path, sub){
   for (let q = 1; q <= n; q++) {
     const t = snap(q);
     const xa = lerp(xA, xB, tp), ya = lerp(yA, yB, tp), sa = lerp(sA, sB, tp), xb = lerp(xA, xB, t), yb = lerp(yA, yB, t), sb = lerp(sA, sB, t);
-    texAff(T, uc, xa, ya, sa, xb, yb, sb, zA + F / sa - dzA, zA + F / sb - dzA, a);
+    const za = zA + F / sa - dzA, zb = zA + F / sb - dzA, w = texAff(T, uc, xa, ya, sa, xb, yb, sb, za, zb, a, 0);
     ctx.beginPath(); path(tp, t); ctx.fill();
+    if (w > 0.04) { texAff(T, uc, xa, ya, sa, xb, yb, sb, za, zb, a, 1); ctx.fill(); }   // 縮圖換級的地方兩級交叉淡換（以前在固定的距離有一條明暗分界跟著畫面走）
     tp = t;
   }
 }
@@ -307,13 +308,16 @@ function roadShade(){
 }
 const mipN = k =>Math.min(6, Math.max(0, Math.floor(-Math.log2(k * DPR))));
 // 一條橫條的貼圖對齊：近端中心 (xn, yn) 對到世界位置 zn，遠端 (xf, yf) 對到 zf；橫向比例取兩端平均，跟著中心線斜切
-function texAff(T, uc, xn, yn, sn, xf, yf, sf, zn, zf, a){
+// step：0＝這一級（回傳要跟下一級交叉淡換多少 w），1＝下一級（疊在上面）。兩次的不透明度算好，讓底色露出來的比例跟只畫一次一樣
+function texAff(T, uc, xn, yn, sn, xf, yf, sf, zn, zf, a, step){
   const r = T.w / T.m, dv = Math.max(1e-4, (zf - zn) * r), kx = (sn + sf) * 0.5 / r, d = -(yn - yf) / dv, c = (xf - xn) / dv;
-  const nx = mipN(kx), ny = mipN(-d), L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1;
+  const fy = clamp(-Math.log2(-d * DPR), 0, 6), ny0 = Math.floor(fy), w = ny0 < 6 ? fy - ny0 : 0;
+  const nx = mipN(kx), ny = ny0 + (step ? 1 : 0), L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1;
   const v0 = (((zn % T.m) + T.m) % T.m) * r, u0 = uc * r, m = TEX_MTX || new DOMMatrix();
   m.a = kx * sx; m.b = 0; m.c = c * sy; m.d = d * sy; m.e = xn - kx * u0 - c * v0; m.f = yn - d * v0;
   p.setTransform(m);
-  ctx.fillStyle = p; ctx.globalAlpha = a;
+  ctx.fillStyle = p; ctx.globalAlpha = step ? a * w / (1 - a + a * w) : w > 0.04 ? a * (1 - w) : a;
+  return w;
 }
 // ───────── 立體草叢：一條一條站起來的草葉（預先畫好幾條「草帶」，每幀沿地面蓋章） ─────────
 // 平鋪的俯視草地貼圖看起來像地毯；低角度看草地應該看到草葉站起來：根部暗、葉尖亮、邊緣毛毛的
@@ -1763,7 +1767,7 @@ function drawWorld(b, t){
         }
         // 草地底色：整片同一個顏色（以前每兩段換一次深淺、每格坡面分三階，一段一段像色塊），明暗交給下面連續的坡面陰影
         ctx.beginPath();
-        for (k = 1; k < nS - 1; k++) { const e = side * 0.8; ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1]); ctx.lineTo(tX2[k] - e, tY2[k]); ctx.closePath(); }
+        for (k = 1; k < nS - 1; k++) { const e = side * 0.8; ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + 1); ctx.lineTo(tX2[k] - e, tY2[k] + 1); ctx.closePath(); }   // 遠端往內縮 1 像素：底色的反鋸齒邊不會蓋到後面那段已經貼好的草地（以前每段交界有一條淡淡的亮線）
         ctx.fillStyle = LUT[1 * FOGN + fi]; ctx.fill();
         if (TEX.grass && ta > 0.03) {   // 草地貼圖：近處切成薄橫條各自對齊透視，跟前後段接得起來（下雪時淡掉，露出底下積雪的白色坡面）
           texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * GRASS_A * (1 - snowFall * snowAmt * 0.85), function(a, b){
@@ -1840,8 +1844,8 @@ function drawWorld(b, t){
           }
         }
       } else {
-        ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2, x2 - e2, y2);
-        ctx.fillStyle = LUT[7 * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2, x2 - w2, y2);
+        ctx.fillStyle = LUT[13 * FOGN + fi]; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + 1, x2 - e2, y2 + 1);   // 遠端同樣往內縮 1 像素（不蓋到後面那段的路面貼圖）
+        ctx.fillStyle = LUT[7 * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2 + 1, x2 - w2, y2 + 1);
         if (RT && ta > 0.03) { texRun(RT, RW, x1, y1, s1, x2, y2, s2, zA, ta, roadPath(x1, y1, s1, x2, y2, s2)); ctx.globalAlpha = fade; }
         const wA = isWood ? farA(j, 60, 10) : 0;
         if (wA > 0) for (k = 0; k < PLANKS; k++) {   // 木棧道：每片木板深淺不一，近處再加幾條木紋（遠處淡入）
