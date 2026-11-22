@@ -155,6 +155,7 @@
   function wxIcon(cv, kind, time){
     const d = Math.min(2, window.devicePixelRatio || 1), s = 34; cv.width = cv.height = s * d;
     const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, s, s);
+    if (HUD.drawWxArt(c, kind, time, s)) return;   // 有天氣美術圖就用圖（跟登山畫面同一套對照）
     c.lineJoin = c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = 1.8;
     const clear = kind === 'sunny', x = clear ? 17 : 12, y = clear ? 17 : 11, r = clear ? 7.5 : 6;
     if (clear || kind === 'cloudy') {
@@ -399,13 +400,15 @@
 
   // 便條（樹洞）
   const notePick = o => SX.NOTES[(C.hash(M.id + o.m) + Math.floor(Date.now() / 86400000 / 3)) % SX.NOTES.length];
+  // 便條紙（山友便條、許願紙共用）：字包一層，美術圖到了可以讓字跟著紙一起斜
+  const noteHtml = (txt, sign) => `<div class="noteP"><div>${txt}<small>${sign}</small></div></div>`;
   function openNote(o){
     A.paper();
     const title = o.type === 'note' ? '山友留下的便條' : o.type === 'btree' ? '祈福樹上的小卡' : '笑臉疊石下壓著一張紙條';
     const days = 1 + C.hash(o.m + 'd') % 3;
     SV.stats.notes++; daily('note');
     modal(`<h3>${title}</h3>
-      <div class="noteP">${notePick(o)}<small>— 匿名山友・${days} 天後會風化</small></div>
+      ${noteHtml(notePick(o), `— 匿名山友・${days} 天後會風化`)}
       <div class="mBtns"><button class="cbtn" id="nHeart">給愛心</button><button class="cbtn" id="nClean">${o.type === 'btree' ? '澆澆水' : '清清泥'}</button></div>
       <div class="mBtns" style="margin-top:10px"><button class="cbtn go" id="nOk">繼續走</button></div>`);
     const give = (btn, kind) => { if (btn.disabled) return; btn.disabled = true; const r = btn.getBoundingClientRect(); sparks(r.left + r.width/2, r.top + r.height/2, 12); A.sparkle(); st.stam = Math.min(100, st.stam + 8); toast(kind === 'heart' ? '愛心送出了，體力 +8' : '步道變乾淨了，體力 +8'); };
@@ -450,6 +453,22 @@
     if (u('ui_bubble')) css.push(`.bubble{background:none!important;border-style:solid!important;border-width:12px 16px 20px!important;border-color:transparent!important;border-image:url("${u('ui_bubble')}") 60 70 90 70 fill / 12px 16px 20px stretch!important;box-shadow:none!important;padding:0 2px!important}.bubble::after{display:none!important}`);
     if (u('ui_page')) css.push(`#scrAlbum,#scrSettings,#scrLobby{background:url("${u('ui_page')}") center/cover no-repeat!important}`);
     for (const k of ['common', 'rare', 'legend']) if (u('rarity_' + k)) css.push(`.bag .slot.rar-${k}{background:url("${u('rarity_' + k)}") center/100% 100% no-repeat!important;border-color:transparent!important;box-shadow:none!important}`);
+    // 天氣圓章已含木框：登山畫面右上角拿掉原本的圓框和底色
+    css.push(`.hudWx.art{border:0!important;background:none!important;box-shadow:none!important;overflow:visible!important}`);
+    // 登頂插圖（16:9）放在抵達終點視窗最上面
+    css.push(`.summitArt{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;border:2px solid var(--ink);margin:0 0 12px}`);
+    // 集印帳：紅色印章圖，下緣壓一塊紅框小牌寫山名和日期（字跟著章的大小縮放）；整枚章用「取暗色」混色，米色底會融進紙裡像真的蓋上去
+    css.push(`.stampArt{position:relative;width:100%;aspect-ratio:1;container-type:inline-size;transform:rotate(-8deg);mix-blend-mode:darken}
+      .stampArt img{display:block;width:100%;height:100%;object-fit:contain}
+      .stampArt span{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);padding:1.5cqw 5cqw 2cqw;background:#fbf2df;border:max(1.5px,1.6cqw) solid #b8322a;border-radius:3cqw;color:#b8322a;text-align:center;line-height:1.15;white-space:nowrap;text-shadow:none;font-family:Huninn,sans-serif}
+      .stampArt b{display:block;font-size:13cqw;letter-spacing:.08em}.stampArt i{display:block;font-style:normal;font-size:9.5cqw;font-weight:bold}
+      .stampSlot:has(.stampArt){padding:2px}`);
+    // 便條／許願紙：綁繩小紙卡當底圖，字放在紙的位置、跟紙一樣順時針斜 16°
+    // 數字是 note_paper 裁掉透明邊後量的（314×438，紙 168×280，紙中心在 124.75, 275.5），換圖要重量
+    if (u('note_paper')) css.push(`.noteP{--p:140px;width:calc(var(--p) * 314 / 168)!important;height:calc(var(--p) * 438 / 168);box-sizing:border-box;margin:0 auto 14px!important;padding:0!important;background:url("${u('note_paper')}") center/100% 100% no-repeat!important;border:0!important;border-radius:0!important;box-shadow:none!important;transform:none!important}
+      .noteP::before{display:none!important}
+      .noteP>div{position:absolute;left:calc(100% * 124.75 / 314);top:calc(100% * 275.5 / 438);width:var(--p);height:calc(var(--p) * 280 / 168);margin:calc(var(--p) * -140 / 168) 0 0 calc(var(--p) / -2);box-sizing:border-box;padding:34px 12px 10px;font-size:15px;line-height:1.6;transform:rotate(16deg);overflow-wrap:anywhere}
+      .noteP small{font-size:11.5px!important;line-height:1.4;margin-top:6px!important}`);
     if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
     if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }
   });
@@ -612,10 +631,16 @@
     const c = $('#sgCv'), W = 300, H = 400, d = Math.min(2, window.devicePixelRatio || 1); c.width = W * d; c.height = H * d;
     const g = c.getContext('2d'), base = H - 44, stack = [], COLS = ['#b9b3a6','#c9bfae','#a9aeb0','#cdb9a0','#b4bdb0'], t0 = performance.now();
     let alive = true, cur = null;
-    const mk = () => ({ w:100 - stack.length * 11, h:32 - stack.length * 2.5, x:W / 2, y:64, vy:0, vx:0, rot:0, state:'swing', ph:Math.random() * 6.28, sp:1.7 + stack.length * 0.35, col:COLS[stack.length % 5], tilt:(Math.random() - 0.5) * 0.14 });
+    // 石頭美術圖：有圖就隨機挑一顆，高度照圖的長寬比算（碰撞也用這個高度）
+    const STONE_ART = ['stone_a', 'stone_b', 'stone_c'];
+    const mk = () => {
+      const n = stack.length, w = 100 - n * 11, art = pick(STONE_ART), e = SX.art.get(art), f = e && e.frames[0];
+      return { w, h:f ? w * f.h / f.w : 32 - n * 2.5, art:f ? art : null, x:W / 2, y:64, vy:0, vx:0, rot:0, state:'swing', ph:Math.random() * 6.28, sp:1.7 + n * 0.35, col:COLS[n % 5], tilt:(Math.random() - 0.5) * 0.14 };
+    };
     const ell = s => { g.beginPath(); g.ellipse(0, 0, s.w / 2, s.h / 2, 0, 0, 6.2832); };
     function drawStone(s){
       g.save(); g.translate(s.x, s.y); g.rotate(s.tilt + s.rot);
+      if (s.art) { SX.art.drawFrame(g, s.art, 0, 0, s.h / 2, s.h); g.restore(); return; }
       ell(s); g.fillStyle = s.col; g.fill();
       g.save(); ell(s); g.clip();
       g.fillStyle = 'rgba(58,42,32,.24)'; g.beginPath(); g.ellipse(-s.w * 0.12, s.h * 0.34, s.w / 2, s.h / 2, 0, 0, 6.2832); g.fill();
@@ -629,7 +654,7 @@
       SC.addCairn(m, side); (SV.cairns[M.id] = SV.cairns[M.id] || []).push({ m, side });
       SV.stats.cairns++; daily('cairn'); save(); A.chime();
       const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width / 2, r.top + r.height * 0.4, 18);
-      modal(`<h3>石頭疊好了</h3><div class="noteP">${wish}<small>— 你在${M.name}留下的願望</small></div>
+      modal(`<h3>石頭疊好了</h3>${noteHtml(wish, `— 你在${M.name}留下的願望`)}
         <p class="summitBig">步道旁多了一座你的小石堆。</p><div class="mBtns"><button class="cbtn go" id="sgOk">好</button></div>`);
       $('#sgOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };
     }
@@ -803,7 +828,7 @@
       if (img) { SV.photos.push({ id:M.id, m:M.dist, alt:M.alt, img, cap:`${M.name}・登頂`, wx:wxText(wx) || '晴', date:today() }); imgDirty = true; save(); }
       const r = $('#app').getBoundingClientRect(); sparks(r.left + r.width/2, r.top + r.height*0.4, 24); confetti();
       const wall = SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) >= M.dist);
-      modal(`<h3>抵達終點！</h3>
+      modal(`${SX.art.img('summit_' + M.id, '', 'artImg summitArt')}<h3>抵達終點！</h3>
         <div class="summitBig"><b>${M.name} ${M.alt.toLocaleString('en-US')} m</b>${M.end}</div>
         ${img ? `<div class="pol"><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
@@ -1021,7 +1046,9 @@
   function showLot(f){ modal(`<h3>你的籤詩</h3>${lotHtml(f)}<div class="mBtns"><button class="cbtn go" id="lOk">收進籤詩冊</button></div>`); $('#lOk').onclick = () => { A.pop(); $('#modal').classList.remove('on'); }; }
 
   function stampSvg(id, date){
-    const m = SX.M[id];
+    const m = SX.M[id], u = SX.art.url('stamp_' + id);
+    // 有印章美術圖：圖上壓一塊紅框小牌寫山名和日期，讀起來還是一枚有日期的章
+    if (u) return `<div class="stampArt"><img src="${u}" alt="" draggable="false"><span><b>${m.name}</b><i>${(date || '').replace(/\//g,'.')}</i></span></div>`;
     return `<svg viewBox="0 0 100 100"><g transform="rotate(-8 50 50)" opacity=".9">
       <circle cx="50" cy="50" r="44" fill="none" stroke="#c8402f" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="#c8402f" stroke-width="1.5" stroke-dasharray="3 3"/>
       <path d="M22 62 L38 38 L48 50 L60 30 L78 62Z" fill="#c8402f" opacity=".85"/>
