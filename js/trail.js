@@ -137,7 +137,7 @@ const GAIT = {
   idle:[100, 180], idleDur:[2, 3],      // 偶爾停下來喝口水或擦汗
   wipe:[0.35, 0.3, 0.25],               // 停下來時擦汗的機率：基本＋大太陽＋爬坡（其餘是喝水）
   look:6, lookDur:[2.2, 3],             // 觀景台、路線地標在前面幾公尺內：停下來轉頭看
-  bendIn:0.012, bendOut:0.007,          // 轉身走路圖只在真的彎道：腳下往前 8 公尺的平均彎度超過 bendIn 換上、低於 bendOut 才算彎完（直線上的小擺動不會換）
+  bendIn:0.034, bendOut:0.02,           // 轉身走路圖只在真的彎道（中彎、大彎；路上每隔幾十公尺就有的小彎不算）：腳下往前 8 公尺的平均彎度超過 bendIn 換上、低於 bendOut 才算彎完（直線上的小擺動不會換）
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
   stairCad:1.35,                        // 階梯上一步踩一階：踏面很短（很陡）時步頻最多是平路的這麼多倍，再快就放慢前進（腳不會原地狂踩、在階梯上滑）
@@ -754,7 +754,7 @@ function buildSprites(){
   // 依山的主題決定路旁植物比例
   const al = th.alpine;
   smallTab = mkTab([[SPR.rhodo, al ? 3 : 1.4], [SPR.rock, (al || th.rocks || th.trail === 'scree') ? 3 : 1], [SPR.bamboo, al ? 3 : 0.5], [SPR.fern, al ? 0.3 : 2.5], [SPR.grass, 3], [SPR.flower, 1.5], [SPR.silver, th.grass ? 3 : 0.3]]);
-  const cl = clumps(); SPR.clump = cl ? cl.map(function(c){ return clumpSpr(c, SCALE.clump); }) : null;   // 美術圖切開的小草叢（石階邊緣、欄杆柱腳），染上這座山的草色
+  const cl = clumps(); SPR.clump = cl ? cl.slice(0, CLUMP_V).map(function(c){ return clumpSpr(c, SCALE.clump); }) : null;   // 美術圖切開的小草叢（石階邊緣、欄杆柱腳），染上這座山的草色
   stairTab = mkTab([[SPR.clump, 4], [SPR.grass, 2], [SPR.fern, al ? 0.5 : 2]].filter(e => e[0]));   // 從石階兩側長進石頭上的苔草、蕨類
   edgeTab = mkTab([[SPR.grass, 3], [SPR.fern, al ? 0.6 : 2], [SPR.flower, 1]]);   // 蓋過路緣的矮草（不放灌木、石頭，才不會擋路）
   // 路旁植物牆：森林是蕨類＋灌木＋箭竹擠成一道綠牆；高山是玉山箭竹＋杜鵑貼著步道
@@ -775,9 +775,9 @@ function buildSprites(){
 const TURN_GAP = [15, 45];     // 地形轉折點的間距（公尺）
 const TURN_KIND = [            // 轉折點的種類：機率、轉幾度、轉多長（公尺）
   { p:0.28, deg:[0, 0], len:[0, 0] },        // 直直走
-  { p:0.44, deg:[5, 12], len:[14, 24] },     // 小彎
-  { p:0.18, deg:[14, 24], len:[16, 26] },    // 中彎
-  { p:0.10, deg:[26, 42], len:[18, 30] }     // 大彎（繞過大樹、巨石）
+  { p:0.44, deg:[5, 12], len:[20, 34] },     // 小彎
+  { p:0.18, deg:[14, 24], len:[20, 32] },    // 中彎
+  { p:0.10, deg:[26, 42], len:[22, 34] }     // 大彎（繞過大樹、巨石）
 ];
 const TURN_SAME = 0.55;   // 下一個彎跟上一個同一邊的基本機率（同一邊連續幾個小彎、再一個反向大彎）
 const TURN_BACK = 0.8;    // 地形彎累積偏離大方向這麼多弧度時，幾乎一定往回彎（路不會一直往同一邊繞）
@@ -1992,7 +1992,8 @@ const SE_SH = 0.4;                     // 接觸陰影往草地淡出去多寬�
 const SE_EXT = [0.05, 0.13];            // 石頭側面伸出踏面外多少（公尺）
 const SEQ = new Float32Array(9 * 4);   // 這段每一階：近端 x、y、半寬、比例，遠端 x、y（踏面）、立面上緣 y、半寬、比例
 const SE_PLANT_J = 24, SE_PLANT_P = 0.8, SE_FAR = 0.6;   // 石階邊的苔草：幾段以內畫、每階每邊長一叢的機率、最遠那幾段縮到幾成大
-const SE_LEAF = 5;                     // 石階每段多撒幾片落葉、松針
+const SE_LEAF = 5, SE_LEAF_J = 22;     // 石階每段多撒幾片落葉、松針；幾段以內才撒（再遠只剩一個像素）
+const CLUMP_V = 4;                     // 小草叢只用前幾種（每種是一張貼圖，種類越多 WebGL 越常要換圖）
 function stoneSE(){ return TH.trail === 'stairs' && snowAmt < 0.5; }
 // 一段階梯分成幾階（每階最高 STEP_H）：登山客踩階梯的節奏、畫階梯、石階邊的草和落葉都用這個
 function stepsOf(rise){ return clamp(Math.ceil(rise / STEP_H), 1, 4); }
@@ -2130,7 +2131,7 @@ function railPost(x, y, s, lit, dk, A, AI){
 }
 // 路緣的落葉：堆在路邊內側（被踩過的地方掃到兩邊），讓路面和草地的交界不是一條乾淨的線
 function edgeLeaves(i, j, stp, n){
-  if (stp && n && stoneSE()) for (let q = 0; q < SE_LEAF; q++) {   // 石階：落葉、松針多一點，卡在每階接縫兩邊
+  if (stp && n && stoneSE() && pZ[j] < SE_LEAF_J * SEG) for (let q = 0; q < SE_LEAF; q++) {   // 石階：落葉、松針多一點，卡在每階接縫兩邊
     if (Hh(i, 760 + q) > 0.75) continue;
     const k = (Hh(i, 765 + q) * n) | 0, f = (k + 0.75 + 0.2 * Hh(i, 770 + q)) / n, side = Hh(i, 775 + q) < 0.5 ? -1 : 1;
     proj(j, f, false); gy = treadY(j, f, n);
