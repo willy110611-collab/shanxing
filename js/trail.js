@@ -239,6 +239,20 @@ function buildTex(){
     moss:tr === 'stairs' && !TH.alpine ? mirTex('ground_stone_moss', RW * 2.4, [0, 0, 1, 1], true, true, 512) : null,   // 森林裡的石階：踏面一階石板、一階苔蘚石塊，才不會每階都同一種鋪面
     riser:rs ? (rs.r ? mirTex(rs.id, rs.m, rs.r, true, false, 640) : mkTex(rs.id, rs.m)) : null };
   if (TEX.riser) TEX.riser.rows = rs.rows;
+  TEX.bank = tr === 'wood' ? null : mirTex('trail_bank', BANK_M, [0.14, 0.32, 0.87, 0.68], true, false, 512);   // 路肩土坎切面：泥土、石頭、樹根（木棧道沒有土坎）
+}
+// 土坎切面貼圖：圖寬代表沿路 BANK_M 公尺、圖高代表 BANK_H 公尺（土坎約 0.12～0.28 公尺高），BANK_J 段以內才貼（最後 6 段淡入）
+const BANK_M = 2.6, BANK_H = 0.32, BANK_J = 26;
+// 切面是一片斜斜往遠處延伸的四邊形：貼圖橫向沿著路往前、直向從土坎上緣往下（用這一段近端的兩個點和遠端上緣的點對齊）
+function bankFill(T, side, z0, bh, a){
+  const ux = (tX2[1] - tX1[1]) / SEG, uy = (tY2[1] - tY1[1]) / SEG, vx = (tX1[0] - tX1[1]) / bh, vy = (tY1[0] - tY1[1]) / bh;
+  const kx = BANK_M / T.w, ky = BANK_H / T.c.height;
+  const nx = Math.min(6, Math.max(0, Math.floor(-Math.log2(Math.hypot(ux, uy) * kx * DPR)))), ny = Math.min(6, Math.max(0, Math.floor(-Math.log2(Math.hypot(vx, vy) * ky * DPR))));
+  const L = nx || ny ? texLevel(T, nx, ny) : null, p = L ? L.p : T.p, sx = L ? L.sx : 1, sy = L ? L.sy : 1, ph = (z0 % BANK_M) / BANK_M * T.w;
+  const m = TEX_MTX || new DOMMatrix();
+  m.a = ux * kx * sx; m.b = uy * kx * sx; m.c = vx * ky * sy; m.d = vy * ky * sy; m.e = tX1[1] - ph * ux * kx; m.f = tY1[1] - ph * uy * kx;
+  p.setTransform(m);
+  ctx.fillStyle = p; ctx.globalAlpha = a;
 }
 // 立面貼圖：xl 左緣、yt 上緣（螢幕座標）、s 這個深度每公尺幾像素；k 決定這一階對齊圖裡第幾排、左右錯開多少
 function riserFill(T, xl, yt, s, k, a){
@@ -304,9 +318,39 @@ function buildTurf(){
   const r = mkrng(seed ^ 0x2b1d), near = TH.near || '#86c06a', av = texAvg('ground_grass');
   const base = av ? mix(near, av, GRASS_A * TEX_A) : rgb(near);
   TURF.forEach(a => a.forEach(b => b.forEach(s => free(s.c))));   // 上一座山的草帶（顏色不同）釋放
-  TURF = [[0.9, 0.3, 240, 26], [2.4, 0.26, 90, 60]].map(function(d){
-    return [0, 1, 2].map(function(lv){ return [0, 1, 2, 3].map(function(){ return turfSpr(d[0], d[1], d[2], d[3], base, lv, r); }); });   // 每種明暗 4 種草叢，排起來才不會一直重複
+  const cl = clumps();
+  TURF = [[0.9, 0.3, 240, 26], [2.4, 0.26, 90, 60]].map(function(d, far){
+    return [0, 1, 2].map(function(lv){
+      const v = [0, 1, 2, 3].map(function(){ return turfSpr(d[0], d[1], d[2], d[3], base, lv, r); });   // 每種明暗 4 種草叢，排起來才不會一直重複
+      if (cl && !far) for (let k = 0; k < CLUMP_N; k++) v.push(clumpStrip(cl, d[0], d[1], d[2], base, lv, r));   // 近景再加幾條美術圖草叢
+      return v;
+    });
   });
+}
+// 美術圖草叢 grass_clumps：一排好幾叢，照透明的空隙切開（只做一次）
+const CLUMP_N = 2;
+function clumps(){
+  return keep('clumps', function(){
+    const c = ART.crop('grass_clumps'); if (!c) return null;
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, col = x => { for (let y = 0; y < c.height; y++) if (d[(y * c.width + x) * 4 + 3] > 40) return true; return false; }, out = [];
+    let x0 = -1;
+    for (let x = 0; x <= c.width; x++) { const on = x < c.width && col(x); if (on && x0 < 0) x0 = x; if (!on && x0 >= 0) { if (x - x0 > 6) { const s = mk(x - x0, c.height); s.getContext('2d').drawImage(c, x0, 0, x - x0, c.height, 0, 0, x - x0, c.height); out.push(s); } x0 = -1; } }
+    free(c);
+    return out.length ? out : null;
+  });
+}
+// 跟程式畫的草帶一樣大小的一條：三叢美術圖草排在草根範圍裡，再染上這座山、這個明暗的草色（美術圖顏色才跟地面一致）
+function clumpStrip(cl, core, hm, ppm, base, lv, r){
+  const pad = hm * 0.5, wm = core + pad * 2, c = mk(wm * ppm, hm * ppm), g = c.getContext('2d');
+  for (let k = 0; k < 3; k++) {
+    const s = cl[(r() * cl.length) | 0], h = hm * ppm * (0.65 + r() * 0.35), w = h * s.width / s.height, x = (pad + core * (k + 0.2 + r() * 0.6) / 3) * ppm;
+    g.drawImage(s, 0, 0, s.width, s.height, x - w / 2, c.height - h, w, h);
+  }
+  g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.5; g.fillStyle = css(tone(base, lv)); g.fillRect(0, 0, c.width, c.height); g.globalAlpha = 1;
+  const gr = g.createLinearGradient(0, c.height, 0, c.height * 0.4);
+  gr.addColorStop(0, 'rgba(36,32,58,0.42)'); gr.addColorStop(1, 'rgba(36,32,58,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
+  return { c:c, w:wm, hm:hm, core:core };
 }
 // 一段路兩側蓋草帶：固定 4 排，每排從路邊往外蓋到畫面外或稜線邊；明暗跟著所在那格坡面
 // 每一叢的位置、大小、樣式只跟「這段路是第幾段（世界位置）」有關，跟離鏡頭幾段無關，走近時不會重新洗牌
@@ -1668,6 +1712,12 @@ function drawWorld(b, t){
         if (side < 0 ? tX1[n1] > -10 : tX1[n1] < W + 10) { ctx.fillStyle = LUT[19 * FOGN + fi]; quad(tX1[n1], tY1[n1], tX1[n1] + side * 10 * s1, tY1[n1] + 16 * s1, tX2[n1] + side * 10 * s2, tY2[n1] + 16 * s2, tX2[n1], tY2[n1]); }
         // 土坎切面（第 0 格）：土色；左邊那面朝右、迎著右上來的光，右邊那面背光
         ctx.fillStyle = LUT[(21 + (side < 0 ? 1 + (lvS ? 1 : 0) : 0)) * FOGN + fi]; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]);
+        const bA = TEX.bank ? ta * farA(j, BANK_J, 6) * (1 - snowAmt) : 0, bh0 = bankH(i, side);
+        if (bA > 0.03 && tY1[0] - tY1[1] > 1.5) {   // 土坎切面貼圖；右邊那面背光再壓暗一點
+          bankFill(TEX.bank, side, z0, bh0, bA); quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]);
+          if (side > 0) { ctx.globalAlpha = bA * 0.35; ctx.fillStyle = '#2c3560'; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]); }
+          ctx.globalAlpha = fade;
+        }
         for (let lv = 0; lv < 3; lv++) {
           ctx.beginPath(); let any = false;
           for (k = 1; k < nS - 1; k++) if (tLv[k] === lv) { any = true; const e = side * 0.8;
