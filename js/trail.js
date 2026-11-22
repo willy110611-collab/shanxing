@@ -58,7 +58,8 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, sx:187, sy:650, u:0.75, top:520 };
+const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_A = 0.09, TURN_X = 0.07;   // 轉彎傾身：看腳下往前幾段的彎度、彎到多少算全傾、最多傾幾弧度（約 5 度）、腳往內側偏幾公尺
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
@@ -554,7 +555,7 @@ function buildSprites(){
 }
 
 // ═════════ 世界生成：彎道、坡度、道具位置（每座山固定） ═════════
-const SWAY = 0.022;      // 平緩左右擺動的強度（每段轉向量；約 50 公尺換一次方向，不會暈）
+const BEND_GAP = 260;    // 真實路線的轉彎之間，直線超過這麼長（公尺）就在中間補一個彎
 function buildCurves(m){
   const r = mkrng(seed ^ 0x9e3779b9), rt = m.route; let i;
   if (rt && rt.length >= 3) {
@@ -569,14 +570,25 @@ function buildCurves(m){
       const c = clamp(ang / lenB * SEG * SEG, -0.03, 0.03), s0 = Math.floor((cum[i] * mpu - lenB / 2) / SEG), cnt = Math.ceil(lenB / SEG);
       for (let k = 0; k < cnt; k++) { const j = s0 + k; if (j >= 0 && j < N) curve[j] += c * 1.57 * Math.sin((k + 0.5) / cnt * Math.PI); }
     }
-    for (i = 0; i < N; i++) curve[i] = clamp(curve[i] + (vn(i * 0.045, 91) - 0.5) * 0.006 + SWAY * (vn(i * 0.022, 92) - 0.5), -0.032, 0.032);   // 加上平緩的左右擺動：直線段也會慢慢彎，路不會一直是畫面正中間一條直地毯
+    // 很長的直線（超過 BEND_GAP）中間補一個明顯的彎：直線就是直線、彎就是彎，不再整條路一直微微左右擺（登山客看起來像斜著走）
+    let run = 0, sign = r() < 0.5 ? -1 : 1;
+    for (i = 0; i <= N; i++) {
+      if (i < N && curve[i] === 0) { run++; continue; }
+      if (run * SEG > BEND_GAP) {
+        const cnt = Math.round((50 + r() * 40) / SEG), s0 = i - Math.round(run / 2) - (cnt >> 1), amp = sign * (0.008 + r() * 0.008);
+        for (let k = 0; k < cnt; k++) curve[s0 + k] = amp * Math.sin((k + 0.5) / cnt * Math.PI);
+        sign = -sign;
+      }
+      run = 0;
+    }
+    for (i = 0; i < N; i++) curve[i] = clamp(curve[i], -0.032, 0.032);
   } else {
-    // 沒有路線資料：固定亂數的 S 彎
+    // 沒有路線資料：固定亂數的彎，彎和彎之間留一段真的直線
     i = 8; let sign = r() < 0.5 ? -1 : 1;
     while (i < N) {
-      const len = 20 + Math.floor(r() * 45), amp = sign * (0.004 + r() * 0.016);
-      for (let k = 0; k < len && i < N; k++, i++) curve[i] = amp * Math.sin((k + 0.5) / len * Math.PI) + SWAY * (vn(i * 0.022, 92) - 0.5);
-      i += Math.floor(r() * 14); sign = r() < 0.78 ? -sign : sign;
+      const len = 20 + Math.floor(r() * 45), amp = sign * (0.006 + r() * 0.014);
+      for (let k = 0; k < len && i < N; k++, i++) curve[i] = amp * Math.sin((k + 0.5) / len * Math.PI);
+      i += 25 + Math.floor(r() * 40); sign = r() < 0.78 ? -sign : sign;
     }
   }
   const e = Math.floor(total / SEG);
@@ -1009,6 +1021,8 @@ S.allProps = function(){ return AP.map(function(o){ return { type:o.type, m:o.m,
 S.stepAt = function(){ const out = []; for (let i = 0; i < N; i++) if (stepF[i] && !stepF[i - 1]) out.push(i * SEG); return out; };   // 測試用：階梯段起點（公尺）
 S.edgeAt = function(){ const out = []; for (let i = 1; i <= N; i++) if (edgeK[i] > 0.5 && !(edgeK[i - 1] > 0.5)) out.push({ m:i * SEG, side:dropS[i] }); return out; };   // 測試用：貼著稜線邊緣那幾段的起點（公尺）與往下掉的那一邊
 S.passAt = function(){ const out = []; for (let i = 0; i <= N; i++) if (Hh(i, 300) < PASS_P && !railOn(i)) out.push(Math.round(i * SEG)); return out; };   // 測試用：鏡頭前掠過的芒草／蕨類在哪裡（公尺）
+S.curveAt = function(m){ return cAt(Math.floor(m / SEG)); };   // 測試用：某個位置（公尺）的彎度（0＝直線，正的＝右彎）
+S.turn = function(){ return hero.turn; };                     // 測試用：登山客現在轉彎傾身多少（-1～1）
 S.addCairn = function(m, side){ cairns.push({ type:'mycairn', m:Math.max(0, +m || 0), side:side < 0 ? -1 : 1, text:'' }); mergeProps(); };
 S.setCairns = function(list){
   cairns = [];
@@ -1038,6 +1052,10 @@ function updHero(s, t, dt, dist, sp){
   hero.mgv += (-hero.mga * 60 - hero.mgv * 3 + Math.cos(hero.ph) * 14 * hero.mv + Math.sin(t * 1.3) * 0.6) * dt;
   hero.mga = clamp(hero.mga + hero.mgv * dt, -0.9, 0.9);
   hero.lean += ((s.boost && mv ? 1 : mv ? 0.45 + 0.4 * hero.stair : 0) - hero.lean) * Math.min(1, dt * 5);
+  // 轉彎：看腳下到前方幾公尺的彎度，身體慢慢往彎的內側傾、腳往內側偏一點；直線上回到正好 0；系統設定減少動態就不傾
+  let kc = 0; for (let q = 0; q < TURN_LOOK; q++) kc += cAt(si + q); kc /= TURN_LOOK;
+  const tg = RMOT && RMOT.matches ? 0 : clamp(kc / TURN_FULL, -1, 1) * Math.max(mv, 0.4);
+  hero.turn += (tg - hero.turn) * Math.min(1, dt * 2.5); if (!tg && Math.abs(hero.turn) < 0.002) hero.turn = 0;
   // 每次落腳揚起一點塵土
   const st = Math.floor(hero.ph / Math.PI + 0.5);
   if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain && !isSnow) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
@@ -1304,7 +1322,8 @@ let benchO = null;
 // bx、by、bs：坐在長椅上時，椅面中間的畫面位置和那裡的比例（每公尺幾像素）；沒給就站在路中間
 function drawHero(s, t, bx, by, bs){
   proj(jhG, fhG, false);
-  const onB = bx != null, X = onB ? bx : gx, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100, sit = s.rest || s.sleep;     // 角色座標單位：公分
+  const onB = bx != null, sit = s.rest || s.sleep, tn = onB || sit ? 0 : hero.turn;   // tn：轉彎傾身（坐著不傾）
+  const X = onB ? bx : gx + tn * TURN_X * gs, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100;     // 角色座標單位：公分
   hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
   ctx.globalAlpha = 1;
   drawPet(s, X + 68 * u, (onB ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t);
@@ -1313,7 +1332,7 @@ function drawHero(s, t, bx, by, bs){
   if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
   else ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
-  ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
+  ctx.save(); ctx.translate(X, Y); if (tn) ctx.rotate(tn * TURN_A); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 轉彎往內側傾（以腳底為軸）；爬階梯：身體往前傾，從背後看起來矮一點點
   if (!heroArt(ctx, s, t)) { if (s.sleep) heroSleep(ctx, t); else if (s.rest) heroRest(ctx, t); else heroWalk(ctx, t); }
   ctx.restore();
 }
