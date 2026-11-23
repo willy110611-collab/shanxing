@@ -2110,12 +2110,13 @@
   // 讀取進度：進度條和上面跑的小柴犬用同一個百分比
   // 讀取畫面：小柴犬一定從左跑到右。顯示的進度 = 真正的進度和「跑了多久」取比較小的那個：
   // 圖都在手機裡（一下就讀完）也要跑滿 LD_MIN_MS 才收起；網路慢就照真正的進度慢慢跑。收起畫面等牠跑到最右邊
-  const LD_MIN_MS = 1800;
-  const ld = { real:0, shown:-1, t0:performance.now(), want:false };
+  // 小柴犬一路從左跑到右：每毫秒最多前進 100 / LD_MIN_MS（%），整段至少跑 2 秒；讀取進度突然跳上去也是一路跑過去，不會瞬移
+  const LD_MIN_MS = 2000;
+  const ld = { real:0, shown:0, last:performance.now(), want:false };
   const ldSet = p => { ld.real = Math.max(ld.real, p); };
   function ldTick(now){
     if (entered) return;
-    const p = Math.min(ld.real, (now - ld.t0) / LD_MIN_MS * 100);
+    const p = Math.min(ld.real, ld.shown + Math.min(50, Math.max(0, now - ld.last)) / LD_MIN_MS * 100); ld.last = now;
     if (p !== ld.shown) { ld.shown = p; const f = $('#ldFill'), d = $('#ldDog'); if (f) f.style.width = p + '%'; if (d) d.style.left = p + '%'; }
     if (ld.want && p >= 100) enterNow(); else requestAnimationFrame(ldTick);
   }
