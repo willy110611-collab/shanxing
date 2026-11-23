@@ -687,13 +687,17 @@
     st.stopAt = Math.max(st.dist + 1, o.m); st.restType = o.type;
     say(o.type === 'view' ? '去觀景台看看！' : '去那張長椅坐一下');
   }
+  const restTitle = () => st.restType === 'view' ? '觀景台到了，慢慢看' : st.restType === 'trail' ? '在路邊坐下來，喝口水' : '坐下來喝口熱茶';
   function onRest(){
-    SV.stats.rests++; daily('rest'); A.chime();
-    say(st.restType === 'view' ? '哇，風景好漂亮' : '呼～喝口熱茶');
-    $('#rsTitle').textContent = st.restType === 'view' ? '觀景台到了，慢慢看' : '坐下來喝口熱茶';
+    if (st.restType !== 'trail') { SV.stats.rests++; daily('rest'); }   // 路邊主動休息不算「長椅常客」和每日任務（不然一直按休息就能刷）
+    A.chime();
+    say(st.restType === 'view' ? '哇，風景好漂亮' : st.restType === 'trail' ? '在路邊坐一下' : '呼～喝口熱茶');
+    $('#rsTitle').textContent = restTitle();
     $('#restSheet').classList.add('on');
     save(); checkQuests();
   }
+  // 主動休息：在路邊坐下來（不用走到長椅），一樣打開休息木牌、慢慢回體力和體溫，按「出發」繼續走
+  $('#restBtn').onclick = () => { if (!st || st.rest || st.sleep || arrived) return; A.unlock(); A.pop(); st.stopAt = null; st.restType = 'trail'; st.rest = true; onRest(); };
   $('#rsGo').onclick = () => { if (!st) return; A.pop(); st.rest = false; $('#restSheet').classList.remove('on'); say('出發囉！'); };
   $('#rsPhoto').onclick = () => { if (st && M) takePhoto(st.dist, false, st.restType === 'view' ? '觀景台' : '休息時光'); };
   $('#rsStone').onclick = () => { if (st && M) { A.pop(); stoneGame(); } };
@@ -1380,8 +1384,9 @@
         mood: st.sleep ? 'sleep' : st.temp < 25 ? 'cold' : st.stam < 25 ? 'tired' : st.stam < 55 ? 'ok' : 'happy', wx });
     } catch(e){}
     const rs = $('#restSheet'), on = !!st.rest && !arrived;
-    if (on && !rs.classList.contains('on')) $('#rsTitle').textContent = st.restType === 'view' ? '觀景台到了，慢慢看' : '坐下來喝口熱茶';
+    if (on && !rs.classList.contains('on')) $('#rsTitle').textContent = restTitle();
     rs.classList.toggle('on', on);
+    $('#restBtn').classList.toggle('off', !!(st.rest || st.sleep || arrived));
     segTick();
   }
 

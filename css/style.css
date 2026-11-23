@@ -639,7 +639,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 
 /* 收合畫面資訊（#hudTog）：收起時狀態面板、小地圖、下方選單淡出，按鈕移到右下角 */
 #scrClimb .hud,#scrClimb .dock{transition:opacity .3s}
-#scrClimb.clean .hud,#scrClimb.clean .dock,#scrClimb.clean .partyBox{opacity:0;pointer-events:none!important}   /* 隊友卡片也跟著收起 */
+#scrClimb.clean .hud,#scrClimb.clean .dock,#scrClimb.clean .partyBox,#scrClimb.clean .restBtn{opacity:0;pointer-events:none!important}   /* 隊友卡片也跟著收起 */
 .hudTog{position:absolute;right:12px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:4;width:38px;height:38px;padding:0;border-radius:50%;background:rgba(255,247,228,.88);border:2px solid var(--ink);color:var(--ink);font-size:16px;line-height:1;box-shadow:0 2px 4px rgba(40,25,10,.3);transition:bottom .3s}
 .hudTog::before{content:"▾"}
 #scrClimb.clean .hudTog{bottom:calc(14px + env(safe-area-inset-bottom));background:rgba(255,247,228,.6)}
@@ -766,3 +766,7 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .likeBar{display:flex;justify-content:flex-end;margin:2px 0 6px}
 .likeBar .chip{white-space:nowrap;font-size:14px;padding:4px 12px}
 .likeBar .chip.on{background:#ffd9e0}
+
+/* 主動休息：登山畫面左下（和右下的收合鈕左右對稱），坐下來時、登頂後、收起畫面資訊時不顯示 */
+.restBtn{position:absolute;left:12px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:4;transition:opacity .3s}
+.restBtn.off{opacity:0;pointer-events:none}
