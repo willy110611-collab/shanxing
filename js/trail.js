@@ -868,7 +868,8 @@ function buildSprites(){
 // 山路的彎不是規律的正弦波：每隔 15～45 公尺一個「地形轉折點」，轉的角度有大有小、左右不對稱（例如兩個小左彎、一段直路、再一個大右彎），
 // 轉折點之間再疊一點低頻的小擺動（像人踩出來的小路，不是工程畫的圓弧）。
 // 全部只存成每段的彎度 curve（方向的變化），畫面上由彎度累加成方向、再累加成位置：內插的是方向不是位置，轉彎一定平順、沒有折角。
-// 真實路線的轉角（m.route，雷達圖畫的也是這條）照舊先放，大方向跟雷達一致；地形轉折點只補在真實轉角之間
+// 路線（m.route，雷達圖畫的也是這條）先放，大方向跟雷達一致；地形轉折點只補在路線轉彎之間。
+// 已經換成真實路線形狀的山（m.routeSrc）用 routeCurves 整條跟著地圖的方向走；其他山照舊在手畫路線的轉角放彎
 const TURN_GAP = [15, 45];     // 地形轉折點的間距（公尺）
 const TURN_KIND = [            // 轉折點的種類：機率、轉幾度、轉多長（公尺）
   { p:0.28, deg:[0, 0], len:[0, 0] },        // 直直走
@@ -895,10 +896,53 @@ function addBend(mc, ang, len, p){
   }
   return pk;
 }
+// 真實路線（m.routeSrc，例如 OpenStreetMap 的步道形狀）：不是只在轉角放彎，而是整條路的方向都跟著地圖走。
+// 每一段折線的方向，照 m.routeM（每個點走到第幾公尺）攤到步道每一段，平滑之後「每段方向變了多少」就是彎度：
+// 地圖上往左繞＝步道往左彎，之字形的急彎攤開成舒服的大彎（最後再被 CURVE_MAX 柔和壓住，鏡頭不會猛轉）
+const ROUTE_SMOOTH = 18;   // 方向的平滑半徑（公尺）：越大彎越緩
+const ROUTE_CALM = 0.006;  // 每公尺轉超過這麼多弧度＝真實路線正在轉彎：前後 ROUTE_PAD 公尺內不加地形彎（地形彎不會跟真實的彎打架）
+const ROUTE_PAD = 20;
+const ROUTE_RATE = 0.8;    // 真實路線的彎最多用到彎度上限 CURVE_MAX 的幾成（留一點給小擺動，不被 tanh 壓掉角度）
+const ROUTE_TERRAIN = 0.55, ROUTE_DRIFT = 0.3;   // 真實路線的山：地形彎只轉原本的幾成、累積偏離超過幾弧度就往回彎（不會跟地圖的方向打架）
+function routeCurves(m, e, busy){
+  const rt = m.route, rm = m.routeM, n = rt.length, th = new Float32Array(N + 2), tmp = new Float32Array(N + 2), hs = [];
+  let i, j, k = 0, a0 = 0;
+  for (i = 0; i < n - 1; i++) {   // 每段折線的方向（y 向下：角度變大＝往右轉），接續上一段不跳 2π
+    const dx = rt[i + 1][0] - rt[i][0], dy = rt[i + 1][1] - rt[i][1];
+    if (dx || dy) { const a = Math.atan2(dy, dx); a0 = i ? a0 + Math.atan2(Math.sin(a - a0), Math.cos(a - a0)) : a; }
+    hs.push(a0);
+  }
+  for (j = 0; j <= N + 1; j++) { const d = Math.min(j * SEG, total); while (k < n - 2 && rm[k + 1] <= d) k++; th[j] = hs[k]; }
+  const R = Math.max(1, Math.round(ROUTE_SMOOTH / SEG)), W = 2 * R + 1, P = Math.round(ROUTE_PAD / SEG);
+  for (let pass = 0; pass < 3; pass++) {   // 移動平均做三次（接近高斯平滑）
+    let s = 0; for (j = -R; j <= R; j++) s += th[clamp(j, 0, N + 1)];
+    for (j = 0; j <= N + 1; j++) { tmp[j] = s / W; s += th[Math.min(N + 1, j + R + 1)] - th[Math.max(0, j - R)]; }
+    th.set(tmp);
+  }
+  // 每段轉幾弧度（正的＝右彎）；超過 ROUTE_RATE 的部分往前後兩段分出去：急彎變長、變緩，但總共轉的角度不變（跟地圖一致）
+  const cs = new Float32Array(N), cap = ROUTE_RATE * CURVE_MAX / SEG;
+  for (j = 0; j < N; j++) cs[j] = th[j + 1] - th[j];
+  for (let it = 0, more = true; more && it < 600; it++) {
+    more = false;
+    for (j = 1; j < N - 1; j++) { const x = Math.abs(cs[j]) - cap; if (x > 0) { const s = Math.sign(cs[j]) * x; cs[j] -= s; cs[j - 1] += s / 2; cs[j + 1] += s / 2; more = true; } }
+  }
+  let run = 0, pk = 0, pv = 0;
+  const flush = () => { if (run && pk < e) bends.push({ i:pk, side:run < 0 ? -1 : 1, ang:Math.abs(run) }); };
+  for (j = 0; j < N; j++) {
+    const c = cs[j], hot = Math.abs(c) / SEG > ROUTE_CALM;
+    curve[j] += c * SEG;
+    if (hot) for (let q = Math.max(0, j - P); q <= Math.min(N, j + P); q++) busy[q] = 1;
+    if (hot && (!run || run * c > 0)) { run += c; if (Math.abs(c) > pv) { pv = Math.abs(c); pk = j; } }
+    else { flush(); run = hot ? c : 0; pv = Math.abs(run); pk = j; }   // 一段連續同方向的轉彎＝一個彎（給彎道旁的景物用）
+  }
+  flush();
+}
 function buildCurves(m){
   const r = mkrng(seed ^ 0x9e3779b9), rt = m.route, e = Math.floor(total / SEG), busy = new Uint8Array(N + 1); let i;
   bends = [];
-  if (rt && rt.length >= 3) {
+  const real = !!(m.routeSrc && m.routeM), tK = real ? ROUTE_TERRAIN : 1, tBack = real ? ROUTE_DRIFT : TURN_BACK;
+  if (real) routeCurves(m, e, busy);
+  else if (rt && rt.length >= 3) {
     // 真實路線折線的轉角：決定左右彎，讓 2.5D 山徑和雷達圖一致
     const n = rt.length, cum = [0];
     for (i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(rt[i][0] - rt[i - 1][0], rt[i][1] - rt[i - 1][1]));
@@ -918,10 +962,10 @@ function buildCurves(m){
     const x = r(), ra = r(), rl = r(), rp = r(), rs = r(), rb = r();
     let K = TURN_KIND[0], acc = 0;
     for (let k = 0; k < TURN_KIND.length; k++) { acc += TURN_KIND[k].p; if (x < acc) { K = TURN_KIND[k]; break; } }
-    const ang = lerp(K.deg[0], K.deg[1], ra) * Math.PI / 180, len = lerp(K.len[0], K.len[1], rl), si = Math.round(mm / SEG);
+    const ang = lerp(K.deg[0], K.deg[1], ra) * Math.PI / 180 * tK, len = lerp(K.len[0], K.len[1], rl), si = Math.round(mm / SEG);
     if (ang > 0 && !busy[Math.min(N, si)]) {
       let side = rs < TURN_SAME ? prev : -prev;
-      if (side * drift > 0 && rb < Math.abs(drift) / TURN_BACK) side = -side;   // 已經往這邊繞很多了：往回彎
+      if (side * drift > 0 && rb < Math.abs(drift) / tBack) side = -side;   // 已經往這邊繞很多了：往回彎
       const pk = addBend(mm, side * ang, len, 0.7 + rp * 0.7);
       drift += side * ang; prev = side;
       if (pk < e) bends.push({ i:pk, side:side, ang:ang });

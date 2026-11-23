@@ -488,7 +488,7 @@
     $('#routeCard').classList.remove('on'); $('#modal').classList.remove('on');
     wx = wxOverride || wxHere();
     SC.setMountain(M); SC.setCairns(SV.cairns[id] || []);
-    try { HUD.setRoute(M.route); } catch(e){ console.error('hud', e); }
+    try { HUD.setRoute(M.route, M.routeM); } catch(e){ console.error('hud', e); }
     if (screen === 'climb') catchUp(); else go('climb');
     SC.resize(); A.nextDay();
     const sc = $('#scrClimb'), ar = $('#app').getBoundingClientRect(); sc.style.setProperty('--rx', (lastTap.x - ar.left) + 'px'); sc.style.setProperty('--ry', (lastTap.y - ar.top) + 'px'); sc.classList.remove('reveal'); void sc.offsetWidth; sc.classList.add('reveal');
