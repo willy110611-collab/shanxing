@@ -898,11 +898,16 @@ function addBend(mc, ang, len, p){
 }
 // 真實路線（m.routeSrc，例如 OpenStreetMap 的步道形狀）：不是只在轉角放彎，而是整條路的方向都跟著地圖走。
 // 每一段折線的方向，照 m.routeM（每個點走到第幾公尺）攤到步道每一段，平滑之後「每段方向變了多少」就是彎度：
-// 地圖上往左繞＝步道往左彎，之字形的急彎攤開成舒服的大彎（最後再被 CURVE_MAX 柔和壓住，鏡頭不會猛轉）
-const ROUTE_SMOOTH = 18;   // 方向的平滑半徑（公尺）：越大彎越緩
+// 地圖上往左繞＝步道往左彎；地圖轉 90 度，畫面也真的轉 90 度（每公尺最多轉一定角度，頭尾慢慢進出彎）。
+// 真實路線的彎不經過地形彎的 tanh 上限（不然轉的角度會被壓小）；之字形的髮夾彎就是連續兩個大彎
+// 轉彎的急緩有三種可以比較，只改 ROUTE_TURN 這一個字：A 急轉角（約 12 公尺轉完 90 度）、B 中等（約 25 公尺）、C 大弧度（約 40 公尺）
+const ROUTE_TURN = 'B';
+const ROUTE_TURNS = { A:{ len:12, smooth:2.5 }, B:{ len:25, smooth:5 }, C:{ len:40, smooth:8 } };   // len：轉 90 度要走幾公尺；smooth：頭尾進出彎的平滑半徑（公尺）
+const ROUTE_SMOOTH = ROUTE_TURNS[ROUTE_TURN].smooth;
+const ROUTE_CAP = SEG * SEG * (Math.PI / 2) / ROUTE_TURNS[ROUTE_TURN].len;   // 真實路線每段彎度上限（地形彎的上限 CURVE_MAX 小很多）
+let routeC = null;         // 真實路線的彎度（每段），buildCurves 最後加進 curve；沒有真實路線的山是 null
 const ROUTE_CALM = 0.006;  // 每公尺轉超過這麼多弧度＝真實路線正在轉彎：前後 ROUTE_PAD 公尺內不加地形彎（地形彎不會跟真實的彎打架）
 const ROUTE_PAD = 20;
-const ROUTE_RATE = 0.8;    // 真實路線的彎最多用到彎度上限 CURVE_MAX 的幾成（留一點給小擺動，不被 tanh 壓掉角度）
 const ROUTE_TERRAIN = 0.55, ROUTE_DRIFT = 0.3;   // 真實路線的山：地形彎只轉原本的幾成、累積偏離超過幾弧度就往回彎（不會跟地圖的方向打架）
 function routeCurves(m, e, busy){
   const rt = m.route, rm = m.routeM, n = rt.length, th = new Float32Array(N + 2), tmp = new Float32Array(N + 2), hs = [];
@@ -919,8 +924,8 @@ function routeCurves(m, e, busy){
     for (j = 0; j <= N + 1; j++) { tmp[j] = s / W; s += th[Math.min(N + 1, j + R + 1)] - th[Math.max(0, j - R)]; }
     th.set(tmp);
   }
-  // 每段轉幾弧度（正的＝右彎）；超過 ROUTE_RATE 的部分往前後兩段分出去：急彎變長、變緩，但總共轉的角度不變（跟地圖一致）
-  const cs = new Float32Array(N), cap = ROUTE_RATE * CURVE_MAX / SEG;
+  // 每段轉幾弧度（正的＝右彎）；超過 ROUTE_CAP 的部分往前後兩段分出去：急彎變長、變緩，但總共轉的角度不變（跟地圖一致）
+  const cs = new Float32Array(N), cap = ROUTE_CAP / SEG, rc = routeC = new Float32Array(N + 1);
   for (j = 0; j < N; j++) cs[j] = th[j + 1] - th[j];
   for (let it = 0, more = true; more && it < 600; it++) {
     more = false;
@@ -930,7 +935,7 @@ function routeCurves(m, e, busy){
   const flush = () => { if (run && pk < e) bends.push({ i:pk, side:run < 0 ? -1 : 1, ang:Math.abs(run) }); };
   for (j = 0; j < N; j++) {
     const c = cs[j], hot = Math.abs(c) / SEG > ROUTE_CALM;
-    curve[j] += c * SEG;
+    rc[j] = c * SEG;
     if (hot) for (let q = Math.max(0, j - P); q <= Math.min(N, j + P); q++) busy[q] = 1;
     if (hot && (!run || run * c > 0)) { run += c; if (Math.abs(c) > pv) { pv = Math.abs(c); pk = j; } }
     else { flush(); run = hot ? c : 0; pv = Math.abs(run); pk = j; }   // 一段連續同方向的轉彎＝一個彎（給彎道旁的景物用）
@@ -941,6 +946,7 @@ function buildCurves(m){
   const r = mkrng(seed ^ 0x9e3779b9), rt = m.route, e = Math.floor(total / SEG), busy = new Uint8Array(N + 1); let i;
   bends = [];
   const real = !!(m.routeSrc && m.routeM), tK = real ? ROUTE_TERRAIN : 1, tBack = real ? ROUTE_DRIFT : TURN_BACK;
+  routeC = null;
   if (real) routeCurves(m, e, busy);
   else if (rt && rt.length >= 3) {
     // 真實路線折線的轉角：決定左右彎，讓 2.5D 山徑和雷達圖一致
@@ -972,10 +978,10 @@ function buildCurves(m){
     }
     mm += lerp(TURN_GAP[0], TURN_GAP[1], r());
   }
-  // 轉折點之間的低頻小擺動（兩層不同頻率的平滑雜訊疊起來），再把太急的彎柔和壓住
+  // 轉折點之間的低頻小擺動（兩層不同頻率的平滑雜訊疊起來），再把太急的地形彎柔和壓住；真實路線的彎（rc）另外加上，不被壓小
   for (i = 0; i < N; i++) {
     const x = i * SEG, w = (vn(x / 23, 91) - 0.5) * 1.3 + (vn(x / 9, 92) - 0.5) * 0.7;
-    curve[i] = CURVE_MAX * Math.tanh((curve[i] + WOBBLE * w) / CURVE_MAX);
+    curve[i] = CURVE_MAX * Math.tanh((curve[i] + WOBBLE * w) / CURVE_MAX) + (routeC ? routeC[i] : 0);
   }
   for (i = e; i <= N; i++) curve[i] *= Math.max(0, 1 - (i - e) / 20);   // 山頂之後拉直
   head[0] = 0; for (i = 0; i <= N; i++) head[i + 1] = head[i] + curve[i] / SEG;
