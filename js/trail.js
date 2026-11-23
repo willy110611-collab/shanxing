@@ -58,7 +58,7 @@ let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
 let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積雪多少；snowFall：正在下的雪有多密（兩個都會慢慢變化）
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
 const cSkyT = [0,0,0], cSkyB = [0,0,0], cGrade = [255,255,255], cSun = [0.8,0.12], cSunCol = [255,246,216];
-let SHADOW = null, CONTACT = null, CAST = null, CANOPY = [], DAPPLE = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
+let SHADOW = null, CONTACT = null, CAST = null, CANOPY = [], DAPPLE = null, GLOW = null, SUNB = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
 const SHOW_FG = false;   // 畫面上下兩端的前景花草（frame_top／frame_bottom）：玩家意見先拿掉，想恢復改成 true
 const WARM_A = 0.5;     // 午後暖光濾鏡強度（soft-light，再乘上太陽可見度）
 const RIM_A = 0.75;     // 前景框（杜鵑、蕨葉）輪廓光強度
@@ -68,7 +68,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, gr:0, crK:0, crD:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -1213,12 +1213,14 @@ function mist(){
   g.fillStyle = gr; g.fillRect(0, 0, 4, 64);
   return c;
 }
+// 遠景第 n 層跟著坡度上下挪幾像素（上坡往下沉、下坡浮上來；地平線和路不動）：每格直接挪位置畫，不重做任何快取
+function plxDy(n){ return LOOK.climb.farPx[n] * hero.gr * U; }
 function drawSkyArt(e, key, hd, a, frac){
   if (a <= 0.01) return;
   const f = e.frames[0], h = HOR + 150 * U, w = Math.max(W * 1.05, h * f.w / f.h), L = plxLayers(key, e), M = mist();
   ctx.globalAlpha = a;
   for (let n = 0; n < L.length; n++) {
-    const p = L[n].p, y0 = h * p[0] + p[4] * U * frac, lh = h * (p[1] - p[0]), off = hd * p[3];
+    const p = L[n].p, dy = plxDy(n), y0 = h * p[0] + p[4] * U * frac + (n ? dy : 0), lh = h * (p[1] - p[0]) + (n ? 0 : dy), off = hd * p[3];   // 最上層（天空）頂端不動，只把下緣的遠山拉下來一點
     if (n) ctx.drawImage(M, 0, 0, 4, 64, 0, y0 - 6 * U, W, h * p[2] + 20 * U);   // 霧帶蓋在上一層的接縫上
     let k = Math.floor(off / w), x = -(off - k * w);
     for (; x < W; x += w, k++) {
@@ -1256,12 +1258,12 @@ function drawBG(t, dist){
   const TA = getTiles(palA), TB = (palB !== palA && palK > 0.01) ? getTiles(palB) : null;
   const hd = headAt(dist) * F, hv = Math.sin(t * 0.5) * 3 * U;        // 視差：依累積轉向角平移
   if (isCloudy || isRain || isSnow) tile(TA.c[1], hd * 0.3 + t * 5, -40 * U, 190 * U, 0.62);   // 高空厚雲
-  layer(TA, TB, 'r', 0, hd * 0.5, HOR - 136 * U, 150 * U);
-  layer(TA, TB, 'c', 0, hd * 0.6 + t * 3, HOR - 52 * U + hv * 0.5, 84 * U);
-  layer(TA, TB, 'r', 1, hd * 0.7, HOR - 92 * U, 130 * U);
-  layer(TA, TB, 'r', 2, hd * 0.85, HOR - 56 * U, 115 * U);
+  layer(TA, TB, 'r', 0, hd * 0.5, HOR - 136 * U + plxDy(0), 150 * U);
+  layer(TA, TB, 'c', 0, hd * 0.6 + t * 3, HOR - 52 * U + hv * 0.5 + plxDy(1), 84 * U);
+  layer(TA, TB, 'r', 1, hd * 0.7, HOR - 92 * U + plxDy(1), 130 * U);
+  layer(TA, TB, 'r', 2, hd * 0.85, HOR - 56 * U + plxDy(2), 115 * U);
   ctx.fillStyle = PAL[palA].valley; ctx.fillRect(0, HOR + 54 * U, W, H);
-  layer(TA, TB, 'c', 1, hd + t * 7, HOR - 34 * U - hv, 120 * U);
+  layer(TA, TB, 'c', 1, hd + t * 7, HOR - 34 * U - hv + plxDy(2), 120 * U);
 }
 
 // ═════════ 一次性素材：影子、光點、神光、前景散景葉、暗角 ═════════
@@ -1291,6 +1293,14 @@ function buildStatic(){
   DAPPLE = mk(32, 32); g = DAPPLE.getContext('2d');
   gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,236,170,0.9)'); gr.addColorStop(0.45, 'rgba(255,226,150,0.5)'); gr.addColorStop(1, 'rgba(255,220,140,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  // 陽光光束（LOOK.sun）：一條直的暖光，左右邊緣很柔、上面淡入、往下慢慢淡掉；畫的時候斜放、拉長（每格只貼這張圖，不另外算）
+  const B = LOOK.sun.col;
+  SUNB = mk(32, 128); g = SUNB.getContext('2d');
+  gr = g.createLinearGradient(0, 0, 32, 0); gr.addColorStop(0, rgba(B, 0)); gr.addColorStop(0.5, rgba(B, 1)); gr.addColorStop(1, rgba(B, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 128);
+  g.globalCompositeOperation = 'destination-in';
+  gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.18, 'rgba(0,0,0,1)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 128);
   GLOW = mk(48, 48); g = GLOW.getContext('2d');
   gr = g.createRadialGradient(24, 24, 0, 24, 24, 24); gr.addColorStop(0, 'rgba(255,244,200,1)'); gr.addColorStop(0.25, 'rgba(255,222,140,0.7)'); gr.addColorStop(1, 'rgba(255,200,90,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 48, 48);
@@ -1482,6 +1492,7 @@ function updHero(s, t, dt, dist, sp){
   // 上坡多陡（0～1）：看腳下往前三段的平均坡度，階梯段不算（階梯有自己的節奏）；慢慢變
   const gr = nSt ? 0 : (eAt(si + 3) - eAt(si)) / (3 * SEG);
   hero.up += (clamp(gr / GAIT.upFull, 0, 1) - hero.up) * Math.min(1, dt * 2);
+  climbUpd(si, dt);
   if (Math.abs(dd) < 3 && hero.pd >= 0) {
     let inc = dd / (nSt ? 2 * stepL : STRIDE * GAIT.stride[gait.lvl] * (1 - (1 - GAIT.upStride) * hero.up)) * TAU;
     if (nSt && dd > 0) {
@@ -1510,6 +1521,28 @@ function updHero(s, t, dt, dist, sp){
   if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain && !isSnow) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
   updGait(s, dt, dist);
 }
+// 爬坡感（地平線不動）：參數在 LOOK.climb
+// gr：腳下往前幾段的坡度（-1 下坡～1 上坡，慢慢變），遠山跟著上下挪幾像素；系統設定減少動態就是 0
+// crK、crD：前方有坡頂（路先往上、翻過去往下掉）時，坡頂前的路提早往下彎多少（0～1）、坡頂離登山客幾公尺（都慢慢變，不會一下子跳）
+const CRS = { k:0, d:0 };
+function crestOf(si){
+  const C = LOOK.climb, n0 = Math.round(C.look[0] / SEG), n1 = Math.round(C.look[1] / SEG), e0 = eAt(si);
+  let pk = si, pe = e0;
+  for (let q = 1; q <= n1; q++) { const e = eAt(si + q); if (e > pe) { pe = e; pk = si + q; } }
+  const dk = pk - si;
+  CRS.d = dk * SEG;
+  CRS.k = dk < n0 || dk >= n1 ? 0 : clamp((pe - eAt(pk + Math.round(C.after / SEG))) / C.drop, 0, 1) * clamp((pe - e0) / C.rise, 0, 1) * clamp((n1 - dk) / (n1 * 0.3), 0, 1);   // 太近（已經到頂）、太遠、翻過去沒往下掉、沒比腳下高都不算
+  return CRS;
+}
+function climbUpd(si, dt){
+  const C = LOOK.climb, e = Math.min(1, dt * C.ease), g = (eAt(si + 4) - eAt(si)) / (4 * SEG), still = RMOT && RMOT.matches;
+  hero.gr += ((still ? 0 : clamp(g / C.gradeFull, -1, 1)) - hero.gr) * e;
+  const c = crestOf(si);
+  hero.crK += (c.k - hero.crK) * e;
+  if (c.k > 0) hero.crD += (c.d - hero.crD) * (hero.crK < 0.02 ? 1 : Math.min(1, e * 2));   // 剛出現的坡頂直接對準位置（那時候還沒彎），之後慢慢跟
+}
+S.climb = function(){ return { gr:hero.gr, crK:hero.crK, crD:hero.crD }; };   // 測試用：現在的坡度、坡頂前多彎多少、坡頂多遠
+S.crestAt = function(){ const out = []; let last = -99; for (let i = 0; i < N; i++) { const c = crestOf(i); if (c.k > 0.6 && i + c.d / SEG - last > 20) { last = i + c.d / SEG; out.push(Math.round(i * SEG)); } } return out; };   // 測試用：走到哪裡（公尺）前方開始有明顯的坡頂
 // ───────── 步態：累了慢慢走、偶爾停下來喘氣／喝水／擦汗／看風景、開心時小跳、上階梯和轉彎換圖 ─────────
 function rnd(r){ return r[0] + Math.random() * (r[1] - r[0]); }
 function gaitReset(){ gait.act = null; gait.pace = 1; gait.tB = rnd(GAIT.breath[1]); gait.tH = rnd(GAIT.hop); gait.tI = rnd(GAIT.idle); gait.lookM = -1; gait.cur = ''; gait.prev = ''; gait.k = 1; gait.mode = 'walk'; gait.modeT = 9; gait.bendT = 0; gait.tired = false; }
@@ -2131,6 +2164,15 @@ function groundLight(i, j, t, fq, a){
       const ph = Hh(i, 426 + q) * TAU, x = gx + ((Hh(i, 424 + q) - 0.5) * 1.8 * rwAt(i) + Math.sin(t * 0.35 + ph) * 0.14) * gs, r = (0.22 + 0.2 * Hh(i, 428 + q)) * gs, fl = Math.min(1, CAMH / gz);   // 平躺在地上：越遠越扁
       ctx.globalAlpha = da * (0.16 + 0.1 * Math.sin(t * 0.8 + ph)); ctx.drawImage(DAPPLE, x - r, gy - r * fl, r * 2, r * 2 * fl);
     }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // 陽光灑在路上的一小片暖光（LOOK.sun.pool）：森林裡明顯、空曠稜線上淡；位置只跟這是第幾段有關，慢慢呼吸
+  const P = LOOK.sun.pool, pa = A * SUN.pool * farA(j, P.j, 8);
+  if (pa > 0.01 && Hh(i, 430) < P.p) {
+    proj(j, Hh(i, 431), false);
+    const fl = Math.min(1, CAMH / gz) * P.flat, ln = lerp(P.len[0], P.len[1], Hh(i, 432)) * gs, wd = lerp(P.wid[0], P.wid[1], Hh(i, 433)) * rwAt(i) * gs, x = gx + (Hh(i, 434) - 0.5) * 0.8 * rwAt(i) * gs;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = pa * (0.85 + 0.15 * Math.sin(t * 0.5 + Hh(i, 435) * TAU));
+    ctx.drawImage(DAPPLE, x - wd, gy - ln * fl * 0.5, wd * 2, ln * fl);
     ctx.globalCompositeOperation = 'source-over';
   }
   ctx.globalAlpha = a;
@@ -3024,8 +3066,41 @@ function drawFlyers(t, dt, sp){
     if (rx > 3) { ctx.strokeStyle = INK; ctx.lineWidth = 0.8; ctx.stroke(); }
   }
 }
+// 陽光灑落（LOOK.sun）：這一格光束、路上暖光多亮。看時間（晚上一定 0）、太陽看得到多少（陰天雨天變淡）、霧、
+// 腳下是森林還是空曠稜線（森林裡最明顯）、自動畫質那一級開不開（開關跟著畫質慢慢淡入淡出）
+const SUN = { k:0, pool:0, mote:0, q:1, qm:1, f:-1 };
+function sunUpd(dt){
+  const L = LOOK.sun, Q = LOOK.q, lv = qs.lvl, e = Math.min(1, dt * QUAL.ease), si = Math.floor(((curS && curS.dist) || 0) / SEG);
+  const f = clamp(wallAt(si), 0, 1) * (TH.alpine ? L.alpine : 1);
+  SUN.f = SUN.f < 0 || !(dt > 0) ? f : SUN.f + (f - SUN.f) * e;
+  SUN.q += (Q.shaft[lv] - SUN.q) * (dt > 0 ? e : 1); SUN.qm += (Q.mote[lv] - SUN.qm) * (dt > 0 ? e : 1);
+  const base = isNight || isRain || isSnow ? 0 : lookT(L.a) * clamp((sunVis - 0.3) / 0.7, 0, 1) * (isFog ? L.fog : 1) * lerp(L.open, 1, SUN.f);
+  SUN.k = base * SUN.q; SUN.mote = base * SUN.qm; SUN.pool = Q.pool[lv] ? base * L.pool.a : 0;   // 路上暖光另外有畫質第 4 級起的淡出（groundLight 的 qs.light）
+}
+S.sun = function(){ return { k:SUN.k, pool:SUN.pool, mote:SUN.mote, forest:SUN.f }; };   // 測試用：這一格陽光光束、路上暖光、小光點多亮，腳下多像森林
+// 光束：從右上方太陽那邊斜斜照下來，幾條寬窄不同、慢慢左右飄、輕輕呼吸；裡面幾顆金色小光點慢慢往下飄
+function drawSun(t){
+  const L = LOOK.sun, n = L.n, M = L.mote;
+  if (SUN.k < 0.01 && SUN.mote < 0.01) return;
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / n, ph = i * 2.39, ang = L.tilt + (u - 0.5) * L.spread + Math.sin(t * 0.07 + ph) * 0.02;
+    const x0 = W * (L.x[0] + (L.x[1] - L.x[0]) * u + Math.sin(t * L.drift + ph) * 0.04), y0 = -H * 0.04, len = H * L.len, w = W * lerp(L.w[0], L.w[1], (Math.sin(ph * 3.1) + 1) / 2);
+    const c = Math.cos(ang), s = Math.sin(ang);   // 光束方向：往下、往左斜 ang
+    if (SUN.k >= 0.01) {
+      ctx.globalAlpha = clamp(SUN.k * (0.7 + 0.3 * Math.sin(t * 0.31 + ph * 1.7)), 0, 1);
+      ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.drawImage(SUNB, -w / 2, 0, w, len); ctx.restore();
+    }
+    if (SUN.mote < 0.01) continue;
+    for (let q = 0; q < M.n; q++) {
+      const p = (t * M.v + q / M.n + i * 0.37) % 1, d = len * (0.15 + 0.6 * p), side = Math.sin(t * 0.6 + q * 2 + ph) * w * 0.25, r = lerp(M.r[0], M.r[1], (q + i) % 3 / 2) * U;
+      ctx.globalAlpha = clamp(SUN.mote * M.a * Math.sin(p * Math.PI) * (0.6 + 0.4 * Math.sin(t * 2.3 + q + ph)), 0, 1);
+      ctx.drawImage(GLOW, x0 - s * d + c * side - r, y0 + c * d + s * side - r, r * 2, r * 2);
+    }
+  }
+}
 function drawLights(t){
   ctx.globalCompositeOperation = 'lighter';
+  drawSun(t);
   if (!isNight && sunVis > 0 && raysA > 0.01) { const sx = cSun[0] * W, sy = cSun[1] * H, R = 170 * U; ctx.globalAlpha = clamp(0.2 * sunVis * (0.6 + raysA * 0.5), 0, 1); ctx.drawImage(GLOW, sx - R, sy - R, R * 2, R * 2); }   // 太陽光暈
   if (raysA > 0.01 && RAYS) {                 // 右上方斜射的神光，輕輕搖曳
     ctx.save(); ctx.globalAlpha = clamp(raysA * (0.8 + 0.2 * Math.sin(t * 0.6)), 0, 1); ctx.translate(W, 0); ctx.rotate(Math.sin(t * 0.23) * 0.03); ctx.drawImage(RAYS, -W, 0, W, H); ctx.restore();
@@ -3083,12 +3158,17 @@ S.burst = function(x, y, kind, n){
     p.life = p.max;
   }
 };
+// 粒子畫在整體調色之後（調色不會再乘到它們）：塵土的顏色自己乘上這一格的時間天氣調色，晚上才不會在暗暗的路上亮亮的發光
+const DUSTC = [0, 0, 0];
 function drawParts(dt){
+  const D = LOOK.dust, dA = D.a * (isNight ? D.night : 1);
+  for (let c = 0; c < 3; c++) DUSTC[c] = D.col[c] * cGrade[c] / 255;
+  const dCss = css(DUSTC);
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]; if (!p.on) continue;
     p.life -= dt; if (p.life <= 0) { p.on = 0; continue; }
     const k = p.life / p.max; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
-    if (p.kind === 0) { ctx.globalAlpha = k * 0.5; dot(ctx, p.x, p.y, p.sz * (1.8 - k), '#e2cda6'); }
+    if (p.kind === 0) { ctx.globalAlpha = k * dA; dot(ctx, p.x, p.y, p.sz * (1.8 - k), dCss); }   // 一般混色（不是加亮）
     else if (p.kind === 1) {
       p.vy += 160 * dt; ctx.globalAlpha = Math.min(1, k * 2); ctx.fillStyle = p.col;
       ctx.beginPath(); ctx.ellipse(p.x, p.y, p.sz, p.sz * 0.45, p.rot, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.8; ctx.stroke();
@@ -3218,7 +3298,7 @@ S.render = function(s){
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
   if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
-  updPalette(wx, frac, dt); litUpd(); shdUpd(); updHero(s, t, dt, dist, sp); stepMates(dt);
+  updPalette(wx, frac, dt); litUpd(); shdUpd(); sunUpd(s.dt); updHero(s, t, dt, dist, sp); stepMates(dt);
   if (ctx.gpu) ctx.begin();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
@@ -3228,7 +3308,8 @@ S.render = function(s){
   hero.pan += ((benchO ? benchO.side * PXO.bench * 0.7 : 0) - hero.pan) * Math.min(1, dt * 2); if (!benchO && Math.abs(hero.pan) < 0.002) hero.pan = 0;   // 離開長椅後鏡頭回到正中間：剩一點點就直接歸零（不會永遠偏一點點）
   const bob = RMOT && RMOT.matches ? 0 : hero.mv;   // 鏡頭跟著步伐極輕微上下晃（一步一次）；系統設定減少動態就不晃
   let j, x = 0, dx = -off * cAt(b);
-  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc; x += dx; dx += cAt(b + j); }
+  const crX = CREST * LOOK.climb.k * hero.crK, crS = hero.crD * LOOK.climb.lead;   // 前方有坡頂：從登山客到坡頂這段的 lead 成開始，路再多往下彎（坡頂提早、清楚地翻過去）
+  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ), dr = Math.max(0, dc - crS); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc - crX * dr * dr; x += dx; dx += cAt(b + j); }
   const hj = HZ / SEG + off; jhG = Math.floor(hj); fhG = hj - jhG;
   camX = lerp(pC[jhG], pC[jhG + 1], fhG) + hero.pan + Math.sin(hero.ph) * 0.012 * bob;
   camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH - Math.abs(Math.sin(hero.ph)) * 0.022 * bob;
