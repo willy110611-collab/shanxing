@@ -144,8 +144,9 @@ const GAIT = {
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
   upFull:0.35, upStride:0.75, upPace:0.8,   // 上坡（不是階梯）：坡度到 35% 算最陡，最陡時步子只剩 0.75、前進速度只剩 0.8（一步一步踩上去，腳不在地上滑）
+  walkHz:1.0,                           // 平路每秒走幾步：每座山都一樣（山友紀錄的速度從每秒 0.24 到 0.83 公尺都有，步數固定、步子大小跟著速度變，走路的樣子才不會一座山快、一座山像慢動作）
+  stairHz:1.15,                         // 爬階梯每秒踩幾階：每座山都一樣（但不會比平路走得快：慢的山照原本速度）
   stairPace:0.85,                       // 爬階梯：前進速度只剩這麼多（背大背包一階一階往上，約一秒一步多一點）
-  stairCad:1.35,                        // 階梯上一步踩一階：踏面很短（很陡）時步頻最多是平路的這麼多倍，再快就放慢前進（腳不會原地狂踩、在階梯上滑）
   tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
   hold:1.5,                             // 換了一種走路圖以後，至少用這麼多秒才能再換（不會一閃一閃）
   fade:0.25                             // 換圖時兩張交叉淡換幾秒（不會一下子跳成另一張）
@@ -1480,11 +1481,17 @@ let BOT_L = '#8fd0e4', BOT_S = '#5398b8', MUG_L = '#e2e6e8', MUG_S = '#9aa4b0', 
 let PON_L = '#f6d968', PON_S = '#cba740', DOG_L = '#e9a55c', DOG_S = '#b9743f', CRM_L = '#fff3de', CRM_S = '#dcc3a0';
 const LEAFC = ['#8fbf5a', '#d9a441', '#c9703f', '#6fa85a'];
 
+// 平路一個步伐循環（兩步）走幾公尺：這座山平常的速度 ÷ 每秒步數（每座山步數一樣、步子大小不一樣）
+let vRef = 0;
+function strideOf(){ return vRef > 0 ? 2 * vRef / GAIT.walkHz : STRIDE; }
+// 階梯上前進速度倍率：每秒踩 stairHz 階 → 速度 = stairHz × 一階的長度，換成這座山平常速度的倍數；最多 1（不會比平路快）
+function stairK(stepL){ return vRef > 0 ? Math.min(1, GAIT.stairHz * stepL / vRef) : GAIT.stairPace; }
 function updHero(s, t, dt, dist, sp){
+  if (s.vBase > 0) vRef = s.vBase;
   if (sp > 0.05 && !s.rest && !s.sleep) hero.walkV += (sp - hero.walkV) * Math.min(1, dt * 0.5);   // 自己平常走路的速度（隊友剛出現時拿來當他的步調）
   const mv = (sp > 0.05 && !s.rest && !s.sleep) ? 1 : 0;
   hero.mv += (mv - hero.mv) * Math.min(1, dt * 8);
-  // 步伐：平路一個循環（兩步）走 STRIDE 公尺；階梯上一步踩一階，身體往前傾一點
+  // 步伐：平路每秒 walkHz 步（每座山一樣，一個循環走 strideOf() 公尺）；階梯上一步踩一階、每秒 stairHz 階，身體往前傾一點
   // 階梯上步伐相位跟畫面上的踏面對齊：第 4、8 格腳踩上下一階的踏面時，身體剛好開始升上那一階（heroGround）
   const si = Math.floor(dist / SEG), rise = sAt(si) === 1 ? eAt(si + 1) - eAt(si) : 0, nSt = rise > 0 ? stepsOf(rise) : 0;
   const sm = stairSteps(nSt), stepL = nSt ? SEG / (nSt * sm) : 0, dd = dist - hero.pd;
@@ -1494,7 +1501,7 @@ function updHero(s, t, dt, dist, sp){
   hero.up += (clamp(gr / GAIT.upFull, 0, 1) - hero.up) * Math.min(1, dt * 2);
   climbUpd(si, dt);
   if (Math.abs(dd) < 3 && hero.pd >= 0) {
-    let inc = dd / (nSt ? 2 * stepL : STRIDE * GAIT.stride[gait.lvl] * (1 - (1 - GAIT.upStride) * hero.up)) * TAU;
+    let inc = dd / (nSt ? 2 * stepL : strideOf() * GAIT.stride[gait.lvl] * (1 - (1 - GAIT.upStride) * hero.up)) * TAU;
     if (nSt && dd > 0) {
       // 這一步走到哪（0～1）→ 相位該在哪；差多少在接下來半步內慢慢補上（只往前補，腳不會倒著走），從一般走路圖換過來步伐接得上
       const u = (dist / SEG - si) * nSt * sm, e = u - Math.floor(u);
@@ -1502,7 +1509,7 @@ function updHero(s, t, dt, dist, sp){
       inc = Math.max(inc * 0.35, inc + err * Math.min(1, dd / stepL * 2));
     }
     hero.ph += inc;
-  } else hero.ph = dist / STRIDE * TAU;   // 一下子跳很遠（換山、補進度）就直接重算
+  } else hero.ph = dist / strideOf() * TAU;   // 一下子跳很遠（換山、補進度）就直接重算
   hero.pd = dist;
   hero.stair += ((nSt ? clamp(rise / SEG / 0.45, 0.4, 1) : 0) - hero.stair) * Math.min(1, dt * 3);
   // 背包：阻尼彈簧跟著步伐上下彈
@@ -1569,8 +1576,8 @@ function updGait(s, dt, dist){
     else if (gait.tH <= 0 && stam >= G.happy && hero.stair < 0.2 && Math.abs(hero.turn) < 0.2) { if (!(RMOT && RMOT.matches)) gaitStart('hiker_hop4', G.hopDur); gait.tH = rnd(G.hop); }
   }
   // 前進速度：做動作時停下來，累了慢慢走；長按快走照原本的速度。慢慢變，不會一下子停住
-  const cad = hero.stepL ? Math.min(1, G.stairCad * hero.stepL / (STRIDE / 2)) : 1;   // 很陡的階梯（踏面短）放慢，一步還是踩一階
-  const up = (1 - (1 - G.upPace) * hero.up) * (1 - (1 - G.stairPace) * hero.stair);   // 上坡越陡走越慢；爬階梯更慢
+  const cad = hero.stepL ? stairK(hero.stepL) : 1;   // 階梯：每秒踩 stairHz 階（每座山一樣），一步踩一階
+  const up = 1 - (1 - G.upPace) * hero.up;   // 上坡越陡走越慢
   const tg = gait.act ? 0 : (s.boost ? 1 : G.pace[lvl]) * cad * up;
   gait.pace += (tg - gait.pace) * Math.min(1, dt * 6);
   if (gait.k < 1) gait.k = Math.min(1, gait.k + dt / G.fade);
@@ -1592,7 +1599,7 @@ function gaitMode(dt, dist, stam){
 }
 S.pace = function(){ return gait.pace; };
 // 測試用：這座山整條路因為上坡和爬階梯變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
-S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const st = sAt(i) === 1 && eAt(i + 1) > eAt(i), gr = st ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1); a += 1; b += 1 / ((1 - (1 - GAIT.upPace) * u) * (st ? GAIT.stairPace : 1)); } return Math.round((b / a - 1) * 1000) / 10; };
+S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const rise = eAt(i + 1) - eAt(i), st = sAt(i) === 1 && rise > 0, gr = st ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1), ns = st ? stepsOf(rise) : 0; a += 1; b += 1 / ((1 - (1 - GAIT.upPace) * u) * (st ? stairK(SEG / (ns * stairSteps(ns))) : 1)); } return Math.round((b / a - 1) * 1000) / 10; };
 S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv, ph:hero.ph, stepL:hero.stepL }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
 // 現在要用哪一張走路圖、要不要鏡射（寫在 gait.sid、gait.sf；每格都會跑，不產生新的陣列、字串）
 const RAIN_OF = { hiker_stairs16:'hiker_rain_stairs16', hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
@@ -1814,7 +1821,7 @@ function drawMate(mt, j, f, t, fade){
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
   const cols = [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S];
   JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
-  hero.ph = mt.d / STRIDE * TAU + 1.3; hero.mv = mt.rest ? 0 : 1; hero.lean = mt.rest ? 0 : 0.45; hero.py = 0; hero.mga = Math.sin(t * 2) * 0.3;
+  hero.ph = mt.d / strideOf() * TAU + 1.3; hero.mv = mt.rest ? 0 : 1; hero.lean = mt.rest ? 0 : 0.45; hero.py = 0; hero.mga = Math.sin(t * 2) * 0.3;
   ctx.globalAlpha = fade;
   footShadow(X, Y, u, 86, 34, SCALE.hero * 100, 1, j);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
