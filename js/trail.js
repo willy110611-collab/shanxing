@@ -901,7 +901,7 @@ function addBend(mc, ang, len, p){
 // 地圖上往左繞＝步道往左彎；地圖轉 90 度，畫面也真的轉 90 度（每公尺最多轉一定角度，頭尾慢慢進出彎）。
 // 真實路線的彎不經過地形彎的 tanh 上限（不然轉的角度會被壓小）；之字形的髮夾彎就是連續兩個大彎
 // 轉彎的急緩有三種可以比較，只改 ROUTE_TURN 這一個字：A 急轉角（約 12 公尺轉完 90 度）、B 中等（約 25 公尺）、C 大弧度（約 40 公尺）
-const ROUTE_TURN = 'B';
+const ROUTE_TURN = 'A';
 const ROUTE_TURNS = { A:{ len:12, smooth:2.5 }, B:{ len:25, smooth:5 }, C:{ len:40, smooth:8 } };   // len：轉 90 度要走幾公尺；smooth：頭尾進出彎的平滑半徑（公尺）
 const ROUTE_SMOOTH = ROUTE_TURNS[ROUTE_TURN].smooth;
 const ROUTE_CAP = SEG * SEG * (Math.PI / 2) / ROUTE_TURNS[ROUTE_TURN].len;   // 真實路線每段彎度上限（地形彎的上限 CURVE_MAX 小很多）
