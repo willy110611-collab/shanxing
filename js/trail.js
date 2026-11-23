@@ -119,7 +119,7 @@ let warmQ = [];
 function warmBuild(){
   // WebGL：同時把圖先傳上顯示卡（prep），第一次看到時不用等上傳
   const up = (c, rep) => { if (ctx.gpu && c) ctx.prep(c, rep); };
-  const q = [], spr = sp => { if (!sp || !sp.c) return; q.push(function(){ mip(sp.c, 1); up(sp.c); }); if (sp.h) q.push(function(){ mip(sp.h, 1); up(sp.h); }); q.push(function(){ if (!sp.sd) sprShadow(sp); up(sp.sd.c); }); };
+  const q = [], spr = sp => { if (!sp || !sp.c) return; q.push(function(){ mip(sp.c, 1); up(sp.c); }); if (sp.h) q.push(function(){ const h = hzOf(sp); mip(h, 1); up(h); }); q.push(function(){ if (!sp.sd) sprShadow(sp); up(sp.sd.c); }); };
   for (const k in SPR) { const a = SPR[k]; if (Array.isArray(a)) a.forEach(spr); }
   TURF.forEach(function(n){ n.forEach(function(v){ v.forEach(spr); }); });
   for (const k in TEX) { const T = TEX[k]; if (T && T.lv) { q.push(function(){ up(T.c, true); }); for (let nx = 0; nx <= 3; nx++) for (let ny = nx; ny <= 6; ny++) if (nx || ny) q.push(function(){ up(texLevel(T, nx, ny).c, true); }); } }
@@ -226,9 +226,8 @@ function sprite(wm, hm, ppm, fn, sink){
   gr.addColorStop(0, 'rgba(255,238,190,0.24)'); gr.addColorStop(0.5, 'rgba(255,238,190,0)'); gr.addColorStop(1, 'rgba(40,36,80,0.2)');
   g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
   c = sunk(c, s);
-  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
-  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
-  return { c:c, h:h, w:wm, hm:hm * (1 - s), ax:0.5 };
+  const o = { c:c };
+  return { c:c, h:hazed(o), o:o, w:wm, hm:hm * (1 - s), ax:0.5 };
 }
 // Gemini 美術圖做成同樣格式的貼圖；hm 是實際高度（公尺）。沒有這張圖就回 null
 const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, drawOver(){ return false; }, mirrored(){ return false; }, onLoad(){} };
@@ -248,9 +247,11 @@ function hazed(o){
   }
   return o.h;
 }
+// 霧化剪影：時段換了霧色（hazeUpd）之後第一次畫到才重做（o 是存原圖和剪影的那個物件）
+function hzOf(sp){ return sp.o ? hazed(sp.o) : sp.h; }
 function artSpr(id, hm){
   const o = keep('spr:' + id, function(){ const c0 = ART.crop(id); if (!c0) return null; const k = 1 - (SINK[id] || 0), c = sunk(c0, SINK[id] || 0); groundShade(c); if (SOFT_BASE[id]) softBase(c, hashStr(id)); return { c:c, k:k }; });
-  return o ? { c:o.c, h:hazed(o), w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;   // shared：換山時不能釋放；埋進土裡的那截不算高度，寬度照原比例
+  return o ? { c:o.c, h:hazed(o), o:o, w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;   // shared：換山時不能釋放；埋進土裡的那截不算高度，寬度照原比例
 }
 // 樹埋進土裡：Gemini 的樹圖底部畫了一整圈樹根，照圖底貼在地面上，樹根就整片浮在地表上。
 // 每張圖往下埋「圖高的幾成」（量的是樹幹和樹根交界往下多少，只留樹幹底和樹根最上面一點點）；沒列的圖不埋。
@@ -314,7 +315,7 @@ function trunkSpr(hm){
     for (let k = 0; k < TRUNK_TILES; k++) { g.save(); g.translate(0, k * th + (k & 1 ? th : 0)); g.scale(1, k & 1 ? -1 : 1); g.drawImage(e.img, f.x, sy, f.w, sh, 0, 0, w, th); g.restore(); }
     return { c:sunk(c, SINK.trunk_close), k:1 - SINK.trunk_close };
   });
-  return o ? { c:o.c, h:hazed(o), w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;
+  return o ? { c:o.c, h:hazed(o), o:o, w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;
 }
 // 路面／草地貼圖（俯視、可無縫拼接）：m 是一張圖代表幾公尺
 const TRAIL_TEX = { dirt:'ground_dirt', stairs:'ground_stone', scree:'ground_scree' };
@@ -554,7 +555,7 @@ function clumpSpr(s, hm){
   g.drawImage(s, 0, 0); g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.4; g.fillStyle = VG.grassL; g.fillRect(0, 0, c.width, c.height); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   groundShade(c);
   const o = { c:c };
-  return { c:c, h:hazed(o), w:hm * c.width / c.height, hm:hm };
+  return { c:c, h:hazed(o), o:o, w:hm * c.width / c.height, hm:hm };
 }
 function buildTurf(){
   const r = mkrng(seed ^ 0x2b1d), near = TH.near || '#86c06a', av = texAvg('ground_grass');
@@ -796,9 +797,8 @@ function artSummitSpr(name){
   const fs = Math.min(c.width * B.w * 0.85, (B.y1 - B.y0) * c.height / n * 0.82);
   g.font = '700 ' + fs + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(120,30,26,.85)';
   for (let i = 0; i < n; i++) g.fillText(name[i], c.width * B.x, c.height * B.y0 + fs * (i + 0.6));
-  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
-  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
-  return { c:c, h:h, w:SCALE.summit * c.width / c.height, hm:SCALE.summit, ax:0.5 };
+  const o = { c:c };
+  return { c:c, h:hazed(o), o:o, w:SCALE.summit * c.width / c.height, hm:SCALE.summit, ax:0.5 };
 }
 function getSign(txt){ return signSpr[txt] || (signSpr[txt] = artSignSpr(txt) || sprite(SCALE.sign * 0.93, SCALE.sign, 80, function(g){ pSign(g, txt); })); }
 // 美術圖路標（sign_wood）：上面那塊箭頭木板寫字。木板位置是照這張圖量的（裁掉透明邊後的比例）
@@ -809,14 +809,13 @@ function artSignSpr(txt){
   g.save(); g.translate(c.width * B.x, c.height * B.y); g.rotate(B.rot);
   let fs = c.height * B.h; g.font = '700 ' + fs + 'px ' + FONT; const tw = g.measureText(txt).width; if (tw > c.width * B.w) { fs *= c.width * B.w / tw; g.font = '700 ' + fs + 'px ' + FONT; }
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(58,36,22,.88)'; g.fillText(txt, 0, 0); g.restore();
-  const h = mk(c.width / 2, c.height / 2), hg = h.getContext('2d');
-  hg.drawImage(c, 0, 0, h.width, h.height); hg.globalCompositeOperation = 'source-atop'; hg.fillStyle = hazeCss; hg.fillRect(0, 0, h.width, h.height);
-  return { c:c, h:h, w:SCALE.sign * c.width / c.height, hm:SCALE.sign, ax:0.5 };
+  const o = { c:c };
+  return { c:c, h:hazed(o), o:o, w:SCALE.sign * c.width / c.height, hm:SCALE.sign, ax:0.5 };
 }
 function buildSprites(){
   const r = mkrng(seed ^ 0x7f4a7c15), th = TH, a = [];
   // 上一座山專用的貼圖（寫了字的路標、三角點、程式畫的植物）用完就釋放；共用的美術圖留著
-  const dropSpr = s => { if (s && s.c && !s.shared) { free(s.c); free(s.h); } };
+  const dropSpr = s => { if (s && s.c && !s.shared) { free(s.c); free(s.h); if (s.o) free(s.o.h); } };
   for (const k in signSpr) dropSpr(signSpr[k]);
   for (const k in SPR) if (Array.isArray(SPR[k])) SPR[k].forEach(dropSpr);
   SPR = {}; signSpr = {};
@@ -1127,8 +1126,8 @@ function updPalette(wx, frac, dt){
     isSnow ? clamp((frac - 0.2) / 0.2, 0, 1) : 0);   // 高山本來就有殘雪；正在下雪時整片蓋滿
   const ease = lutKey < 0 ? 1 : Math.min(1, (dt || 0) * 0.5);   // 天氣變了：雪慢慢積起來、慢慢融掉（剛進山直接到位）
   snowAmt += (sAmt - snowAmt) * ease; snowFall += ((isSnow ? 1 : 0) - snowFall) * ease;
-  const key = Math.round(snowAmt * 8);
-  if (key !== lutKey) { lutKey = key; buildLUT(key / 8); }
+  const key = Math.round(snowAmt * 8), hz = hazeUpd();
+  if (key !== lutKey || hz) { lutKey = key; buildLUT(key / 8); }
 }
 // 地面色表：種類(7) × 明暗(3) × 霧階(FOGN)，只在積雪量改變時重建
 function buildLUT(sn){
@@ -1520,6 +1519,11 @@ S.setMountain = function(m){
 ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); warmBuild(); farReset(); } });
 // 空氣透視的霧色：取白天天空圖「地平線那一條」的平均色（暖金／淡青），遠處的樹、草、地面才會融進遠山和雲海
 // 沒有天空圖就用這座山的遠山色調淡
+// 霧色跟著時段（白天、夕陽、清晨、晚上）換：遠處的地面、樹淡進去的顏色要跟背後的遠山、雲海（PAL 的地平線色）一樣，
+// 不然夕陽時遠處山坡淡成白綠色，貼在橘粉色的天空前面像一塊塊浮在空中的板子（2026-11-24 回報）
+// hazeBase：這座山自己的霧色；每個時段再往那個時段地平線的顏色混 HAZE_SKY。爬升時白天慢慢混到夕陽，霧色分 HAZE_STEP 階換（換一階才重做色表、霧化剪影）
+const HAZE_SKY = 0.5, HAZE_STEP = 4;
+let hazeBase = [223, 230, 226], hazeK = '';
 function setHaze(){
   const base = mix(TH.far || '#8fb3a8', '#f4f1e6', 0.5), e = ART.get(SKY_ART.day), f = e && e.frames[0];
   let sky = null;
@@ -1530,7 +1534,16 @@ function setHaze(){
     for (let k = 0; k < 64; k += 4) { sky[0] += d[k] / 16; sky[1] += d[k + 1] / 16; sky[2] += d[k + 2] / 16; a += d[k + 3]; }
     if (a < 16 * 200) sky = null;      // 圖還沒解碼好（透明）就先不用，等美術圖載完會再算一次
   }
-  hazeRgb = sky ? mix(base, sky, 0.6) : base; hazeCss = css(hazeRgb);
+  hazeBase = sky ? mix(base, sky, 0.6) : base; hazeRgb = hazeBase; hazeCss = css(hazeRgb); hazeK = '';
+}
+// 某個時段的霧色：這座山的霧色往那個時段遠山山腳、雲海的顏色（ridgeTile 的 hz）混
+function hazeOf(key){ const P = PAL && PAL[key]; return P ? mix(hazeBase, mix(P.skyB, P.cloudL, 0.5), HAZE_SKY) : hazeBase; }
+// 每格叫：時段變了才換霧色（回傳 true＝換了，色表要重做）
+function hazeUpd(){
+  const q = Math.round(palK * HAZE_STEP) / HAZE_STEP, k = palA + palB + q;
+  if (k === hazeK) return false;
+  hazeK = k; hazeRgb = mix(hazeOf(palA), hazeOf(palB), q); hazeCss = css(hazeRgb);
+  return true;
 }
 S.props = function(fromM, toM){
   const out = [];
@@ -2188,6 +2201,53 @@ const TDN = [RW, RW + BANKW, RW + 0.6, RW + 1.8, RW + 4.5, RW + 10, 0], TDF = [R
 const TDF_J = 60, TD_MORPH = 8, TDM = [0, 0, -1, RW + 3, -1, 0, 0];
 function tdMorph(z){ return clamp((z / SEG - (TDF_J - 1 - TD_MORPH)) / TD_MORPH, 0, 1); }
 const FAR_FADE = 30, FAR_FADE_A = 0.65, FAR_FADE_H = 0.35;   // 最遠幾段淡出；透明度在最遠的 65% 裡變、霧色在最遠 35% 以內已經全是霧
+// 地面的外緣一律淡進霧裡（2026-11-24 回報：遠處山坡像硬邊貼紙浮在雲海上、灰綠色的多邊形浮在天空）：
+// 以前稜線外緣接一片 10×16 公尺的深色「往下掉的山坡」，下緣又是一條硬邊，底下直接露出雲海；往上長的山壁外緣也是一條硬邊貼著天空。
+// 現在兩側地面的最外緣（離路 gwAt 公尺那條線）上下各蓋一段霧色漸層：往上 up 公尺從透明到霧、往下 dn 公尺從霧到透明（畫面上最多幾像素），
+// 地面不論往下掉還是往上長，邊緣都融進霧和雲海。霧色貼圖一張（換霧色才重做），每段每邊只多貼兩次，WebGL 同一批
+const SKIRT = { up:2.2, dn:9, upPx:34, dnPx:110, a:0.85 };
+let skirtC = null;
+function skirtTex(){
+  if (skirtC && skirtC.hk === hazeCss) return skirtC;
+  free(skirtC); const c = mk(4, 64), g = c.getContext('2d');
+  for (let h = 0; h < 2; h++) { const gr = g.createLinearGradient(0, h * 32, 0, h * 32 + 32); for (let q = 0; q <= 8; q++) gr.addColorStop(q / 8, rgba(hazeRgb, ease01(h ? 1 - q / 8 : q / 8).toFixed(3))); g.fillStyle = gr; g.fillRect(0, h * 32, 4, 32); }
+  c.hk = hazeCss; return (skirtC = c);
+}
+// 一段外緣 (xa, ya)→(xb, yb)（畫面像素）、這裡每公尺幾像素 s、不透明度 a：上下兩塊斜的平行四邊形（setTransform 把貼圖斜貼上去）
+function skirtEdge(xa, ya, xb, yb, s, a){
+  const dx = xb - xa; if (a < 0.01 || Math.abs(dx) < 0.3 || Math.max(xa, xb) < -2 || Math.min(xa, xb) > W + 2) return;
+  const up = Math.min(SKIRT.up * s, SKIRT.upPx * U), dn = Math.min(SKIRT.dn * s, SKIRT.dnPx * U);
+  if (Math.max(ya, yb) + dn < 0 || Math.min(ya, yb) - up > H) return;
+  const T = skirtTex(), ax = DPR * dx / 4, ay = DPR * (yb - ya) / 4;
+  ctx.globalAlpha = a;
+  ctx.setTransform(ax, ay, 0, DPR * up / 32, DPR * xa + OX, DPR * (ya - up) + OY); ctx.drawImage(T, 0, 0, 4, 32, 0, 0, 4, 32);
+  ctx.setTransform(ax, ay, 0, DPR * dn / 32, DPR * xa + OX, DPR * ya + OY); ctx.drawImage(T, 0, 32, 4, 32, 0, 0, 4, 32);
+  ctx.setTransform(DPR, 0, 0, DPR, OX, OY);
+}
+// 遠處地面和天空的交界（2026-11-24 回報：開闊草原跟天空之間一條筆直的地平線）：離鏡頭 HZB.z 公尺以外的地面畫完時，
+// 在那些地面最高的地方（畫面上最上面那條，通常是翻過坡頂那條線）蓋一條起伏的霧帶：往上淡進天空、往下淡進遠處的地面。
+// 比較近的地面、樹之後才畫，不會被霧蓋到。霧帶貼圖一張（上緣高高低低，換霧色才重做），每格只貼兩三次
+const HZB = { z:60, up:30, dn:40, a:0.75, w:300, k:0.85 };
+const HZS = [{ y:Infinity, on:false }, { y:Infinity, on:false }];   // 現場畫、遠景快取各一份（快取一格只畫一截）
+let hzbC = null;
+function hzbTex(){
+  if (hzbC && hzbC.hk === hazeCss) return hzbC;
+  free(hzbC); const w = 256, h = 64, c = mk(w, h), g = c.getContext('2d'), im = g.createImageData(w, h), d = im.data, cy = h * HZB.up / (HZB.up + HZB.dn), hr = hazeRgb;
+  for (let x = 0; x < w; x++) {
+    const u = x / w * TAU, off = (Math.sin(u * 2 + 1.1) * 0.5 + Math.sin(u * 5 + 0.3) * 0.3 + Math.sin(u * 11 + 2.2) * 0.2) * 7, amp = 0.82 + 0.18 * Math.sin(u * 3 + 0.7);   // 整數倍頻率：左右頭尾接得起來
+    for (let y = 0; y < h; y++) {
+      const t = y - (cy + off), v = t < 0 ? ease01(1 + t / (cy + off)) : ease01(1 - t / (h - cy - off)), p = (y * w + x) * 4;
+      d[p] = hr[0]; d[p + 1] = hr[1]; d[p + 2] = hr[2]; d[p + 3] = 255 * amp * v;
+    }
+  }
+  g.putImageData(im, 0, 0); c.hk = hazeCss; return (hzbC = c);
+}
+function horizonBand(y, a){
+  if (!(y < H) || a < 0.01) return;
+  const T = hzbTex(), w = HZB.w * U, top = y - HZB.up * U, hh = (HZB.up + HZB.dn) * U, off = headAt((bG + jhG + fhG) * SEG) * F * HZB.k;
+  ctx.globalAlpha = a;
+  for (let x = -(((off % w) + w) % w); x < W; x += w) { const xa = Math.round(x * DPR) / DPR, xb = Math.round((x + w) * DPR) / DPR; ctx.drawImage(T, 0, 0, T.width, T.height, xa, top, xb - xa, hh); }
+}
 const tX1 = new Float32Array(8), tY1 = new Float32Array(8), tX2 = new Float32Array(8), tY2 = new Float32Array(8), tSh = new Float32Array(8);
 const tD1 = new Float32Array(8), tH1 = new Float32Array(8), tD2 = new Float32Array(8), tH2 = new Float32Array(8);   // 帶子每一條離路中心幾公尺、地面多高
 // 一端（第 i 段近端）兩側山坡帶子的位置：D 離路中心、Ht 地形高度、X/Y 畫面位置。mo：換成遠處切法前壓平到哪裡（0～1）
@@ -2300,7 +2360,7 @@ function drawSpr(sp, x, y, sc, fq, sh, a){
   const px = dw * DPR;
   ctx.globalAlpha = k;
   if (fq < 0.96) ctx.drawImage(mip(sp.c, px), x0, y - dh, dw, dh);
-  if (fq > 0.04) { ctx.globalAlpha = k * fq; ctx.drawImage(mip(sp.h, px), x0, y - dh, dw, dh); }
+  if (fq > 0.04) { ctx.globalAlpha = k * fq; ctx.drawImage(mip(hzOf(sp), px), x0, y - dh, dw, dh); }
 }
 // 遠端淡入：離鏡頭 J 段以外看不到，往內 n 段慢慢出現。用連續的距離（pZ）算，不是用段號：段號每走 1.6 公尺跳一格，淡入也會一格一格跳
 // 階梯：第 j 段 f 處的比例（每公尺幾像素）和畫面 x
@@ -2827,7 +2887,7 @@ function railArt(i, j, fade, fq){
         for (let hz = 0; hz < 2; hz++) {          // 原色＋霧化剪影（遠處融進霧裡）
           if (hz ? fq <= 0.04 : fq >= 0.96) continue;
           const a = hz ? qa * fq : qa; if (a < 0.01) continue;
-          const img = mip(hz ? B.h : B.c, len * DPR), sw = img.width, sh = img.height;
+          const img = mip(hz ? hzOf(B) : B.c, len * DPR), sw = img.width, sh = img.height;
           ctx.globalAlpha = a;
           ctx.setTransform(DPR * (xb - xa) / sw, DPR * (hb - ha) / sw, 0, DPR * th / sh, DPR * xa + OX, DPR * (ha - th * 0.5) + OY);
           ctx.drawImage(img, 0, 0);
@@ -2919,7 +2979,10 @@ function drawWorld(b, t, jHi, jLo, far){
   const lightA = (isNight || isRain || isFog || isSnow) ? 0 : clamp((sunVis - 0.3) / 0.5, 0, 1) * (1 - qs.light);   // 樹影、光斑：要有太陽才畫
   let j, k, pi = AP.length - 1;
   heroDone = !!far; lodSkip = false; CQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
+  const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
+  if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; } else if (!far) HS.on = false;
   for (j = jHi; j >= jLo; j--) {
+    if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a); }
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false; CQ.j = j;
     const lod = j > jLo && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1;
@@ -2935,6 +2998,7 @@ function drawWorld(b, t, jHi, jLo, far){
     if (fade < 0.005) { if (lod) { lodRestore(j); lodSkip = false; } continue; }
     ctx.globalAlpha = fade;
     if (!below && !skipG && y1 - y2 > 0.2) {
+      if (HS.on && fade > 0.05 && y2 < HS.y) HS.y = y2;   // 遠處地面最高到畫面哪裡（地平線霧帶的位置）
       const yb = y1 + 0.7 + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
       const g1 = gwAt(pZ[j]) * s1, g2 = gwAt(pZ[j + 1]) * s2, gl1 = x1 - g1, gl2 = x2 - g2, gr1 = x1 + g1, gr2 = x2 + g2;
       // 兩側山坡：沿著離路的距離切幾條帶子，每條依地形高度抬升或下降，依坡向（光從右上來）分亮暗
@@ -2951,10 +3015,7 @@ function drawWorld(b, t, jHi, jLo, far){
         }
         softG[(side + 1) >> 1] = grsC(tSh[1]); softSH[(side + 1) >> 1] = shcQ(tSh[1]);   // 路緣草唇跟草地第一條同色
         { const b = ((side + 1) >> 1) * 9; SBAND[b] = tX1[1]; SBAND[b + 1] = tY1[1]; SBAND[b + 2] = tX2[1]; SBAND[b + 3] = tY2[1]; SBAND[b + 4] = tX1[2]; SBAND[b + 5] = tY1[2]; SBAND[b + 6] = tX2[2]; SBAND[b + 7] = tY2[2]; SBAND[b + 8] = DS[2] - DS[1]; }   // 路緣磨損草色帶貼在真正的地形上
-        // 稜線外緣往下掉的暗坡
         const n1 = nS - 1;
-        const dq = fade * fade, fb = ease01(farA(j + 1, DRAW - 1, FAR_FADE) / FAR_FADE_A), dq2 = fb * fb;   // 最遠那幾段：往下掉的暗坡跟著淡出縮回稜線邊（以前整片 10×16 公尺的半透明板子一片疊一片，遠方看起來一塊一塊）
-        if (dq > 0.01 && (side < 0 ? tX1[n1] > -10 : tX1[n1] < W + 10)) { ctx.fillStyle = LUT[19 * FOGN + fi]; quad(tX1[n1], tY1[n1], tX1[n1] + side * 10 * dq * s1, tY1[n1] + 16 * dq * s1, tX2[n1] + side * 10 * dq2 * s2, tY2[n1] + 16 * dq2 * s2, tX2[n1], tY2[n1]); }
         // 土坎切面（第 0 格）：土色；左邊那面朝右、迎著右上來的光，右邊那面背光
         ctx.fillStyle = LUT[(21 + (side < 0 ? 2 : 0)) * FOGN + fi]; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]);
         const bA = TEX.bank ? ta * farA(j, BANK_J, 4) * (1 - snowAmt) * clamp((Math.abs(tX1[0] - tX1[1]) + tY1[0] - tY1[1] - 3) / 3, 0, 1) : 0, bh0 = bankH(i, side);   // 切面在畫面上不到幾像素時慢慢淡掉
@@ -2992,6 +3053,9 @@ function drawWorld(b, t, jHi, jLo, far){
           for (k = 1; k < nS - 1; k++) if (Math.abs(tY1[k + 1] - tY1[k]) > 0.35 * s1 && Hh(i, 70 + k) < 0.6) { const mx = (tX1[k] + tX1[k + 1]) / 2, my = (tY1[k] + tY1[k + 1]) / 2; ctx.moveTo(lerp(tX1[k], mx, 0.25), lerp(tY1[k], my, 0.25)); ctx.lineTo(lerp(tX1[k + 1], mx, 0.2), lerp(tY1[k + 1], my, 0.2)); }
           ctx.stroke(); ctx.globalAlpha = fade;
         }
+        const dq = fade * fade;   // 最遠那幾段：外緣的霧跟著淡掉（不會一片一片半透明的霧板疊在遠方）
+        skirtEdge(tX1[n1], tY1[n1], tX2[n1], tY2[n1], (s1 + s2) * 0.5, dq * SKIRT.a);   // 稜線外緣：上下各一段霧，地面淡進雲海，不是一條硬邊
+        ctx.globalAlpha = fade;
       }
       const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road;
       // 步道
