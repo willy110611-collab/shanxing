@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS players (
   wk INTEGER DEFAULT 0, wk_base REAL DEFAULT 0,        -- 本週起點（週排行 = walked - wk_base）
   banned INTEGER DEFAULT 0,
   login TEXT,                          -- 換手機用的登入名（設密碼時才有；不分大小寫、不重複）
-  pw_hash TEXT, pw_salt TEXT, pw_iter INTEGER  -- 密碼的 PBKDF2-SHA256 雜湊、隨機鹽、次數（不存密碼本身）
+  pw_hash TEXT, pw_salt TEXT, pw_iter INTEGER,  -- 密碼的 PBKDF2-SHA256 雜湊、隨機鹽、次數（不存密碼本身）
+  unlocks TEXT                         -- 能爬的山 { 山 id: 關著遊戲自己走上去要幾分鐘 }（好友跟隨選山取交集用）
 );
 CREATE UNIQUE INDEX IF NOT EXISTS players_login ON players (login);
 -- 用登入名＋密碼登入的手機：每支手機自己的登入碼雜湊
@@ -55,7 +56,8 @@ CREATE TABLE IF NOT EXISTS invites (
   host TEXT NOT NULL, guest TEXT NOT NULL,
   mountain TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending', -- pending / accepted / declined
-  created INTEGER NOT NULL
+  created INTEGER NOT NULL,
+  team TEXT                           -- 好友跟隨：邀進哪一支隊伍
 );
 CREATE INDEX IF NOT EXISTS invites_guest ON invites (guest, status);
 
@@ -89,3 +91,26 @@ CREATE TABLE IF NOT EXISTS affinity (
 CREATE TABLE IF NOT EXISTS aff_tops (lo TEXT NOT NULL, hi TEXT NOT NULL, day TEXT NOT NULL, mountain TEXT NOT NULL, by_lo INTEGER NOT NULL DEFAULT 0, by_hi INTEGER NOT NULL DEFAULT 0, granted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (lo, hi, day, mountain));
 -- 按好友照片的愛心：同一個人按同一張照片只算一次（取消再按不會再加）
 CREATE TABLE IF NOT EXISTS aff_likes (player TEXT NOT NULL, photo TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (player, photo));
+
+-- v3：推播通知（已經在跑的資料庫跑 migrate3.sql）
+-- push_subs：每支手機的推播訂閱（endpoint 是瀏覽器給的網址，本身就很難猜）
+CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, player TEXT NOT NULL, created INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS push_subs_player ON push_subs(player);
+-- push_queue：等手機來拿的通知內容（推播本身不帶內容，手機收到後再來拿，就不用做內容加密）
+CREATE TABLE IF NOT EXISTS push_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, tag TEXT, created INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS push_queue_ep ON push_queue(endpoint);
+-- eta：關掉遊戲時，登山客預計走到山頂前的時間（排程每 5 分鐘檢查一次）
+CREATE TABLE IF NOT EXISTS eta (player TEXT PRIMARY KEY, mountain TEXT NOT NULL, name TEXT NOT NULL, at INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0);
+
+-- v7：好友跟隨（隊伍）（規則在 server/src/index.js 的 TEAM；已經在跑的資料庫跑 migrate7.sql）
+-- 隊伍：隊長、現在是第幾趟（0＝還沒出發過）、隊長交接後原隊長是誰（他回來時告訴他一次）
+CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, leader TEXT NOT NULL, trip INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, handed_from TEXT);
+-- 隊員（隊長也在這裡）：一個人同時只能在一支隊伍，所以用 player 當主鍵
+CREATE TABLE IF NOT EXISTS team_members (player TEXT PRIMARY KEY, team TEXT NOT NULL, joined INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS team_members_team ON team_members (team);
+-- 每一趟：哪座山、哪天出發（台灣日期，寶物分配的亂數種子用）、出發時的隊員名單（寫死，大家照這份算寶物）、全員登頂的時間（0＝還沒）
+CREATE TABLE IF NOT EXISTS team_trips (team TEXT NOT NULL, trip INTEGER NOT NULL, mountain TEXT NOT NULL, day TEXT NOT NULL, started INTEGER NOT NULL, members TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team, trip));
+-- 每人每趟：最後回報走到哪、什麼時候；預估登頂時間（關著遊戲也照這個算登頂）；登頂時間（0＝還沒）
+CREATE TABLE IF NOT EXISTS team_runs (team TEXT NOT NULL, trip INTEGER NOT NULL, player TEXT NOT NULL, dist REAL NOT NULL DEFAULT 0, at INTEGER NOT NULL, eta INTEGER NOT NULL DEFAULT 0, summited INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team, trip, player));
+CREATE INDEX IF NOT EXISTS team_runs_player ON team_runs (player);
+CREATE INDEX IF NOT EXISTS team_runs_open ON team_runs (summited, eta);

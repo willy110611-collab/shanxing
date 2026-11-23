@@ -72,12 +72,21 @@
     const t = SX.twDay();
     if (SV.lastSeen === t) return;
     if (SV.lastSeen) {
-      const away = Math.round((Date.parse(t) - Date.parse(SV.lastSeen)) / 864e5), c = SX.fitDecay(SX.fitCond(SV), away);
-      if (c < SX.fitCond(SV) - 1e-9) { SV.cond = c; fitDecayed = true; }
+      const from = SV.followDay > SV.lastSeen ? SV.followDay : SV.lastSeen;   // 好友跟隨：跟著隊伍走的日子也算有在走路
+      const c0 = SX.fitCond(SV), away = Math.round((Date.parse(t) - Date.parse(from)) / 864e5), c = SX.fitDecay(c0, away);
+      if (c < c0 - 1e-9) { SV.cond = c; fitDecayed = true; SV.fitBase = { day:t, cond:c0, from }; }   // fitBase：今天掉之前的狀態，隊伍資料拿回來後可能要重算
     }
     SV.lastSeen = t;
   }
   fitOpen();
+  // 好友跟隨：伺服器說我跟著隊伍走到哪一天。比今天打開時算體能下降用的日子還晚，就照新的日子重算今天掉多少（跟隨也算有在走路）
+  function followWalked(day){
+    if (!day || (SV.followDay && SV.followDay >= day)) return;
+    SV.followDay = day;
+    const b = SV.fitBase;
+    if (b && b.day === SX.twDay() && day > b.from) { SV.cond = SX.fitDecay(b.cond, Math.max(0, Math.round((Date.parse(b.day) - Date.parse(day)) / 864e5))); b.from = day; }
+    save();
+  }
   // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
   if (!SV.born) { const ds = [...Object.values(SV.stamps), ...Object.values(SV.bagLog).map(x => x && x.first), ...Object.values(SV.encSeen).map(x => x && x.first), ...SV.photos.map(p => p.date)].filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d)); SV.born = ds.length ? new Date(Math.min(...ds)).toLocaleDateString('zh-TW') : today(); }
   let saveWarned = false;
@@ -99,7 +108,8 @@
   const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null, seg:null });   // seg：這次的小目標 { m 在哪, name }
   const P = id => { const p = SV.prog[id] || (SV.prog[id] = newProg()), d = newProg(); for (const k in d) if (p[k] === undefined) p[k] = d[k]; if (!p.got || typeof p.got !== 'object') p.got = {}; ['dist','stam','temp','ms','last','encT'].forEach(k => { if (typeof p[k] !== 'number' || !isFinite(p[k])) p[k] = d[k]; }); return p; };
   // 一次只能爬一座山（跟真實一樣）：onTrail＝正在爬、還沒登頂的那座；舊存檔裡同時爬到一半的別座山只留目前這座
-  const onTrail = () => { const id = SV.cur, m = id && SX.M[id], q = m && SV.prog[id]; return q && q.dist > 0 && q.dist < m.dist && !q.fin ? id : null; };
+  // 好友跟隨的那一趟（q.team）從隊長出發那一刻就算在路上（還沒打開遊戲、一步都還沒補走也是）
+  const onTrail = () => { const id = SV.cur, m = id && SX.M[id], q = m && SV.prog[id]; return q && (q.dist > 0 || q.team) && q.dist < m.dist && !q.fin ? id : null; };
   for (const k in SV.prog) { const q = SV.prog[k]; if (k !== SV.cur && q && q.dist > 0 && !q.fin) SV.prog[k] = newProg(); }
   // 下山：這次的進度歸零，下次從登山口重新出發（路上拿到的寶物、照片都留著）
   function goDown(id){ SV.prog[id] = newProg(); if (SV.cur === id) SV.cur = null; save(); }
@@ -135,6 +145,7 @@
   const noticeQ = [];
   function notice(msg, ms = 2800){ noticeQ.push([msg, ms]); pumpNotice(); }
   function pumpNotice(){
+    if (showFollowLog()) return;   // 好友跟隨：「隊長帶你走了什麼」先看
     const L = $('#loading');
     const diary = screen === 'climb' && st && st.away;   // 「你不在的時候」日記等一下就會打開：等它看完
     if (!noticeQ.length || (L && !L.classList.contains('done')) || diary || $('#modal').classList.contains('on') || $('#badgePop') || $('#toast').classList.contains('on')) return;
@@ -150,7 +161,7 @@
 
   // rise：奇遇、登頂、寶物這種卡片，由下面彈上來（一般視窗是放大跳出）
   function modal(html, rise){ holdNotice(); const c = $('#mCard'); c.innerHTML = html; c.scrollTop = 0; c.classList.toggle('rise', !!rise); $('#modal').classList.add('on'); paused = true; if (rise) MO.rise(c); }
-  function closeModal(){ $('#modal').classList.remove('on'); paused = false; if (st && screen === 'climb') st.last = Date.now(); queueMicrotask(pumpNotice); }   // 等這次點擊處理完（可能馬上又開下一個視窗）再看要不要跳排隊的通知
+  function closeModal(){ $('#modal').classList.remove('on'); paused = false; if (st && screen === 'climb') st.last = Date.now(); queueMicrotask(() => { followSwitch(); pumpNotice(); }); }   // 等這次點擊處理完（可能馬上又開下一個視窗）再看要不要跳排隊的通知
 
   // ───────── 天氣 ─────────
   let wxOverride = null;
@@ -441,6 +452,7 @@
     const m = SX.M[id]; if (!m) return;
     if (!force && !unlocked(m)) { toast('這座山還不能爬'); return; }
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
+    const tb = !force && tr !== id && SX.social && SX.social.teamBlock && SX.social.teamBlock(); if (tb) { toast(tb, 3600); return; }   // 好友跟隨：在隊伍裡就跟著隊長選的山走
     const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
     if (!force && !quotaOk && tr !== id) { quotaGate(id, () => startClimb(id, false, true)); return; }   // 熱門山：先登記今天的入園名額
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
@@ -590,7 +602,7 @@
       }
     }
     a.marks.filter(k => !a.shot.includes(k)).slice(-AWAY_SHOTS).forEach(k => { const n = SV.photos.length; takePhoto(k, true); a.shot.push(k); if (SV.photos.length > n) a.pics = (a.pics || 0) + 1; });
-    SC.props(a.from, a.to).forEach(o => { const k = Math.round(o.m); if (o.type === 'treasure' && !st.got['t' + k] && !a.parcel.includes(k) && a.parcel.length < AWAY_PARCEL) a.parcel.push(k); });
+    if (!st.team) SC.props(a.from, a.to).forEach(o => { const k = Math.round(o.m); if (o.type === 'treasure' && !st.got['t' + k] && !a.parcel.includes(k) && a.parcel.length < AWAY_PARCEL) a.parcel.push(k); });   // 好友跟隨：路上的寶物歸全隊，登頂時一起分（teamShare）
     save();
   }
   const awIco = (id, cls) => `<span class="awI${cls ? ' ' + cls : ''}">${SX.art.img(id, `<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="#f2c35a" stroke="${INK}" stroke-width="1.8"/></svg>`)}</span>`;
@@ -900,10 +912,12 @@
     return `<svg viewBox="0 0 60 60"><g transform="rotate(5 30 30)"><rect x="8" y="14" width="44" height="33" rx="3" fill="#fff7e2" ${o} stroke-width="2.5"/><rect x="8" y="14" width="44" height="9" fill="${col}" ${o} stroke-width="2"/><path d="M14 30h20M14 36h26M14 41h14" stroke="${INK}" stroke-width="1.5" stroke-linecap="round" opacity=".55"/><path d="M43 29l1.6 3.4 3.7.5-2.7 2.6.7 3.7-3.3-1.8-3.3 1.8.7-3.7-2.7-2.6 3.7-.5z" fill="${col}" ${o} stroke-width="1.2"/></g></svg>`;
   }
   // mid 是 null：不限哪座山掉的；only：再多一個條件（例如只要還沒有的），挑不到就回 null
-  function rollTreasure(mid, only){
-    const pool = SX.TREASURES.filter(x => (mid == null || x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) && (!x.peaks || x.peaks.includes(mid)) &&(!x.season || seasonOk(x.season, mid)) && (!only || only(x)));
+  // rnd、date：好友跟隨分寶物用（固定亂數、那一趟的日期，白天的季節），每支手機挑出同一件；平常不給就是 Math.random 和現在
+  const TEAM_WX = { kind:'sunny', time:'day' };
+  function rollTreasure(mid, only, rnd, date){
+    const pool = SX.TREASURES.filter(x => (mid == null || x.drop === 'any' || (Array.isArray(x.drop) && x.drop.includes(SX.groupOf(mid)))) && (!x.peaks || x.peaks.includes(mid)) &&(!x.season || (date ? seasonOk(x.season, mid, TEAM_WX, date) : seasonOk(x.season, mid))) && (!only || only(x)));
     let sum = 0; pool.forEach(x => { sum += RAR_W[x.rarity] || 30; });
-    let r = Math.random() * sum;
+    let r = (rnd || Math.random)() * sum;
     for (const x of pool) { r -= RAR_W[x.rarity] || 30; if (r <= 0) return x; }
     return pool[pool.length - 1] || (only ? null : SX.TREASURES[0]);
   }
@@ -916,12 +930,12 @@
     else if (mode === 'toast') toast(`得到「${tr.name}」`);
   }
   // 收進背包並馬上存檔。卡片只是事後顯示：卡片還沒看完就關掉 App，東西也已經在背包裡
-  function putInBag(tr){
+  function putInBag(tr, mt = M ? M.id : null){   // mt：在哪座山拿到的（好友跟隨在背景算的那一趟不是畫面上這座）
     const had = SV.bag[tr.id] > 0;   // 舊存檔：這個功能出來前就拿過的寶物，不知道第一次是哪天，不要記成今天
     SV.bag[tr.id] = (SV.bag[tr.id] || 0) + 1;
-    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = had ? {} : { first:today(), mt:(screen === 'climb' && M) ? M.id : null };   // 只記第一次拿到的日期和山
+    if (!SV.bagLog[tr.id]) SV.bagLog[tr.id] = had ? {} : { first:today(), mt:(screen === 'climb' || mt !== (M && M.id)) ? mt : null };   // 只記第一次拿到的日期和山
     SV.bagLog[tr.id].last = today();
-    if (M && tr.name.includes('紀念章')) SV.stats.magpie[M.id] = 1;
+    if (mt && tr.name.includes('紀念章')) SV.stats.magpie[mt] = 1;
     save();
   }
   // 寶物卡（寶物已經在背包裡了，這裡只負責給玩家看）
@@ -935,9 +949,10 @@
   }
   function pickTreasure(o, cx, cy){
     const k = 't' + Math.round(o.m);
-    if (st.got[k]) return toast('這裡的寶物已經收進背包了');
+    if (st.got[k]) return toast(st.team ? '這裡的寶物已經收進隊伍的寶物袋了' : '這裡的寶物已經收進背包了');
     st.got[k] = 1;
     const r = cv.getBoundingClientRect(); SC.burst(cx - r.left, cy - r.top, 'star', 8); MO.sparks(cx, cy, 14);
+    if (st.team) { A.sparkle(); toast('收進隊伍的寶物袋，登頂後全隊一起分', 2800); return; }   // 好友跟隨：路上的寶物歸全隊，登頂時一起分（teamShare）
     gainTreasure(rollTreasure(M.id), 'show');
   }
 
@@ -1424,6 +1439,7 @@
     daily('summit');
     const stamp = SX.TREASURES.find(x => x.id === SUMMIT_STAMP); if (stamp) gainTreasure(stamp, 'quiet');
     const gift = giftTreasure('summit', M.id); if (gift) gainTreasure(gift, 'quiet');   // 第一次登頂：保證一件還沒有的稀有寶物
+    const tq = st.team ? followDone(st.team) : null;   // 好友跟隨：這一趟登頂了，分到全隊寶物裡我的那幾件、告訴伺服器
     st.seg = null;   // 小目標是山頂時，登頂卡片就是它的獎勵
     save(); A.yay();
     const m = M;
@@ -1447,13 +1463,115 @@
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
         ${gift ? `<div class="giftRow ${RAR_CLS[gift.rarity] || ''}" style="${RAR_BG[gift.rarity] || ''}">${trSvg(gift)}<span><small>第一次登頂的禮物</small><b>${gift.name}</b><span class="chip" style="background:${RAR_COL[gift.rarity]}">${gift.rarity}</span></span></div>` : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
+        ${tq && tq.items.length ? `<p class="summitBig">隊伍的寶物袋分到 ${tq.items.length} 件：${tq.items.map(x => `「${x.name}」`).join('')}</p>` : ''}
         <p class="summitBig">集印帳蓋上新的章了！</p>
         ${fitUp ? `<p class="summitBig fitUp">${fitUp}</p>` : ''}
-        ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
-        <div class="mBtns"><button class="cbtn go" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`, true);
-      $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
+        ${tq ? '<p class="summitBig">先在山頂等隊友，全員登頂後隊長會選下一座山。</p>' : nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
+        <div class="mBtns"><button class="cbtn go" id="aMap">${tq ? '好' : nxt ? '看下一座' : '回地圖'}</button></div>`, true);
+      // 好友跟隨：看登頂卡片的時候隊長已經帶大家出發了（SV.cur 換成新的那座），按了就接著走新的那座
+      // 好友跟隨：按「好」就留在山頂等隊友（登山畫面上看得到隊友走到哪）；隊長已經選了下一座的話，closeModal 會換過去（followSwitch）
+      $('#aMap').onclick = () => { closeModal(); if (SV.cur === m.id && !tq) SV.cur = null; save(); if (tq || onTrail()) return; go('map'); if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
       checkQuests();
     }, 1400);
+  }
+
+  // ───────── 好友跟隨（隊伍）─────────
+  // 隊伍的狀態只在伺服器；social.js 拿到後叫 follow()，這裡只管自己的存檔：
+  // SV.follow = { trips:{ 趟的代號: { team, trip, mountain, day, members } }, done:[已經算過登頂的趟], log:[還沒看的「隊長帶你走了什麼」] }
+  // 這一趟走在路上時，進度 SV.prog[山].team＝趟的代號：從隊長出發那一刻起算在路上（關著遊戲照現有的離開補算走）
+  const followOf = () => SV.follow || (SV.follow = { trips:{}, done:[], log:[] });
+  // 全隊寶物裡分給我的那幾件（SX.teamSplit：隊伍代號＋山＋日期當種子，每支手機算出一樣的結果）
+  function teamShare(info){
+    const me = SX.social && SX.social.acct && SX.social.acct.id;
+    if (!info || !me || !SX.M[info.mountain]) return [];
+    const date = new Date(info.day + 'T12:00:00+08:00');
+    return SX.teamSplit(info.team, info.mountain, info.day, info.members, r => rollTreasure(info.mountain, null, r, date))[me] || [];
+  }
+  // 自己看著登頂（arrive）：記下這一趟算過了、寶物收進背包、告訴伺服器
+  function followDone(key){
+    const F = followOf(), info = F.trips[key];
+    if (!info || F.done.includes(key)) return null;
+    F.done.push(key); while (F.done.length > 40) F.done.shift();
+    const items = teamShare(info); items.forEach(x => putInBag(x, info.mountain));
+    if (SX.social && SX.social.teamTop) SX.social.teamTop(info, false);
+    save();
+    return { items, info };
+  }
+  // 隊長帶大家出發了：自己爬到一半的別座山先下山，這座從出發的那一刻開始算（打開登山畫面時照離開補算走到現在）
+  function followStart(id, since, key){
+    const tr = onTrail(); if (tr && tr !== id) goDown(tr);
+    SV.cur = id; SV.prog[id] = Object.assign(newProg(), { last:Math.min(Date.now(), since || Date.now()), team:key });
+    save();
+    notice(`隊長帶大家出發去${SX.M[id].name}了，你會照自己的速度跟著走`, 3600);
+    followSwitch();
+  }
+  // 正在登山畫面看著別座山（例如在上一座山頂等）而且沒有視窗開著：換到隊伍現在這座
+  function followSwitch(){ const tr = onTrail(); if (screen === 'climb' && tr && M && M.id !== tr && !$('#modal').classList.contains('on')) startClimb(tr, true, true); }
+  // 關著遊戲（或這支手機還沒走）時隊長帶著走完的那一趟：在背景算登頂（登頂次數、百岳紀錄、集印、體能照自己爬的規則、照片、寶物）
+  function followSummit(tr, m, lead){
+    const when = Math.min(Date.now(), tr.summited || Date.now()), day = SX.twDay(when), date = new Date(when).toLocaleDateString('zh-TW');
+    const fit0 = SX.fitness(SV), F = followOf();
+    if (SV.done[m.id] > 0 && SX.fitCanCount(SV, m.id, day)) { SV.fitRep[m.id] = (SV.fitRep[m.id] || 0) + 1; SV.fitDay[m.id] = day; }
+    SV.done[m.id] = (SV.done[m.id] || 0) + 1;
+    const fresh = !SV.stamps[m.id]; SV.stamps[m.id] = SV.stamps[m.id] || date;
+    SV.stats.withFriends = (SV.stats.withFriends || 0) + 1;
+    const stamp = SX.TREASURES.find(x => x.id === SUMMIT_STAMP); if (stamp) putInBag(stamp, m.id);
+    const gift = giftTreasure('summit', m.id), items = (gift ? [gift] : []).concat(teamShare(F.trips[tr.key]));
+    items.forEach(x => putInBag(x, m.id));
+    F.done.push(tr.key); while (F.done.length > 40) F.done.shift();
+    const img = SX.art.url(groupArt('summit_', m.id));   // 不在這座山的登山畫面上拍不了照：用這座山的山頂插圖當紀念照
+    if (img) { SV.photos.push({ id:m.id, m:m.dist, alt:m.alt, img, cap:lead ? `${m.name}・跟著${lead}登頂` : `${m.name}・全隊登頂`, wx:'晴', date }); if (SV.photos.length > 60) SV.photos.shift(); imgDirty = true; }
+    if (SX.social && SX.social.teamTop) SX.social.teamTop(F.trips[tr.key], true);
+    return { mt:m.id, date, lead, stamp:fresh, photo:img ? SV.photos.length - 1 : -1, items:items.map(x => x.id), fit:Math.round((SX.fitness(SV) - fit0) * 1000) / 1000 };
+  }
+  // social.js 拿到隊伍後叫這裡。list：我有參加的每一趟（舊到新），lead：隊長名字（我自己是隊長就是空字串）
+  // { key, team, trip, mountain, day, started, members, current（隊伍現在這一趟）, summited（伺服器說我登頂的時間，0＝還沒）}
+  function follow(list, lead){
+    const F = followOf(); let changed = false, walked = null;
+    for (const tr of list) {
+      const m = SX.M[tr.mountain]; if (!m) continue;
+      F.trips[tr.key] = { key:tr.key, team:tr.team, trip:tr.trip, mountain:tr.mountain, day:tr.day, members:tr.members };
+      walked = SX.twDay(Math.min(Date.now(), tr.summited || Date.now()));   // 跟著走到哪一天（體能不下降）
+      if (F.done.includes(tr.key)) continue;
+      const q = SV.prog[m.id], here = SV.cur === m.id && q && q.team === tr.key && !q.fin;   // 這一趟我在這支手機上正在走
+      if (tr.current && (!tr.summited || here)) { if (!here) followStart(m.id, tr.started, tr.key); continue; }   // 還在走：接著走（伺服器說我登頂了，也讓我自己走完最後一段看登頂）
+      if (here) goDown(m.id);
+      F.log.push(followSummit(tr, m, lead)); changed = true;
+    }
+    const keep = list.map(x => x.key); for (const k in F.trips) if (!keep.includes(k)) delete F.trips[k];   // 只留伺服器還在回的那幾趟
+    // 離開隊伍、隊伍解散了：正在走的這座變成自己爬（路上的寶物又是自己的），走過的距離留著
+    for (const id in SV.prog) { const q = SV.prog[id]; if (q && q.team && !keep.includes(q.team)) { delete q.team; changed = true; } }
+    followWalked(walked);
+    if (changed) { save(); checkBadges(); pumpNotice(); }
+  }
+  // 「隊長帶你走了什麼」：讀取畫面收起來、沒有別的視窗時才打開（打開前的隊伍資料先存在 SV.follow.log，關掉遊戲也不會不見）
+  function showFollowLog(){
+    const F = SV.follow, L0 = $('#loading');
+    if (!F || !F.log || !F.log.length || (L0 && !L0.classList.contains('done')) || $('#modal').classList.contains('on') || $('#badgePop')) return false;
+    const L = F.log.splice(0), lead = L[L.length - 1].lead, ids = L.flatMap(x => x.items), pics = L.map(x => SV.photos[x.photo]).filter(p => p && /跟著|全隊登頂/.test(p.cap));
+    const trN = ids.map(id => (SX.TREASURES.find(x => x.id === id) || {}).name).filter(Boolean), fit = L.reduce((a, x) => a + (x.fit || 0), 0);
+    save(); A.paper();
+    modal(`<h3>${lead ? '隊長帶你走了什麼' : '你不在的時候，隊伍走了什麼'}</h3><div class="awayD">
+      <p class="awayT">${lead ? `跟著${escH(lead)}的隊伍` : '你帶的隊伍'}・${L.length} 座山</p>
+      <ul class="awayL">${L.map(x => `<li>${awIco('summit_marker')}<span>登頂 <b>${SX.M[x.mt].name}</b>（${x.date}）${x.stamp ? '，集印帳蓋上新的章' : ''}。</span></li>`).join('')}
+        ${fit > 0 ? `<li>${awIco('emo_cheer')}<span>跟著走也算數：體能 +${fit.toFixed(3)}（${SX.fitness(SV).toFixed(3)}）。</span></li>` : ''}
+        ${pics.length ? `<li>${awIco('icon_camera')}<span>相簿多了 ${pics.length} 張山頂的紀念照。</span></li>` : ''}</ul>
+      ${pics.length ? `<div class="awayPics">${pics.slice(-3).map((p, i) => `<img src="${p.img}" alt="" style="transform:rotate(${(i - 1) * 4}deg)">`).join('')}</div>` : ''}
+      ${trN.length ? `<div class="awayParcel">${awIco('treasure_box', 'big')}<span>分到 <b>${trN.length}</b> 件寶物：<br>${trN.map(n => `「${n}」`).join('')}</span></div>` : ''}</div>
+      <div class="mBtns" style="margin-top:12px"><button class="cbtn go" id="flOk">好</button></div>`);
+    MO.stagger($('#mCard'), '.awayL li');
+    $('#flOk').onclick = () => { A.pop(); closeModal(); checkQuests(); };
+    return true;
+  }
+  // 我能爬哪幾座山（隊長選山時伺服器取全隊交集）：{ 山 id: 關著遊戲自己從登山口走到山頂要幾分鐘 }（伺服器拿來估關著遊戲的隊員幾點登頂）
+  // 只有登頂次數、體能、解鎖設定變了才重算（每座山照離線補走的方法試算，一分鐘一步）
+  let ulKey = '', ulVal = null;
+  function teamUnlocks(){
+    const k = Object.keys(SV.done).join() + '|' + SX.fitness(SV).toFixed(3) + '|' + SV.unlockAll;
+    if (k === ulKey) return ulVal;
+    const out = {};
+    SX.MOUNTAINS.forEach(m => { if (!unlocked(m)) return; const p = newProg(); let s = 0; while (s < OFFLINE_CAP && p.dist < m.dist - 2.5) { simulate(p, m, 60, false, true, true); s += 60; } out[m.id] = Math.ceil(s / 60); });
+    ulKey = k; ulVal = out; return out;
   }
 
   // ───────── HUD ─────────
@@ -1995,7 +2113,8 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
   // 給連線模組用：雲端存檔、每日任務
-  SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
+  SX.game = { daily, updateDailyBadge, follow, teamUnlocks, notice,   // follow、teamUnlocks：好友跟隨（隊伍資料拿回來後補算、我能爬哪幾座山）；notice：背景通知排隊
+    getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
     awayPace:m => baseSpeed(m) * devX(),   // 一起爬：遊戲關著時自己走的速度（隊友那邊拿來估離線時走到哪）
     // 好友好感度：好友清單拿回來後，等級到了的稱號（Lv8）收進稱號、一輩子的山友徽章（Lv10）檢查一次；lvs：每位好友的好感等級
     affSync:lvs => {
