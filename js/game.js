@@ -860,7 +860,7 @@
   function say(txt, ms = 2600){
     const b = $('#bubble'), cp = SC.charPos();
     // 對話框放在頭的旁邊（不擋住前面的路，2026-11-24 回報）：預設在右邊，放不下就放左邊；尾巴指向頭
-    b.textContent = txt; const bw = b.offsetWidth, W0 = b.parentElement.clientWidth, R = cp.x + BUB_X + bw <= W0 - 8, x = R ? cp.x + BUB_X : Math.max(8, cp.x - BUB_X - bw);
+    b.textContent = txt; const bw = b.offsetWidth, W0 = b.parentElement.clientWidth, R = cp.x + BUB_X + bw <= W0 - 8 || W0 - cp.x >= cp.x, x = R ? Math.min(cp.x + BUB_X, W0 - 8 - bw) : Math.max(8, cp.x - BUB_X - bw);   // 放得下的那一邊（都放不下就放空間大的那邊）
     b.classList.toggle('left', !R); b.style.left = x + 'px'; b.style.top = (cp.y + BUB_Y) + 'px';
     b.classList.add('on'); clearTimeout(b._h); b._h = setTimeout(() => b.classList.remove('on'), ms);
   }
