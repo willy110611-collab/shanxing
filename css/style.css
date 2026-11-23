@@ -776,3 +776,8 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 /* 主動休息：登山畫面左下（和右下的收合鈕左右對稱），坐下來時、登頂後、收起畫面資訊時不顯示 */
 .restBtn{position:absolute;left:12px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:4;transition:opacity .3s}
 .restBtn.off{opacity:0;pointer-events:none}
+.pfFit{margin:8px 0 6px;padding:7px 10px;text-align:center;border-radius:var(--irrS)}
+.pfFit small{display:block;font-size:11.5px;color:var(--wood2)}
+.pfFit b{display:block;font-weight:normal;font-size:16px;white-space:nowrap}
+.pfFit p{margin:2px 0 0;font-size:12.5px;line-height:1.5;color:var(--wood2)}
+.summitBig.fitUp{font-size:13px;color:var(--wood2);margin-top:-4px}
