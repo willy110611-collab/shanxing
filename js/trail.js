@@ -154,7 +154,7 @@ const GAIT = {
 // 走路圖的高度修正：每張圖量「帽頂到鞋底」佔整格多高（量出來都在 97～100%），用一般走路圖當基準換算，換圖時人不會忽大忽小。重畫了圖要重新量
 // 一般走路：hiker_step8（右腳一步 8 格＋鏡射成左腳一步，art.js 的 STEP8），換腳有兩腳並排那一格
 const WALK_DRY = 'hiker_step8', WALK_RAIN = 'hiker_rain_step8';
-const GAIT_H = { hiker_walk:1, hiker_rain_walk:1, hiker_step8:1, hiker_rain_step8:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_stairs16:1, hiker_rain_stairs16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
+const GAIT_H = { hiker_tired_step8:1, hiker_rain_tired_step8:1, hiker_walk:1, hiker_rain_walk:1, hiker_step8:1, hiker_rain_step8:1, hiker_walk16:1, hiker_rain_walk16:1, hiker_stairs16:1, hiker_rain_stairs16:1, hiker_walk8:1, hiker_rain_walk8:1, hiker_stairs8:1, hiker_rain_stairs8:0.995, hiker_tired_walk8:1, hiker_rain_tired_walk8:1.013, hiker_turn_walk8:1.005 };
 const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
@@ -1643,7 +1643,7 @@ S.pace = function(){ return gait.pace; };
 S.upStat = function(){ let a = 0, b = 0; for (let i = 0; i < N; i++) { const rise = eAt(i + 1) - eAt(i), st = sAt(i) === 1 && rise > 0, gr = st ? 0 : (eAt(i + 3) - eAt(i)) / (3 * SEG), u = clamp(gr / GAIT.upFull, 0, 1), ns = st ? stepsOf(rise) : 0; a += 1; b += 1 / ((1 - (1 - GAIT.upPace) * u) * (st ? stairK(SEG / (ns * stairSteps(ns))) : 1)); } return Math.round((b / a - 1) * 1000) / 10; };
 S.gait = function(){ return { g:gait, stair:hero.stair, turn:hero.turn, mv:hero.mv, ph:hero.ph, stepL:hero.stepL }; };   // 測試掛鉤：看現在的步態、把計時器歸零來測試各種動作
 // 現在要用哪一張走路圖、要不要鏡射（寫在 gait.sid、gait.sf；每格都會跑，不產生新的陣列、字串）
-const RAIN_OF = { hiker_stairs16:'hiker_rain_stairs16', hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
+const RAIN_OF = { hiker_tired_step8:'hiker_rain_tired_step8', hiker_stairs16:'hiker_rain_stairs16', hiker_stairs8:'hiker_rain_stairs8', hiker_tired_walk8:'hiker_rain_tired_walk8' };   // 下雨天：有穿雨衣的版本就用
 function rainy(id){ const r = RAIN_OF[id]; return isRain && r && ART.get(r) ? r : id; }
 function gaitSheet(){
   gait.sf = false;
@@ -1651,7 +1651,7 @@ function gaitSheet(){
   // 一般走路：正背面十六格圖（WALK_DRY／WALK_RAIN），下雨天穿黃色雨衣
   const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;
   // 階梯、累了：重畫成正背面直直走的版本（雨天換雨衣版）；彎道：轉身圖（往右前方，左彎鏡射），沒有雨衣版所以雨天照舊一般走路
-  const m = gait.mode, id = m === 'stairs' ? rainy(ART.get('hiker_stairs16') ? 'hiker_stairs16' : 'hiker_stairs8') : m === 'tired' && !isRain ? 'hiker_tired_walk8' : null;   // 下雨累了先用雨天走路圖（舊的雨天疲勞圖是整件大雨披、沒背包套，跟其他雨衣圖不一樣，等重畫）；轉彎也用一般走路圖（側面大跨步的轉彎圖腳張太開，跟正背面走路對不起來，不用）
+  const m = gait.mode, id = m === 'stairs' ? rainy(ART.get('hiker_stairs16') ? 'hiker_stairs16' : 'hiker_stairs8') : m === 'tired' ? rainy(ART.get('hiker_tired_step8') ? 'hiker_tired_step8' : 'hiker_tired_walk8') : null;   // 累了：彎腰拖步（右腳一步 7 格＋鏡射，art.js 的 TIRED14），雨天穿跟平路一樣的雨衣；轉彎也用一般走路圖
   if (id && ART.get(id)) { gait.sid = id; gait.sf = m === 'turn' && gait.modeF; }
   else gait.sid = walk;
 }
@@ -3321,7 +3321,7 @@ function liteBuild(id){
   return { c:c, k:k, rh:rh };
 }
 // 換山後先做好的光線貼圖（自己的走路圖、雨衣、階梯、累了；其他動作第一次用到才做）
-const LITE_WARM = [WALK_DRY, WALK_RAIN, 'hiker_stairs16', 'hiker_rain_stairs16', 'hiker_tired_walk8', 'hiker_rain_tired_walk8'];
+const LITE_WARM = [WALK_DRY, WALK_RAIN, 'hiker_stairs16', 'hiker_rain_stairs16', 'hiker_tired_step8', 'hiker_rain_tired_step8'];
 // 畫一格美術圖（登山客、寵物、隊友都經過這裡）：照 LIT 疊上逆光、輪廓光、光斑（光線貼圖是存好的，這裡只貼圖）
 function artFrame(c, id, i, cx, by, h, flip, fl){
   if (!ART.drawFrame(c, id, i, cx, by, h, flip, fl)) return false;

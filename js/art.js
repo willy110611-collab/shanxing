@@ -20,11 +20,14 @@ const WALK16 = [0, 5, 1, 2, 4, 6, 7, 3, ~0, ~5, ~1, ~2, ~4, ~6, ~7, ~3];
 const STAIRS16 = [7, 0, 1, 2, 3, 4, 5, 6, ~7, ~0, ~1, ~2, ~3, ~4, ~5, ~6];
 // hiker_step8：Gemini 只畫「右腳跨一步」8 格，後半步（左腳）整組左右鏡射：兩步一模一樣，換腳有兩腳並排那一格，不會小碎步
 const STEP8 = [0, 1, 2, 3, 4, 5, 6, 7, ~0, ~1, ~2, ~3, ~4, ~5, ~6, ~7];
+// hiker_tired_step8：第 8 格幾乎就是第 1 格左右對調，照 STEP8 接會有兩格一樣（頓一下），所以每半步只用前 7 格、共 14 格
+const TIRED14 = [0, 1, 2, 3, 4, 5, 6, ~0, ~1, ~2, ~3, ~4, ~5, ~6];
 const SHEETS = [
   [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
   [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
   [/_hop4$/, 4, 1, { air:true }], // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
   [/_walk16$/, 8, 2, { order:WALK16 }],  // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
+  [/_tired_step8$/, 8, 1, { order:TIRED14 }],   // hiker_tired_step8、hiker_rain_tired_step8（要排在 _step8 前面）
   [/_step8$/, 8, 1, { order:STEP8 }],    // hiker_step8、hiker_rain_step8
   [/_stairs16$/, 8, 2, { order:STAIRS16 }] // hiker_stairs16、hiker_rain_stairs16（兩張姿勢相同）
 ];

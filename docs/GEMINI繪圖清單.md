@@ -462,6 +462,8 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `hiker_rain_stairs16` | 16:9 | 洋紅底。同 hiker_stairs16，穿黃色雨衣。 |
 | `hiker_step8` | 16:9 | 洋紅底。1 列 8 格正背面「右腳往前跨一步」（第 4 格兩腳並排）；遊戲把左腳那一步鏡射接上，湊成 16 格走路循環。 |
 | `hiker_rain_step8` | 16:9 | 洋紅底。同 hiker_step8，穿黃色雨衣、深綠色背包套，姿勢完全相同。 |
+| `hiker_tired_step8` | 16:9 | 洋紅底。1 列 8 格正背面「累了、彎腰拖一小步」右腳那一步；遊戲鏡射接成左腳那一步。 |
+| `hiker_rain_tired_step8` | 16:9 | 洋紅底。同 hiker_tired_step8，雨衣＋深綠背包套跟 hiker_rain_step8 一樣，帽子 8 格一致。 |
 
 ## 第 17 批：讀取畫面跑步的柴犬（放進 `05.寵物`）
 
