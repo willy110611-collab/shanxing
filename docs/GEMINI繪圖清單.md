@@ -593,3 +593,13 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 | `hiker_back_sit` | 1:1 | 洋紅底。The hiker seen **from directly behind**, sitting cross-legged on the ground, backpack set down beside, looking at the view, holding a tin mug. |
 
 背影的「跳一下」直接用現有的 `hiker_hop4`，不用另外畫。
+
+## 第 25 批：彎道時身體斜一點（放進 `01.風格`，洋紅底、16:9，貼「主角設定」；雨衣版另外加「雨衣設定」）
+
+轉彎時人從正背面轉成「斜後方」，看得到一點側臉和身體側面。往右彎用原圖，往左彎遊戲會整張鏡射，所以這張要**一整個完整的走路循環（左右腳都有）**，不能只畫一步。
+上傳參考圖：`hiker_step8`（腳步節奏、人物大小）、`hiker_turn_walk8`（斜後方的角度）。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `hiker_turn16` | 16:9 | 洋紅底。The hiker (主角設定) seen from **behind and about 30 degrees to the right (three-quarter rear view)**, walking forward and slightly to the right, **16-frame walking cycle in 2 rows of 8**: top row = the RIGHT foot steps forward (frame 4 both feet side by side), bottom row = the LEFT foot steps forward (frame 12 both feet side by side). Same size, same foot baseline, same body center in every frame; trekking poles silver-grey, alternating with the steps. Only a little of the face visible under the hat brim. |
+| `hiker_rain_turn16` | 16:9 | 洋紅底。Exactly the same 16 poses and angle as hiker_turn16, wearing the rain outfit (yellow hooded poncho with hood up, dark-green backpack cover), hood identical in all 16 frames. |

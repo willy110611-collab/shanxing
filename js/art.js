@@ -35,7 +35,8 @@ const PET_ORDER = {
 const SHEETS = [
   [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
   [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
-  [/_hop4$/, 4, 1, { air:true }], // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
+  [/_hop4$/, 4, 1, { air:true }],
+  [/_jump4$/, 4, 1, { air:true }], // hiker_front_jump4、hiker_side_jump4：廣場面向鏡頭、往旁邊的跳一下 // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
   [/_walk16$/, 8, 2, { order:WALK16 }],  // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
   [/_tired_step8$/, 8, 1, { order:TIRED14 }],   // hiker_tired_step8、hiker_rain_tired_step8（要排在 _step8 前面）
   // 寵物（要排在 _step8 前面）：PET_ORDER 是每隻的播放順序；air：Gemini 畫的頭頂每格同一高度、腳照遠近上下，身體固定不拉齊腳底（拉齊的話整隻每格上下跳）
