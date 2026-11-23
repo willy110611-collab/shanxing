@@ -481,7 +481,7 @@
     const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
     if (!force && !quotaOk && tr !== id) { quotaGate(id, () => startClimb(id, false, true)); return; }   // 熱門山：先登記今天的入園名額
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
-    M = m; SV.cur = id; st = P(id);
+    M = m; SV.cur = id; st = P(id); etaV = 0; etaT = 0;   // 換山：預計時間的平均速度重算
     if (!cont) Object.assign(st, newProg());
     arrived = false; paused = false; ptrHold = false; keyHold = false; t = 0;
     segDoneT = 0; segEl.classList.remove('done');   // 小目標：新的一趟沒有；離開一分鐘以上回來，catchUp 會清掉重新定
@@ -699,7 +699,7 @@
     if (m === M) SC.props(from, m.dist).forEach(o => { const k = Math.round(o.m); if ((o.type === 'bench' || o.type === 'view') && !out.some(x => Math.abs(x.m - k) < 30)) out.push({ m:k, name:o.type === 'view' ? '觀景台' : '路邊的長椅' }); });
     return out.sort((a, b) => a.m - b.m);
   }
-  const segMin = () => Math.max(1, Math.round((st.seg.m - st.dist) / (baseSpeed(M) * devX()) / 60));
+  const segMin = () => etaMin(st.seg.m);
   function setSeg(){
     const v = baseSpeed(M) * devX(), eta = x => (x.m - st.dist) / v, L = segStops(M, st.dist + 2);
     let g = L.find(x => eta(x) >= SEG_MIN);
@@ -1611,7 +1611,7 @@
   { const bag = $('.i-bag'); if (bag) bag.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'><path d='M10 7c0-6 10-6 10 0' fill='none' stroke='${INK}' stroke-width='2'/><rect x='6' y='6.5' width='18' height='17.5' rx='5' fill='#f0a444' stroke='${INK}' stroke-width='2'/><path d='M6 12h18' stroke='${INK}' stroke-width='1.4'/><rect x='10' y='14.5' width='10' height='6.5' rx='2' fill='#ffe1a0' stroke='${INK}' stroke-width='1.6'/></svg>`) + '")'; }
   function hudTick(){
     if (!st || !M) return;
-    const f = st.dist / M.dist, v = baseSpeed(M) * (st.temp < 25 ? 0.7 : 1) * devX(), left = Math.max(1, Math.round((M.dist - st.dist) / v / 60));
+    const f = st.dist / M.dist, left = etaMin(M.dist);
     try {
       HUD.update({ name:M.name, stam:st.stam, temp:st.temp, alt:Math.round(altAt(M, f)), frac:f,
         distText:`${(st.dist/1000).toFixed(2)} / ${(M.dist/1000).toFixed(1)} km`,
@@ -1637,6 +1637,13 @@
     const dt = Math.min(0.05, Math.max(0, ftNow / 1000)); lastT = now;
     frame(dt);
   }
+  // 預計時間（右上「還要約」、「下一站」、「這次的小目標」）共用：用最近約一分鐘實際走的平均速度估
+  // 實際走路會因為階梯、上坡、累了、停下來喝水看風景變慢，只用基本步速估會比真的到達早（2026-11-24 山友回報）
+  // 長按快走、休息、睡覺時不算進平均；剛出發還沒走滿 20 秒先用基本步速
+  const ETA_TAU = 60, ETA_WARM = 20;
+  let etaV = 0, etaT = 0;
+  const etaSpeed = () => etaT >= ETA_WARM && etaV > 0 ? etaV : baseSpeed(M) * (st.temp < 25 ? 0.7 : 1) * devX();
+  const etaMin = to => Math.max(1, Math.round((to - st.dist) / etaSpeed() / 60));
   function frame(dt){
     if (screen !== 'climb' || !st || !M) return;
     t += dt;
@@ -1646,6 +1653,7 @@
       const wasSleep = st.sleep, wasRest = st.rest;
       d = simulate(st, M, dt, boost, false, false, SC.pace());
       if (boost) st.fast = true;
+      if (dt > 0 && !boost && !st.rest && !st.sleep) { const k = Math.min(1, dt / ETA_TAU); etaV += (d / dt - etaV) * (etaT ? k : 1); etaT += dt; }
       if (!wasSleep && st.sleep) { say(st.temp <= 0 ? '好冷…鑽進睡袋躲一下' : pick(SX.LINES.tired)); A.yawn(); }
       if (wasSleep && !st.sleep) say('睡飽了！繼續走～');
       if (!wasRest && st.rest) onRest();
