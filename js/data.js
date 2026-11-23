@@ -5,22 +5,22 @@ window.SX = window.SX || {};
 // theme.wall：[登山口, 山頂] 步道兩側被植物包住的程度（1＝森林綠色隧道、0.3＝高山稜線只剩矮箭竹）
 // themeOver：同一山群的山沒寫 theme 時用主峰的，只想改幾項就寫在這裡（例如向陽山、三叉山看不到嘉明湖：{ lake:false }），在下面跟主峰的合併
 SX.MOUNTAINS = [
-  { id:'xiangshan', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
+  { id:'xiangshan', range:'north', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
     feat:'城市高樓、步道石階、山頂六顆大石頭', end:'象山頂的六巨石',
     theme:{ sky:['#9fd3ee','#fbe7c6'], far:'#8fb3a8', mid:'#6fa86a', near:'#86c06a', trail:'stairs', wall:[1,0.85], tower:true, rocks:true } },
-  { id:'qixing', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:1650, diff:2,
+  { id:'qixing', range:'north', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:1650, diff:2,
     feat:'硫磺噴氣孔、整片芒草、火山口', end:'山頂三角點',
     theme:{ sky:['#a9d6e8','#f6e9cf'], far:'#9aae95', mid:'#8aa86a', near:'#b5c46e', trail:'dirt', wall:[0.9,0.35], steam:true, grass:true } },
-  { id:'guanyin', name:'觀音山', area:'新北', lon:121.42, lat:25.135, startAlt:120, alt:616, dist:1563, diff:2,
+  { id:'guanyin', range:'north', name:'觀音山', area:'新北', lon:121.42, lat:25.135, startAlt:120, alt:616, dist:1563, diff:2,
     feat:'淡水河口夕陽、長長石階', end:'硬漢嶺觀景台',
     theme:{ sky:['#f3b98e','#fbe3c0'], far:'#9e9db8', mid:'#71a06a', near:'#8cbc6a', trail:'stairs', wall:[1,0.75], sunset:true } },
-  { id:'matcha', name:'抹茶山', area:'宜蘭', lon:121.80, lat:24.84, startAlt:120, alt:720, dist:6000, diff:3,
+  { id:'matcha', range:'xueshan', name:'抹茶山', area:'宜蘭', lon:121.80, lat:24.84, startAlt:120, alt:720, dist:6000, diff:3,
     feat:'抹茶色草坡、雲霧繚繞、木棧道', end:'山頂草坡觀景處',
     theme:{ sky:['#bfe0e6','#eef2df'], far:'#9fbfae', mid:'#7fb874', near:'#a8d46e', trail:'wood', wall:[0.9,0.3], fog:true, grass:true } },
-  { id:'alishan', name:'阿里山', area:'嘉義', lon:120.80, lat:23.51, startAlt:2150, alt:2489, dist:4000, diff:2,
+  { id:'alishan', range:'alishan', name:'阿里山', area:'嘉義', lon:120.80, lat:23.51, startAlt:2150, alt:2489, dist:4000, diff:2,
     feat:'千年神木、小火車、日出雲海、櫻花', end:'祝山觀日平台',
     theme:{ sky:['#b4d8ee','#fde8d4'], far:'#8aa7a5', mid:'#4f8a62', near:'#6fae68', trail:'wood', wall:[1,1], bigtree:true, sakura:true } },
-  { id:'taiping', name:'太平山', area:'宜蘭', lon:121.53, lat:24.50, startAlt:1890, alt:2000, dist:2200, diff:2,
+  { id:'taiping', range:'xueshan', name:'太平山', area:'宜蘭', lon:121.53, lat:24.50, startAlt:1890, alt:2000, dist:2200, diff:2,
     feat:'觀雲棧道、見晴懷古步道的舊運材鐵軌、檜木林和雲霧', end:'見晴懷古步道終點',
     theme:{ sky:['#b5d4e0','#eef0e0'], far:'#8faaa3', mid:'#4b7f5d', near:'#6aa665', trail:'wood', wall:[1,1], fog:true, bigtree:true } },
   // 合歡群峰：group 是山群代號（地圖上合成一根旗子，見 SX.GROUPS）；baiyue:true 是百岳，海拔和排名從百岳帳拿（見 SX.BAIYUE）
@@ -251,16 +251,29 @@ SX.SOURCES = {
     yushan_east: { url: SX.NOSRC, note:'官方沒公布東峰單獨的距離與時間，沿用山友紀錄' },
   },
 };
+// 山脈（大區域，不是世界區域 SX.REGIONS）：地圖拉遠、旗子擠在一起時，同一山脈的旗子會收成一塊「山脈牌」（顯示已登頂幾座）。
+// 山脈只在這裡定義一次；每座山的 range 寫在山群（SX.GROUPS）或不在山群裡的山身上，山群裡的山不另外寫（一律用 SX.rangeOf）
+SX.RANGES = [
+  { id:'north', name:'北部郊山' },
+  { id:'xueshan', name:'雪山山脈' },
+  { id:'central_n', name:'中央山脈北段' },
+  { id:'central_m', name:'中央山脈中段' },
+  { id:'central_s', name:'中央山脈南段' },
+  { id:'yushan', name:'玉山山脈' },
+  { id:'alishan', name:'阿里山山脈' },
+];
+SX.RANGE = {}; SX.RANGES.forEach(r => SX.RANGE[r.id] = r);
 // 山群：地圖上一根旗子、點開是「群峰」卡片。lead 是代表這個山群的山（旗子位置、步道外觀、解鎖規則都看它）
 // 季節、奇遇、寶物掉落寫山群代號，就代表山群裡每一座山（一律用 SX.groupOf 判斷，不要把每座山的代號抄進去）
 SX.GROUPS = [
-  { id:'hehuan', name:'合歡山', full:'合歡群峰', lead:'hehuan' },
-  { id:'yushan', name:'玉山', full:'玉山群峰', lead:'yushan' },
-  { id:'xueshan', name:'雪山', full:'雪山・雪主東', lead:'xueshan' },
-  { id:'jiaming', name:'嘉明湖', full:'嘉明湖・向陽三叉', lead:'jiaming' },
+  { id:'hehuan', range:'central_n', name:'合歡山', full:'合歡群峰', lead:'hehuan' },
+  { id:'yushan', range:'yushan', name:'玉山', full:'玉山群峰', lead:'yushan' },
+  { id:'xueshan', range:'xueshan', name:'雪山', full:'雪山・雪主東', lead:'xueshan' },
+  { id:'jiaming', range:'central_s', name:'嘉明湖', full:'嘉明湖・向陽三叉', lead:'jiaming' },
 ];
 SX.GROUP = {}; SX.GROUPS.forEach(g => SX.GROUP[g.id] = g);
 SX.groupOf = id => (SX.M[id] && SX.M[id].group) || id;          // 山 → 山群代號（不在山群裡的山就是自己）
+SX.rangeOf = id => { const m = SX.M[id], g = SX.GROUP[id] || (m && m.group && SX.GROUP[m.group]); return (g || m || {}).range || null; };   // 山／山群 → 山脈代號
 SX.peaksOf = gid => SX.MOUNTAINS.filter(m => SX.groupOf(m.id) === gid);
 SX.placeName = id => SX.GROUP[id] ? SX.GROUP[id].name : SX.M[id] ? SX.M[id].name : id;   // 山群用山群名，其他用山名
 // ===== 百岳帳：台灣百岳 100 座（官方分級表，依完百路線分 23 個山群）=====
@@ -381,7 +394,7 @@ SX.MOUNTAINS.forEach(m => {
   if (!g) { SX.PINS.push(m); return; }
   if (SX.PINS.some(p => p.id === g.id)) return;
   const L = SX.M[g.lead];
-  SX.PINS.push({ id:g.id, name:g.name, isGroup:true, area:L.area, lon:L.lon, lat:L.lat, diff:L.diff, dist:L.dist, alt:Math.max(...SX.peaksOf(g.id).map(p => p.alt)) });
+  SX.PINS.push({ id:g.id, name:g.name, isGroup:true, range:g.range, area:L.area, lon:L.lon, lat:L.lat, diff:L.diff, dist:L.dist, alt:Math.max(...SX.peaksOf(g.id).map(p => p.alt)) });
 });
 
 // 官方登山分級（一般季節）：need 是要先登頂過哪一級（或更難）的百岳才開放
