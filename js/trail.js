@@ -914,124 +914,23 @@ function buildSprites(){
 }
 
 // ═════════ 世界生成：彎道、坡度、道具位置（每座山固定） ═════════
-// 山路的彎不是規律的正弦波：每隔 15～45 公尺一個「地形轉折點」，轉的角度有大有小、左右不對稱（例如兩個小左彎、一段直路、再一個大右彎），
-// 轉折點之間再疊一點低頻的小擺動（像人踩出來的小路，不是工程畫的圓弧）。
+// 步道的彎全部來自這座山的路線（m.route，右上地圖畫的也是這條）：SX.routeTurns 把地圖上每個轉角變成步道上同一個公尺數、同一個方向的彎，
+// 地圖是直的地方步道就是直的（不再自己亂加「地形彎」，不然畫面會在地圖沒轉的地方轉彎）。只多疊一點極小的低頻擺動（WOBBLE，不到 1 度），像人踩出來的小路。
 // 全部只存成每段的彎度 curve（方向的變化），畫面上由彎度累加成方向、再累加成位置：內插的是方向不是位置，轉彎一定平順、沒有折角。
-// 路線（m.route，雷達圖畫的也是這條）先放，大方向跟雷達一致；地形轉折點只補在路線轉彎之間。
-// 已經換成真實路線形狀的山（m.routeSrc）用 routeCurves 整條跟著地圖的方向走；其他山照舊在手畫路線的轉角放彎
-const TURN_GAP = [15, 45];     // 地形轉折點的間距（公尺）
-const TURN_KIND = [            // 轉折點的種類：機率、轉幾度、轉多長（公尺）
-  { p:0.28, deg:[0, 0], len:[0, 0] },        // 直直走
-  { p:0.44, deg:[5, 12], len:[20, 34] },     // 小彎
-  { p:0.18, deg:[14, 24], len:[20, 32] },    // 中彎
-  { p:0.10, deg:[26, 42], len:[22, 34] }     // 大彎（繞過大樹、巨石）
-];
-const TURN_SAME = 0.55;   // 下一個彎跟上一個同一邊的基本機率（同一邊連續幾個小彎、再一個反向大彎）
-const TURN_BACK = 0.8;    // 地形彎累積偏離大方向這麼多弧度時，幾乎一定往回彎（路不會一直往同一邊繞）
-const ROUTE_MAX = 0.9;    // 真實路線一個轉角在畫面上最多轉幾弧度（約 52 度）
 const WOBBLE = 0.0022;    // 低頻小擺動（每段彎度）：遠低於轉身門檻 GAIT.bendIn，直路上登山客不會一直傾身
-const CURVE_MAX = 0.07;   // 每段彎度上限（約半徑 15 公尺的急彎）：超過的部分用 tanh 柔和壓住，彎度不會出現折角
+const ROUTE_CALM = 0.006; // 每公尺轉超過這麼多弧度＝路線正在轉彎（連續同方向的一段算一個彎，給彎道旁的景物用）
 let bends = [];           // 每個彎：{ i:彎頂那一段, side:往哪邊彎（＝內側：1 右、-1 左）, ang:轉幾弧度（絕對值） }
-// 一個彎的彎度形狀：兩端的彎度和彎度變化都是 0（跟前後接得平順）；p 讓彎頂偏前或偏後（每個彎不對稱）
-function bump(u, p){ u = Math.pow(u, p); const v = u * (1 - u); return v * v; }
-// 在 mc（公尺）附近轉 ang 弧度（正的＝右彎）、長 len 公尺：彎度照 bump 分到每一段，加起來剛好轉 ang。回傳彎頂那一段
-function addBend(mc, ang, len, p){
-  const cnt = Math.max(3, Math.round(len / SEG)), s0 = Math.round(mc / SEG - cnt / 2); let sum = 0, pk = s0, pv = -1;
-  for (let k = 0; k < cnt; k++) sum += bump((k + 0.5) / cnt, p);
-  for (let k = 0; k < cnt; k++) {
-    const j = s0 + k, v = bump((k + 0.5) / cnt, p);
-    if (v > pv) { pv = v; pk = j; }
-    if (j >= 0 && j < N) curve[j] += ang * SEG * v / sum;
-  }
-  return pk;
-}
-// 真實路線（m.routeSrc，例如 OpenStreetMap 的步道形狀）：不是只在轉角放彎，而是整條路的方向都跟著地圖走。
-// 每一段折線的方向，照 m.routeM（每個點走到第幾公尺）攤到步道每一段，平滑之後「每段方向變了多少」就是彎度：
-// 地圖上往左繞＝步道往左彎；地圖轉 90 度，畫面也真的轉 90 度（每公尺最多轉一定角度，頭尾慢慢進出彎）。
-// 真實路線的彎不經過地形彎的 tanh 上限（不然轉的角度會被壓小）；之字形的髮夾彎就是連續兩個大彎
-// 轉彎的急緩有三種可以比較，只改 ROUTE_TURN 這一個字：A 急轉角（約 12 公尺轉完 90 度）、B 中等（約 25 公尺）、C 大弧度（約 40 公尺）
-const ROUTE_TURN = 'A';
-const ROUTE_TURNS = { A:{ len:12, smooth:2.5 }, B:{ len:25, smooth:5 }, C:{ len:40, smooth:8 } };   // len：轉 90 度要走幾公尺；smooth：頭尾進出彎的平滑半徑（公尺）
-const ROUTE_SMOOTH = ROUTE_TURNS[ROUTE_TURN].smooth;
-const ROUTE_CAP = SEG * SEG * (Math.PI / 2) / ROUTE_TURNS[ROUTE_TURN].len;   // 真實路線每段彎度上限（地形彎的上限 CURVE_MAX 小很多）
-let routeC = null;         // 真實路線的彎度（每段），buildCurves 最後加進 curve；沒有真實路線的山是 null
-const ROUTE_CALM = 0.006;  // 每公尺轉超過這麼多弧度＝真實路線正在轉彎：前後 ROUTE_PAD 公尺內不加地形彎（地形彎不會跟真實的彎打架）
-const ROUTE_PAD = 20;
-const ROUTE_TERRAIN = 0.55, ROUTE_DRIFT = 0.3;   // 真實路線的山：地形彎只轉原本的幾成、累積偏離超過幾弧度就往回彎（不會跟地圖的方向打架）
-function routeCurves(m, e, busy){
-  const rt = m.route, rm = m.routeM, n = rt.length, th = new Float32Array(N + 2), tmp = new Float32Array(N + 2), hs = [];
-  let i, j, k = 0, a0 = 0;
-  for (i = 0; i < n - 1; i++) {   // 每段折線的方向（y 向下：角度變大＝往右轉），接續上一段不跳 2π
-    const dx = rt[i + 1][0] - rt[i][0], dy = rt[i + 1][1] - rt[i][1];
-    if (dx || dy) { const a = Math.atan2(dy, dx); a0 = i ? a0 + Math.atan2(Math.sin(a - a0), Math.cos(a - a0)) : a; }
-    hs.push(a0);
-  }
-  for (j = 0; j <= N + 1; j++) { const d = Math.min(j * SEG, total); while (k < n - 2 && rm[k + 1] <= d) k++; th[j] = hs[k]; }
-  const R = Math.max(1, Math.round(ROUTE_SMOOTH / SEG)), W = 2 * R + 1, P = Math.round(ROUTE_PAD / SEG);
-  for (let pass = 0; pass < 3; pass++) {   // 移動平均做三次（接近高斯平滑）
-    let s = 0; for (j = -R; j <= R; j++) s += th[clamp(j, 0, N + 1)];
-    for (j = 0; j <= N + 1; j++) { tmp[j] = s / W; s += th[Math.min(N + 1, j + R + 1)] - th[Math.max(0, j - R)]; }
-    th.set(tmp);
-  }
-  // 每段轉幾弧度（正的＝右彎）；超過 ROUTE_CAP 的部分往前後兩段分出去：急彎變長、變緩，但總共轉的角度不變（跟地圖一致）
-  const cs = new Float32Array(N), cap = ROUTE_CAP / SEG, rc = routeC = new Float32Array(N + 1);
-  for (j = 0; j < N; j++) cs[j] = th[j + 1] - th[j];
-  for (let it = 0, more = true; more && it < 600; it++) {
-    more = false;
-    for (j = 1; j < N - 1; j++) { const x = Math.abs(cs[j]) - cap; if (x > 0) { const s = Math.sign(cs[j]) * x; cs[j] -= s; cs[j - 1] += s / 2; cs[j + 1] += s / 2; more = true; } }
-  }
-  let run = 0, pk = 0, pv = 0;
+function buildCurves(m){
+  const e = Math.floor(total / SEG), cs = SX.routeTurns(m, SEG, N); let i, run = 0, pk = 0, pv = 0;
+  bends = [];
   const flush = () => { if (run && pk < e) bends.push({ i:pk, side:run < 0 ? -1 : 1, ang:Math.abs(run) }); };
-  for (j = 0; j < N; j++) {
-    const c = cs[j], hot = Math.abs(c) / SEG > ROUTE_CALM;
-    rc[j] = c * SEG;
-    if (hot) for (let q = Math.max(0, j - P); q <= Math.min(N, j + P); q++) busy[q] = 1;
-    if (hot && (!run || run * c > 0)) { run += c; if (Math.abs(c) > pv) { pv = Math.abs(c); pk = j; } }
-    else { flush(); run = hot ? c : 0; pv = Math.abs(run); pk = j; }   // 一段連續同方向的轉彎＝一個彎（給彎道旁的景物用）
+  for (i = 0; i < N; i++) {
+    const c = cs[i], hot = Math.abs(c) / SEG > ROUTE_CALM, x = i * SEG, w = (vn(x / 23, 91) - 0.5) * 1.3 + (vn(x / 9, 92) - 0.5) * 0.7;
+    curve[i] = c * SEG + WOBBLE * w;
+    if (hot && (!run || run * c > 0)) { run += c; if (Math.abs(c) > pv) { pv = Math.abs(c); pk = i; } }
+    else { flush(); run = hot ? c : 0; pv = Math.abs(run); pk = i; }
   }
   flush();
-}
-function buildCurves(m){
-  const r = mkrng(seed ^ 0x9e3779b9), rt = m.route, e = Math.floor(total / SEG), busy = new Uint8Array(N + 1); let i;
-  bends = [];
-  const real = !!(m.routeSrc && m.routeM), tK = real ? ROUTE_TERRAIN : 1, tBack = real ? ROUTE_DRIFT : TURN_BACK;
-  routeC = null;
-  if (real) routeCurves(m, e, busy);
-  else if (rt && rt.length >= 3) {
-    // 真實路線折線的轉角：決定左右彎，讓 2.5D 山徑和雷達圖一致
-    const n = rt.length, cum = [0];
-    for (i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(rt[i][0] - rt[i - 1][0], rt[i][1] - rt[i - 1][1]));
-    const mpu = total / (cum[n - 1] || 1);
-    for (i = 1; i < n - 1; i++) {
-      const ax = rt[i][0] - rt[i - 1][0], ay = rt[i][1] - rt[i - 1][1], bx = rt[i + 1][0] - rt[i][0], by = rt[i + 1][1] - rt[i][1];
-      const ang = clamp(Math.atan2(ax * by - ay * bx, ax * bx + ay * by), -ROUTE_MAX, ROUTE_MAX);   // y 向下：正值 = 右彎
-      const len = clamp(Math.min(cum[i] - cum[i - 1], cum[i + 1] - cum[i]) * mpu * 0.8, 40, 140), mc = cum[i] * mpu;
-      const pk = addBend(mc, ang, len, 0.8 + r() * 0.4);
-      for (let j = Math.max(0, Math.floor((mc - len / 2) / SEG)); j <= Math.min(N, Math.ceil((mc + len / 2) / SEG)); j++) busy[j] = 1;
-      if (pk < e) bends.push({ i:pk, side:ang < 0 ? -1 : 1, ang:Math.abs(ang) });
-    }
-  }
-  // 地形轉折點：每次固定用掉 6 個亂數（同一座山每次長得一樣，離線補進度也一樣）
-  let mm = 15 + r() * 20, prev = r() < 0.5 ? -1 : 1, drift = 0;
-  while (mm < total - 10) {
-    const x = r(), ra = r(), rl = r(), rp = r(), rs = r(), rb = r();
-    let K = TURN_KIND[0], acc = 0;
-    for (let k = 0; k < TURN_KIND.length; k++) { acc += TURN_KIND[k].p; if (x < acc) { K = TURN_KIND[k]; break; } }
-    const ang = lerp(K.deg[0], K.deg[1], ra) * Math.PI / 180 * tK, len = lerp(K.len[0], K.len[1], rl), si = Math.round(mm / SEG);
-    if (ang > 0 && !busy[Math.min(N, si)]) {
-      let side = rs < TURN_SAME ? prev : -prev;
-      if (side * drift > 0 && rb < Math.abs(drift) / tBack) side = -side;   // 已經往這邊繞很多了：往回彎
-      const pk = addBend(mm, side * ang, len, 0.7 + rp * 0.7);
-      drift += side * ang; prev = side;
-      if (pk < e) bends.push({ i:pk, side:side, ang:ang });
-    }
-    mm += lerp(TURN_GAP[0], TURN_GAP[1], r());
-  }
-  // 轉折點之間的低頻小擺動（兩層不同頻率的平滑雜訊疊起來），再把太急的地形彎柔和壓住；真實路線的彎（rc）另外加上，不被壓小
-  for (i = 0; i < N; i++) {
-    const x = i * SEG, w = (vn(x / 23, 91) - 0.5) * 1.3 + (vn(x / 9, 92) - 0.5) * 0.7;
-    curve[i] = CURVE_MAX * Math.tanh((curve[i] + WOBBLE * w) / CURVE_MAX) + (routeC ? routeC[i] : 0);
-  }
   for (i = e; i <= N; i++) curve[i] *= Math.max(0, 1 - (i - e) / 20);   // 山頂之後拉直
   head[0] = 0; for (i = 0; i <= N; i++) head[i + 1] = head[i] + curve[i] / SEG;
 }

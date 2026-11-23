@@ -324,6 +324,34 @@ SX.routeMeters = function(m){
     for (i = a[0]; i <= b[0]; i++) out[i] = a[1] + (b[1] - a[1]) * (cum[i] - cum[a[0]]) / ((cum[b[0]] - cum[a[0]]) || 1); }
   return out;
 };
+// 登山畫面的彎：只由 route＋routeM 算（js/trail.js 和 tools/check.js 都用這一個），右上地圖往哪轉、什麼時候轉，畫面就同時、同方向轉；地圖是直的，畫面就是直的。
+// 每段折線的方向攤到步道每一小段（seg 公尺），頭尾稍微平滑；轉太急的部分往前後分出去（急彎拉長一點，但轉的總角度跟地圖一樣）。
+// 轉彎的急緩只改 style：A 急轉角（約 12 公尺轉完 90 度）、B 中等（約 25 公尺）、C 大弧度（約 40 公尺）
+SX.ROUTE_TURN = { style:'A', styles:{ A:{ len:12, smooth:2.5 }, B:{ len:25, smooth:5 }, C:{ len:40, smooth:8 } } };
+// 回傳 n 段、每段轉幾弧度（y 向下：正的＝右彎）
+SX.routeTurns = function(m, seg, n){
+  var rt = m.route, rm = m.routeM, nr = rt.length, st = SX.ROUTE_TURN.styles[SX.ROUTE_TURN.style];
+  var th = new Float64Array(n + 1), tmp = new Float64Array(n + 1), cs = new Float64Array(n), hs = [], a0 = 0, i, j, k = 0, pass, it, more;
+  for (i = 0; i < nr - 1; i++) {   // 每段折線的方向，接續上一段不跳 2π
+    var dx = rt[i + 1][0] - rt[i][0], dy = rt[i + 1][1] - rt[i][1];
+    if (dx || dy) { var a = Math.atan2(dy, dx); a0 = i ? a0 + Math.atan2(Math.sin(a - a0), Math.cos(a - a0)) : a; }
+    hs.push(a0);
+  }
+  for (j = 0; j <= n; j++) { var d = Math.min(j * seg, m.dist); while (k < nr - 2 && rm[k + 1] <= d) k++; th[j] = hs[k]; }
+  var R = Math.max(1, Math.round(st.smooth / seg)), W = 2 * R + 1;
+  for (pass = 0; pass < 3; pass++) {   // 移動平均三次（接近高斯）：彎的頭尾慢慢進出
+    var s = 0; for (j = -R; j <= R; j++) s += th[Math.min(n, Math.max(0, j))];
+    for (j = 0; j <= n; j++) { tmp[j] = s / W; s += th[Math.min(n, j + R + 1)] - th[Math.max(0, j - R)]; }
+    th.set(tmp);
+  }
+  var cap = seg * (Math.PI / 2) / st.len;   // 每段最多轉幾弧度
+  for (j = 0; j < n; j++) cs[j] = th[j + 1] - th[j];
+  for (it = 0, more = true; more && it < 600; it++) {
+    more = false;
+    for (j = 1; j < n - 1; j++) { var x = Math.abs(cs[j]) - cap; if (x > 0) { var sg = (cs[j] > 0 ? 1 : -1) * x; cs[j] -= sg; cs[j - 1] += sg / 2; cs[j + 1] += sg / 2; more = true; } }
+  }
+  return cs;
+};
 SX.MOUNTAINS.forEach(function(m){
   var r = SX.REC[m.id];
   if (r) Object.assign(m, r);
