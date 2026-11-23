@@ -545,3 +545,30 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 | `hiker_rain_wipe` | 1:1 | 洋紅底。Same pose as hiker_wipe, wiping rain and sweat from the forehead, rain outfit. |
 | `hiker_rain_drink` | 1:1 | 洋紅底。Same pose as hiker_drink (drinking from a water bottle, head tilted back), rain outfit. |
 | `hiker_rain_hop4` | 16:9 | 洋紅底。Exactly the same 4 frames as hiker_hop4 (crouch → small jump → landing → standing), rain outfit, hood identical in all 4 frames. |
+
+## 第 23 批：補奇遇插圖、睡袋
+
+### 放進 `07.奇遇`（16:9，不用去背；每張前面貼「共通規則」，畫到主角就加「主角設定」）
+| 檔名 | 場景 |
+|---|---|
+| `enc_e58` | On the steep scree slope of Yushan Front Peak, a cheerful descending hiker grinning and pointing up at the loose rocky slope above, the hiker (主角設定) seen from behind looking up |
+| `enc_e59` | Looking back from a high scree slope: Tataka saddle and Mt. Lulin spread out far below, clouds slowly creeping up from the valley, the hiker small in the foreground seen from behind |
+| `enc_e61` | From Yushan West Peak, the massive face of Yushan Main Peak standing like a giant folding screen across the valley, afternoon cloud shadows sliding across it, the hiker seen from behind |
+| `enc_e62` | A small mountain weather station on a rocky high peak (Yushan North Peak), a friendly weather observer in a warm jacket leaning out of the doorway chatting with the hiker, instruments and a wind vane on the roof |
+| `enc_e63` | Sunset from Yushan North Peak: Yushan Main Peak glowing golden, its long shadow stretching across a sea of clouds, the hiker silhouetted on the rocks |
+| `enc_e64` | At the foot of a steep rock gully, a teammate handing a red climbing helmet to the hiker, both smiling, rocky cliff and chains behind |
+| `enc_e65` | Close-up of a tiny fuzzy white alpine edelweiss (Yushan Leontopodium) growing in a rock crack, soft focus mountains behind, the hiker's boot and pole tip just visible |
+| `enc_e66` | On a steep wooden staircase on a high mountain slope ("Crying Slope"), an exhausted hiker sitting on a step catching breath, the hiker offering a water bottle, both laughing a little |
+| `enc_e67` | From a summit triangulation stone, a clear view east to two distant great peaks standing side by side above layered ridges (Nanhu Dashan and Zhongyang Jian), the hiker seen from behind |
+| `enc_e68` | A dark misty forest of tall Taiwan fir trees ("Black Forest" on Xueshan), mist drifting between the trunks with beams of light coming through, the hiker small on the trail |
+| `enc_e69` | A glacial cirque of grey scree under a high peak, a small flock of alpine accentors (small brown-grey birds) hopping on the rocks close to the hiker's boots, unafraid |
+| `enc_e70` | Fog suddenly parting to reveal a huge eroded landslide cliff face across the valley (Xiangyang great collapse wall), deep vertical scratches like a giant's fingers, the hiker staring in awe |
+| `enc_e71` | A quiet dark mountain pond among hemlocks, a Formosan sambar deer drinking at the edge and looking up calmly at the hiker standing at a respectful distance |
+| `enc_e72` | A vast high-altitude grassland on Sancha Mountain, strong wind making waves run through the dwarf bamboo grass, a tiny blue lake (Jiaming Lake) far away, the hiker's hat brim flapping |
+| `enc_e73` | A simple stone memorial monument on a windy grassy ridge near a summit, a few wildflowers placed at its base, the hiker standing quietly with hat in hand, calm respectful mood, soft overcast light |
+
+### 放進 `01.風格`（1:1、洋紅底，貼「主角設定」；`hiker_rain_sleep` 另外加「雨衣設定」）
+| 檔名 | 內容 |
+|---|---|
+| `hiker_sleep` | **重畫**。The hiker (主角設定) seen from behind and slightly above, sleeping zipped up in a warm brown mummy sleeping bag laid on the orange sleeping mat, the safari hat tipped over the face, the backpack used as a pillow, trekking poles laid beside. Fully visible, small patch of ground under the mat. |
+| `hiker_rain_sleep` | **重畫**。Same as hiker_sleep but under a small low green tarp shelter strung between the two trekking poles, raindrops on the tarp, the hiker in the sleeping bag under it, backpack in its dark-green rain cover. |
