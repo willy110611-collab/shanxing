@@ -2338,15 +2338,32 @@ function skirtEdge(xa, ya, xb, yb, n1, a){
 // 遠處地面和天空的交界（2026-11-24 回報：開闊草原跟天空之間一條筆直的地平線）：離鏡頭 HZB.z 公尺以外的地面畫完時，
 // 在那些地面最高的地方（畫面上最上面那條，通常是翻過坡頂那條線）蓋一條起伏的霧帶：往上淡進天空、往下淡進遠處的地面。
 // 比較近的地面、樹之後才畫，不會被霧蓋到。霧帶貼圖一張（上緣高高低低，換霧色才重做）
-// 霧帶沿著畫面寬切 HZK 格，每一格跟著那裡遠處地面最高的地方（sky：每條格線上遠處地面最高到哪裡）。以前整條霧帶只放在最高的那一點的高度：
+// 霧帶沿著畫面寬切 HZK 格，每一格跟著那裡 HZB.z 公尺以外地面最高的地方（sky：每條格線上遠處地面最高到哪裡）。以前整條霧帶只放在最高的那一點的高度：
 // 轉彎時遠處的山只在畫面一邊比較高，另一邊比較低的坡頂整條沒有霧，草地和遠山之間一條筆直的硬邊（2026-11-24 轉彎巡檢 玉山東峰 3755 公尺）
-const HZB = { z:25, zf:60, fMin:0.35, up:30, dn:40, a:0.75, w:300, k:0.85 }, HZK = 24;   // z：這麼遠以外的地面才算進霧帶的高度（以前 60 公尺：近一點的坡頂整條沒有霧）；坡頂比 zf 近時霧帶整條縮小（最小 fMin 倍），不會一大片霧蓋在近處的樹叢上
-const HZS = [{ y:Infinity, on:false, sky:new Float32Array(HZK + 1), lx:0, ly:0, z:Infinity }, { y:Infinity, on:false, sky:new Float32Array(HZK + 1), lx:0, ly:0, z:Infinity }];   // 現場畫、遠景快取各一份（快取一格只畫一截）
-// 遠處一段地面的遠端邊 (xa,ya)→(xb,yb) 蓋過的格線上，記下地面最高到哪裡
-function skyAdd(S, xa, ya, xb, yb, z){
+const HZB = { z:10, zf:60, fMin:0.3, up:30, dn:40, a:0.75, w:300, k:0.85 }, HZK = 24;   // z：這麼遠以外的地面才算進霧帶的高度（以前 60 公尺：近一點的坡頂整條沒有霧，草地和遠山之間一條硬邊，2026-11-24 轉彎巡檢 玉山東峰 3755、玉山前峰 846 公尺）；坡頂比 zf 近時霧帶整條縮小（最小 fMin 倍），不會一大片霧蓋在近處的樹叢上
+// 第二條霧帶 gap：比較近的坡頂跟後面更遠的地面之間隔著一段露出背景（轉彎時遠處的地面只在畫面一邊，中間是山谷），那個坡頂也是一條地面和背景的交界，也蓋一段霧
+// （2026-11-24 轉彎巡檢 玉山東峰 782 公尺：以前這種坡頂被舊的外緣霧一塊塊蓋住，外緣霧改順著帶子方向以後露出一條硬邊）
+const hzA = () => ({ y:Infinity, on:false, sky:new Float32Array(HZK + 1), bot:new Float32Array(HZK + 1), lx:0, ly:0, nx:0, ny:0, z:Infinity });
+const GAPN = new Float32Array(HZK + 1);   // 這一段新露出來的坡頂（畫完這段的地面馬上蓋霧，在這段的樹、草叢底下，不會一條霧蓋在樹上）
+const HZS = [hzA(), hzA()];   // 現場畫、遠景快取各一份（快取一格只畫一截）
+const SGT = new Float32Array(HZK + 1), SGB = new Float32Array(HZK + 1);   // 這一段地面在每條格線上的上緣（遠端的邊）、下緣（近端的邊）
+// 一條邊 (xa,ya)→(xb,yb) 蓋過的格線上，A 記最上面（hi）或最下面（lo）
+function edgeAt(A, xa, ya, xb, yb, lo){
   if (xb < xa) { let t = xa; xa = xb; xb = t; t = ya; ya = yb; yb = t; }
   const bw = W / HZK, k0 = Math.max(0, Math.ceil(xa / bw)), k1 = Math.min(HZK, Math.floor(xb / bw)), d = xb - xa;
-  for (let k = k0; k <= k1; k++) { const y = d > 1e-3 ? ya + (yb - ya) * (k * bw - xa) / d : Math.min(ya, yb); if (y < S.sky[k]) { S.sky[k] = y; if (z < S.z) S.z = z; } }
+  for (let k = k0; k <= k1; k++) { const y = d > 1e-3 ? ya + (yb - ya) * (k * bw - xa) / d : (lo ? Math.max(ya, yb) : Math.min(ya, yb)); if (lo ? y > A[k] : y < A[k]) A[k] = y; }
+}
+// 這一段的地面畫完：併進霧帶的記錄。比目前最上面還高＝新的天際線（最後整條一起蓋）；比目前最下面還低、中間隔開＝露出背景的坡頂，回傳 true（GAPN 有值，馬上蓋）
+function skyMerge(S, z){
+  let any = false; GAPN.fill(Infinity);
+  for (let k = 0; k <= HZK; k++) {
+    const t = SGT[k], b = SGB[k]; if (!(t < Infinity && b > -Infinity)) continue;
+    if (!(S.sky[k] < Infinity)) { S.sky[k] = t; S.bot[k] = b; if (z < S.z) S.z = z; continue; }
+    if (t < S.sky[k]) { S.sky[k] = t; if (z < S.z) S.z = z; }
+    if (t > S.bot[k] + 2) { GAPN[k] = t; any = true; }
+    if (b > S.bot[k]) S.bot[k] = b;
+  }
+  return any;
 }
 let hzbC = null;
 function hzbTex(){
@@ -2362,12 +2379,12 @@ function hzbTex(){
   g.putImageData(im, 0, 0); c.hk = hazeCss; return (hzbC = c);
 }
 // 一格一格斜貼（格線對齊實際像素：相鄰兩格的直邊不會反鋸齒疊出細線）；貼圖橫向照世界方向捲動，跨過貼圖頭尾的那一格切兩塊
-function horizonBand(y, a, sky, z){
+function horizonBand(y, a, sky, z, lim){
   if (!(y < H) || a < 0.01) return;
   const f = clamp((z - HZB.z) / (HZB.zf - HZB.z), HZB.fMin, 1), T = hzbTex(), w = HZB.w * U, up = HZB.up * U * f, hh = (HZB.up + HZB.dn) * U * f, off = headAt((bG + jhG + fhG) * SEG) * F * HZB.k, bw = W / HZK, tw = T.width, th = T.height;
   ctx.globalAlpha = a;
   for (let k = 0; k < HZK; k++) {
-    const ya = sky[k], yb = sky[k + 1]; if (!(ya < H + up && yb < H + up)) continue;
+    const ya = sky[k], yb = sky[k + 1]; if (!(ya < H + up && yb < H + up) || (lim && Math.abs(ya - yb) > lim * bw)) continue;   // lim：第二條霧帶相鄰兩格高差太大就是不同的坡頂，不接起來
     const xa = Math.round(k * bw * DPR) / DPR, xb = Math.round((k + 1) * bw * DPR) / DPR, ua = ((((xa + off) % w) + w) % w) / w * tw, du = (xb - xa) / w * tw;
     const cut = Math.min(du, tw - ua), xm = xa + (xb - xa) * cut / du;
     hzPiece(T, xa, ya - up, xm, lerp(ya, yb, cut / du) - up, ua, cut, hh, th);
@@ -3149,7 +3166,7 @@ function drawWorld(b, t, jHi, jLo, far){
   let j, k, pi = AP.length - 1;
   heroDone = !!far; lodSkip = false; CQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
   const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
-  if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
+  if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.bot.fill(-Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
   for (j = jHi; j >= jLo; j--) {
     if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
@@ -3179,9 +3196,10 @@ function drawWorld(b, t, jHi, jLo, far){
         const lvS = side < 0 ? lvL : lvR;
         bandEnd(i, side, DS, nS, dW1, gw1, mo1, x1, y1, s1, tX1, tY1, tD1, tH1, lod ? 1 : 0);   // 路寬每段不一樣：帶子從這段的路緣量起
         bandEnd(i + 1, side, DS, nS, dW2, gw2, mo2, x2, y2, s2, tX2, tY2, tD2, tH2);
-        if (HS.on && fade > 0.05) {   // 地平線霧帶：這段遠端那條邊（兩側山坡、中間的路）在每條格線上的高度
-          for (k = 0; k < nS - 1; k++) skyAdd(HS, tX2[k], tY2[k], tX2[k + 1], tY2[k + 1], pZ[j + 1]);
-          if (side > 0) skyAdd(HS, HS.lx, HS.ly, tX2[0], tY2[0], pZ[j + 1]); else { HS.lx = tX2[0]; HS.ly = tY2[0]; }
+        if (HS.on && fade > 0.05) {   // 地平線霧帶：這段遠端、近端那兩條邊（兩側山坡、中間的路）在每條格線上的高度
+          if (side < 0) { SGT.fill(Infinity); SGB.fill(-Infinity); }
+          for (k = 0; k < nS - 1; k++) { edgeAt(SGT, tX2[k], tY2[k], tX2[k + 1], tY2[k + 1], false); edgeAt(SGB, tX1[k], tY1[k], tX1[k + 1], tY1[k + 1], true); }
+          if (side > 0) { edgeAt(SGT, HS.lx, HS.ly, tX2[0], tY2[0], false); edgeAt(SGB, HS.nx, HS.ny, tX1[0], tY1[0], true); if (skyMerge(HS, pZ[j + 1])) { horizonBand(HS.y, HZB.a * fade, GAPN, pZ[j + 1], 1.5); ctx.globalAlpha = fade; } } else { HS.lx = tX2[0]; HS.ly = tY2[0]; HS.nx = tX1[0]; HS.ny = tY1[0]; }
         }
         bandExt(nS, yb - y1);
         for (k = 0; k < nS - 1; k++) {           // 坡向：往外升高的那一面朝向哪裡（tSh 連續，地面明暗不分階；tLvS 只給草叢挑顏色）
