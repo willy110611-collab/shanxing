@@ -1603,7 +1603,7 @@ function gaitSheet(){
   // 一般走路：正背面十六格圖（WALK_DRY／WALK_RAIN），下雨天穿黃色雨衣
   const walk = isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY;
   // 階梯、累了：重畫成正背面直直走的版本（雨天換雨衣版）；彎道：轉身圖（往右前方，左彎鏡射），沒有雨衣版所以雨天照舊一般走路
-  const m = gait.mode, id = m === 'stairs' ? rainy(ART.get('hiker_stairs16') ? 'hiker_stairs16' : 'hiker_stairs8') : m === 'tired' ? rainy('hiker_tired_walk8') : null;   // 轉彎也用一般走路圖（側面大跨步的轉彎圖腳張太開，跟正背面走路對不起來，不用）
+  const m = gait.mode, id = m === 'stairs' ? rainy(ART.get('hiker_stairs16') ? 'hiker_stairs16' : 'hiker_stairs8') : m === 'tired' && !isRain ? 'hiker_tired_walk8' : null;   // 下雨累了先用雨天走路圖（舊的雨天疲勞圖是整件大雨披、沒背包套，跟其他雨衣圖不一樣，等重畫）；轉彎也用一般走路圖（側面大跨步的轉彎圖腳張太開，跟正背面走路對不起來，不用）
   if (id && ART.get(id)) { gait.sid = id; gait.sf = m === 'turn' && gait.modeF; }
   else gait.sid = walk;
 }
