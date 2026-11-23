@@ -26,6 +26,7 @@ $skipped = @(); $seen = @{}
 $tmpDir = Join-Path ([IO.Path]::GetTempPath()) "shanxing_art_$PID"; New-Item -ItemType Directory -Force $tmpDir | Out-Null
 # 解碼後的像素指紋：同一張圖重新轉檔，像素一樣就算沒變
 function PixelSum($f) { (& ffmpeg -v error -i $f -map 0:v -f hash -hash sha256 -) -join '' }
+$node = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $node) { $node = 'C:\Program Files\nodejs\node.exe' }
 Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|jpe?g|jfif|webp)$' } | ForEach-Object {
   # 在檔名裡找第一個清單上有的英文名字
   $name = $null
@@ -45,8 +46,10 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
     $out = Join-Path $here "$name.webp"; $tmp = Join-Path $tmpDir "$name.webp"
     # 寵物（含第一批 shiba_walk）的舊四格走路圖只剩世界地圖和備用：寵物在畫面上不到 60 像素高，800 寬（每格 200）就夠
     $max = if ($name -match '^hiker_.*walk$') { 1600 } elseif ($name -match '_walk$') { 800 } elseif ($name -match '^frame_') { 1080 } else { 720 }
-    # 去洋紅底：colorkey 只去掉很接近洋紅的底（太強會連粉紅杜鵑花一起吃掉），殘邊交給遊戲載入時的 despill 清
-    ffmpeg -v error -y -i $_.FullName -vf "format=rgba,colorkey=0xFF00FF:0.22:0.06,scale='min($max,iw)':-2" -c:v libwebp -quality 82 $tmp
+    # 去洋紅底：art\despill.js 在原圖尺寸把邊緣的洋紅混色解開（變透明＋換回圖的顏色）、透明處填圖的顏色，再縮圖存 webp
+    # 遊戲載入時不再處理，所以洋紅一定要在這裡清乾淨（tools\artscan.js 會檢查）
+    & $node (Join-Path $here 'despill.js') $_.FullName $tmp $max | Out-Null
+    if ($LASTEXITCODE) { throw "去背失敗：$($_.Name)" }
   }
   if ((Test-Path $out) -and ((PixelSum $out) -eq (PixelSum $tmp))) { Remove-Item $tmp; Write-Host "沒變 $name"; return }
   # 圖真的換了：同名的舊輸出刪掉（換格式時才不會留下兩張同名圖），換上新的
@@ -66,6 +69,5 @@ $json = '[' + (($items) -join ",`n ") + ']'
 [IO.File]::WriteAllText((Join-Path $here 'manifest.json'), $json + "`n", (New-Object System.Text.UTF8Encoding $false))
 Write-Host "清單已更新：$(@($items).Count) 張"
 # 立體地圖：跟真實海岸線對齊，結果寫進 manifest 的 fit（山的位置靠這個換算）
-$node = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $node) { $node = 'C:\Program Files\nodejs\node.exe' }
 $fitTool = Join-Path $here '..\tools\mapfit.js'
 if ((Test-Path $fitTool) -and (Get-ChildItem $here -File -Filter 'map_*')) { & $node $fitTool }
