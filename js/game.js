@@ -1903,15 +1903,16 @@
     const m0 = el.querySelector('.medal'); if (m0) { const r = m0.getBoundingClientRect(); MO.burst(r.left + r.width / 2, r.top + r.height / 2, 12); }
     A.chime();
   }
+  // 等級小獎牌：拿到的填上那一級的顏色（金屬亮光在 CSS），還沒拿到的只留淡淡的虛線圈；橫排放在徽章名字右邊
+  const tierPips = (L, t) => `<span class="bdgPips">${L.map((x, i) => `<i${i <= t ? ` class="on" style="--c:${x.color}"` : ""} title="${x.name}"></i>`).join("")}</span>`;
   function renderBadges(body){
     const earned = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0), all = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0);
     body.innerHTML = `<div class="colHead">徽章 <b>${earned}</b> / ${all} 枚・點徽章看等級</div>` + SX.BADGES.map(b => {
       const L = badgeLevels(b), n = badgeGot(b), t = n - 1, nx = n < L.length ? n : -1;
       const v = badgeValue(b), show = x => Math.floor(x).toLocaleString('en-US');
       const goal = L[nx >= 0 ? nx : t].goal, f = Math.min(1, v / goal);
-      return `<button class="bdgRow${t < 0 ? ' off' : ''}" data-bdg="${b.id}">${medalHtml(b, t)}<span class="bdgTxt"><b>${b.name}${t >= 0 ? `<em style="background:${L[t].color}">${L[t].name}</em>` : ''}</b>
-        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small><span data-count="${Math.floor(v)}">${show(v)}</span>${nx >= 0 ? ` / ${show(goal)} ${b.unit}・下一級${L[nx].name}` : ` ${b.unit}・全部等級都拿到了`}</small></span>
-        <span class="bdgDots">${L.map((x, i) => `<i${i <= t ? ` style="background:${x.color}"` : ''}></i>`).join('')}</span></button>`;
+      return `<button class="bdgRow${t < 0 ? ' off' : ''}" data-bdg="${b.id}">${medalHtml(b, t)}<span class="bdgTxt"><span class="bdgTop"><b>${b.name}${t >= 0 ? `<em style="background:${L[t].color}">${L[t].name}</em>` : ''}</b>${tierPips(L, t)}</span>
+        <span class="dyBar"><i style="width:${f * 100}%"></i></span><small><span data-count="${Math.floor(v)}">${show(v)}</span>${nx >= 0 ? ` / ${show(goal)} ${b.unit}・下一級${L[nx].name}` : ` ${b.unit}・全部等級都拿到了`}</small></span></button>`;
     }).join('');
     MO.stagger(body, '.bdgRow'); MO.progress(body);
     $$('#albumBody [data-bdg]').forEach(el => el.onclick = () => { A.pop(); openBadge(SX.BADGES.find(b => b.id === el.dataset.bdg)); });
