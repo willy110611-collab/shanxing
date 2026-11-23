@@ -1842,7 +1842,7 @@
 
   // ───────── 設定 ─────────
   let gpsWatch = null, gpsPrev = null, gpsTotal = 0;
-  const DEV_HASH = 'acac170fa5097902002a7e1e522ac96c9838c1193505835d2a990e0cd7917fef';
+  const DEV_HASH = 'b1b0ff28963c4288a9c3d0bc3083610789cb0dddd6aa7ba71e4e2345446f095c';
   let devPeek = false, devTaps = 0, devTapT = 0;
   // 資料來源：全部從 SX.SOURCES 畫（網址只寫在 data.js），連結一律開新分頁
   function sourcesHtml(){
