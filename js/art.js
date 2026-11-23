@@ -95,7 +95,38 @@ function prep(name, img){
     if (air) e.hk = fr[0].h / stand;   // 畫的時候給的高度是「人站直多高」：整格要再放大這麼多倍（多出來的是跳起來的空間）
   }
   e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => i < 0 ? Object.assign({}, fr[~i], { mx:true }) : fr[i]) : fr;
-  return toBitmap(c).then(b => { e.img = b; return e; });
+  const m = RELIT.test(name.id) ? relit(px, c.width, c.height, fr) : null;
+  return Promise.all([toBitmap(c), m && toBitmap(m)]).then(([b, bm]) => { e.img = b; if (bm) e.imgM = bm; return e; });
+}
+// 鏡射畫的時候光要照樣從右上來：Gemini 的人物、寵物光都從右上照，背影右半邊比左半邊亮（約一成）。
+// 走路的左腳那步是右腳那步左右鏡射（STEP8、PET_ORDER 的 ~i），直接鏡射亮面就跑到左邊，每一步亮面左右換一次（晚上沒有輪廓光時最明顯）。
+// 這裡先做一份「左右鏡射時用」的圖：每一格量身體（外框 15%～65% 高）左右兩半的平均亮度，用一條平滑的左右漸層把亮暗對調，
+// 鏡射畫出來的左右平均亮度就跟原本那格一樣（只調明暗不改形狀）
+const RELIT = /^(hiker|pet)_/, RELIT_K = 1.45;   // RELIT_K：漸層加強倍數（身體中間的亮面、墨線會把平均拉平；量過 1.45 倍時走路、階梯、累了的鏡射步左右亮度差最接近原本那格）
+function relit(px, Wd, Hd, fr){
+  const d = new Uint8ClampedArray(px), seen = {};
+  for (const f of fr) {
+    const key = f.x + ',' + f.y; if (seen[key]) continue; seen[key] = 1;
+    const ctr = f.cx == null ? f.x + f.w / 2 : f.cx, half = Math.max(1, Math.max(ctr - f.x, f.x + f.w - ctr));
+    let L = 0, nl = 0, Rr = 0, nr = 0;
+    for (let y = Math.round(f.y + f.h * 0.15), ye = Math.round(f.y + f.h * 0.65); y < ye; y++) for (let x = f.x; x < f.x + f.w; x++) {
+      const i = (y * Wd + x) * 4; if (px[i + 3] < 160) continue; const v = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11;
+      if (x < ctr) { L += v; nl++; } else { Rr += v; nr++; }
+    }
+    if (nl < 20 || nr < 20) continue;
+    const want = Math.max(0.67, Math.min(1.5, (L / nl) / (Rr / nr)));   // 右半邊要變成原本左半邊的亮度（倍數）
+
+    // 漸層 k(t) = want^t（t：中線 0、最右 1、最左 −1）；右半邊平均 (want − 1) / ln(want) 要等於 want：解 g 讓 (e^g − 1)/g = want（右半 k=e^{g t}）
+    let g = Math.log(want);
+    for (let it = 0; it < 30; it++) { const m = (Math.exp(g) - 1) / g; g += (Math.log(want) - Math.log(m)) ; }
+    if (!isFinite(g)) continue;
+    for (let x = f.x; x < f.x + f.w; x++) {
+      const t = Math.max(-1, Math.min(1, (x - ctr) / half)), k = Math.exp(g * RELIT_K * t);
+      for (let y = f.y; y < f.y + f.h; y++) { const i = (y * Wd + x) * 4; if (!d[i + 3]) continue; d[i] = px[i] * k; d[i + 1] = px[i + 1] * k; d[i + 2] = px[i + 2] * k; }
+    }
+  }
+  const m = document.createElement('canvas'); m.width = Wd; m.height = Hd; m.getContext('2d').putImageData(new ImageData(d, Wd, Hd), 0, 0);
+  return m;
 }
 // 一格裡身體的左右重心：只看外框高度 20%～55% 那一段（頭到腰，不含腳和登山杖尖），用不透明度加權
 function torsoX(d, Wd, f){
@@ -150,8 +181,8 @@ function put(ctx, e, f, img, oy, k, cx, by, h, flip, u0, v0, u1, v1){
 }
 A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
   const e = lib[id]; if (!e) return false;
-  const f = frameOf(e, i), img = fl ? filtered(e, fl) : e.img;
-  put(ctx, e, f, img, 0, 1, cx, by, h, f.mx ? !flip : flip, 0, 0, 1, 1);   // f.mx：這一格本身是鏡射格（SHEETS 的 order 用 ~i）
+  const f = frameOf(e, i), mir = f.mx ? !flip : flip, img = fl ? filtered(e, fl) : mir && e.imgM ? e.imgM : e.img;   // 鏡射畫的用 imgM（光照樣從右邊來，見 relit）
+  put(ctx, e, f, img, 0, 1, cx, by, h, mir, 0, 0, 1, 1);   // f.mx：這一格本身是鏡射格（SHEETS 的 order 用 ~i）
   return true;
 };
 // 這一格畫出來是不是左右鏡射的（自己要鏡射、或這一格本身是鏡射格）：疊光線貼圖時挑「朝哪邊的輪廓光」用

@@ -124,7 +124,7 @@ function warmBuild(){
   TURF.forEach(function(n){ n.forEach(function(v){ v.forEach(spr); }); });
   for (const k in TEX) { const T = TEX[k]; if (T && T.lv) { q.push(function(){ up(T.c, true); }); for (let nx = 0; nx <= 3; nx++) for (let ny = nx; ny <= 6; ny++) if (nx || ny) q.push(function(){ up(texLevel(T, nx, ny).c, true); }); } }
   props.forEach(function(o){ if (o.type === 'sign') q.push(function(){ getSign(o.text); }); });
-  LITE_WARM.forEach(function(id){ q.push(function(){ const L = liteOf(id); if (L) up(L.c); }); });   // 登山客的光線貼圖（逆光、輪廓光）
+  LITE_WARM.forEach(function(id){ q.push(function(){ const L = liteOf(id); if (L) up(L.c); const e = ART.get(id); if (e && e.imgM) up(e.imgM); }); });   // 登山客的光線貼圖（逆光、輪廓光），和鏡射步用的補光圖（art.js relit）
   if (curS && curS.pet) { const P = petIds(curS.pet); [P.step, P.stepR, P.fly, P.flyR].forEach(function(id){ if (id) q.push(function(){ const L = liteOf(id); if (L) up(L.c); }); }); }   // 帶著的寵物走路、飛行圖也先做
   warmQ = q.reverse();
 }
