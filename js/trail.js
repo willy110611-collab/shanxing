@@ -361,11 +361,34 @@ function mirTex(id, m, r, mx, my, px){
 // 底下是原圖 2×2，上面疊一張錯開半格的原圖，用一張大範圍、會循環的雜訊決定哪裡露出哪一張，再疊一層大範圍的明暗起伏。
 // 兩張都是無縫的、雜訊也照 8 公尺循環，所以大圖本身還是無縫；重複的距離變成兩倍，格子的規律被打散。畫的時候跟以前一樣一次貼完，不多花時間
 const GRASS_TILE = 512;   // 大圖每一格幾像素（整張 1024，顯示卡剛好是 2 的次方）
+// 2026-11-23 玩家回報草地一塊一塊。原圖本身是同一小張 2×2 拼成的，裡面深綠葉叢和黃綠草地排成整齊的格子（每格約 0.7 公尺，亮暗差到 114～158，顏色也一深綠一黃綠），
+// 鋪在山坡上就是一格一格的方塊。先把這種「大塊的顏色明暗」紅綠藍各自往整張的平均拉平（只留草葉、小花這種細節），再做下面的 2×2 大圖
+const GRASS_FLAT = { cell:8, r:2, k:1 };   // 大塊顏色取樣每格幾像素、模糊半徑幾格（橫直各做兩次）、拉平幾成（1＝大塊的顏色差完全拉平）
+function grassFlat(c0, S){
+  const t = mk(S, S), g = t.getContext('2d'); g.drawImage(c0, 0, 0, S, S);
+  const P = GRASS_FLAT, n = S / P.cell, im = g.getImageData(0, 0, S, S), d = im.data, tmp = new Float32Array(n * n), L = [], mean = [0, 0, 0];
+  for (let c = 0; c < 3; c++) {
+    const l = L[c] = new Float32Array(n * n);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) l[((y / P.cell) | 0) * n + ((x / P.cell) | 0)] += d[(y * S + x) * 4 + c];
+    for (let k = 0; k < n * n; k++) { l[k] /= P.cell * P.cell; mean[c] += l[k] / (n * n); }
+    for (let pass = 0; pass < 4; pass++) {   // 頭尾繞回來模糊，貼圖照樣無縫
+      const hz = !(pass & 1), src = pass & 1 ? tmp : l, dst = pass & 1 ? l : tmp;
+      for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { let s = 0; for (let o = -P.r; o <= P.r; o++) s += hz ? src[j * n + (i + o + n) % n] : src[((j + o + n) % n) * n + i]; dst[j * n + i] = s / (P.r * 2 + 1); }
+    }
+  }
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {   // 每點周圍的大塊顏色（雙線性、頭尾繞回）跟平均差多少，就補回多少
+    const fx = x / P.cell - 0.5, fy = y / P.cell - 0.5, ix = Math.floor(fx), iy = Math.floor(fy), tx = fx - ix, ty = fy - iy, a = (iy + n) % n * n, b = (iy + 1) % n * n, i0 = (ix + n) % n, i1 = (ix + 1) % n, p = (y * S + x) * 4;
+    for (let c = 0; c < 3; c++) { const l = L[c]; d[p + c] += (mean[c] - lerp(lerp(l[a + i0], l[a + i1], tx), lerp(l[b + i0], l[b + i1], tx), ty)) * P.k; }
+  }
+  g.putImageData(im, 0, 0);
+  return t;
+}
 function grassTex(){
   if (!ctx) return null;
   const T = keep('texg:ground_grass', function(){
-    const c0 = ART.crop('ground_grass'); if (!c0 || !patOK()) return null;
-    const S = GRASS_TILE, W2 = S * 2, a = mk(W2, W2), b = mk(W2, W2), ga = a.getContext('2d'), gb = b.getContext('2d'), ox = S * 0.5, oy = S * 0.37;
+    const cr = ART.crop('ground_grass'); if (!cr || !patOK()) return null;
+    const S = GRASS_TILE, W2 = S * 2, a = mk(W2, W2), b = mk(W2, W2), ga = a.getContext('2d'), gb = b.getContext('2d'), ox = S * 0.5, oy = S * 0.37, c0 = grassFlat(cr, S);
+    free(cr);
     for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++) ga.drawImage(c0, x * S, y * S, S, S);
     for (let x = -1; x < 2; x++) for (let y = -1; y < 2; y++) gb.drawImage(c0, x * S + ox, y * S + oy, S, S);
     free(c0);
@@ -1187,6 +1210,7 @@ function cloudTile(k, P){
   const TS = 1.25, hT = k ? 120 : 84, c = mk(TWL * TS, hT * TS), g = c.getContext('2d'), r = mkrng(seed + k * 104729 + 77), sc = k ? 1 : 0.62;
   g.scale(TS, TS);
   const line = rgba(mix(INK, P.cloudS, 0.6), 0.5), OX = [0, -TWL, TWL];
+  let fy = 0;   // 最後一排雲的中線（下緣從這裡開始淡出）
   for (let row = 0; row < 3; row++) {
     const by = (28 + row * 20) * sc + (k ? 4 : 2), lit = mixs(P.cloudL, P.cloudS, 0.22 * (2 - row)), sh = mixs(P.cloudS, P.cloudL, 0.15 * row), puffs = [];
     let x = r() * 30;
@@ -1197,9 +1221,15 @@ function cloudTile(k, P){
       if (pass === 0) { dot(g, px, py, rad, sh); g.beginPath(); g.arc(px, py, rad, Math.PI * 1.08, Math.PI * 1.92); g.strokeStyle = line; g.lineWidth = 1; g.stroke(); }
       else dot(g, px + rad * 0.16, py - rad * 0.14, rad * 0.84, lit);
     }
-    const gr = g.createLinearGradient(0, by + 8 * sc, 0, hT); gr.addColorStop(0, mixs(lit, sh, 0.45)); gr.addColorStop(1, row === 2 ? mixs(lit, sh, 0.2) : sh);
-    g.fillStyle = gr; g.fillRect(0, by + 8 * sc, TWL, hT);
+    fy = by;
+    if (row === 2) break;   // 最後一排底下不再填整片：保留一球一球圓圓的雲底（填色的上緣是一條直線，會把雲的下半部切掉）
+    const gr = g.createLinearGradient(0, by + 8 * sc, 0, hT); gr.addColorStop(0, mixs(lit, sh, 0.45)); gr.addColorStop(1, sh);
+    g.fillStyle = gr; g.fillRect(0, by + 8 * sc, TWL, hT);   // 前兩排底下的填色會被下一排的雲球蓋住
   }
+  // 2026-11-23 玩家回報雲的下半部被切掉：以前最後一排雲底下也整片填色到圖的下緣（當雲海時被山和地面蓋住），
+  // 陰天的高空雲、霧帶是整張露出來的，填色的上緣就是一條橫切過雲球的直線。現在最後一排留著圓的雲底，再從那排的中線往下慢慢淡到全透明
+  const fg = g.createLinearGradient(0, fy, 0, hT);
+  easeStops(fg, 0, 1); g.globalCompositeOperation = 'destination-out'; g.fillStyle = fg; g.fillRect(0, fy, TWL, hT - fy);
   return c;
 }
 function freeTiles(T){ if (T) T.r.concat(T.c).forEach(free); }
