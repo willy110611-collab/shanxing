@@ -68,7 +68,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, up:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, up:0, gr:0, crK:0, crD:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -1213,12 +1213,14 @@ function mist(){
   g.fillStyle = gr; g.fillRect(0, 0, 4, 64);
   return c;
 }
+// 遠景第 n 層跟著坡度上下挪幾像素（上坡往下沉、下坡浮上來；地平線和路不動）：每格直接挪位置畫，不重做任何快取
+function plxDy(n){ return LOOK.climb.farPx[n] * hero.gr * U; }
 function drawSkyArt(e, key, hd, a, frac){
   if (a <= 0.01) return;
   const f = e.frames[0], h = HOR + 150 * U, w = Math.max(W * 1.05, h * f.w / f.h), L = plxLayers(key, e), M = mist();
   ctx.globalAlpha = a;
   for (let n = 0; n < L.length; n++) {
-    const p = L[n].p, y0 = h * p[0] + p[4] * U * frac, lh = h * (p[1] - p[0]), off = hd * p[3];
+    const p = L[n].p, dy = plxDy(n), y0 = h * p[0] + p[4] * U * frac + (n ? dy : 0), lh = h * (p[1] - p[0]) + (n ? 0 : dy), off = hd * p[3];   // 最上層（天空）頂端不動，只把下緣的遠山拉下來一點
     if (n) ctx.drawImage(M, 0, 0, 4, 64, 0, y0 - 6 * U, W, h * p[2] + 20 * U);   // 霧帶蓋在上一層的接縫上
     let k = Math.floor(off / w), x = -(off - k * w);
     for (; x < W; x += w, k++) {
@@ -1256,12 +1258,12 @@ function drawBG(t, dist){
   const TA = getTiles(palA), TB = (palB !== palA && palK > 0.01) ? getTiles(palB) : null;
   const hd = headAt(dist) * F, hv = Math.sin(t * 0.5) * 3 * U;        // 視差：依累積轉向角平移
   if (isCloudy || isRain || isSnow) tile(TA.c[1], hd * 0.3 + t * 5, -40 * U, 190 * U, 0.62);   // 高空厚雲
-  layer(TA, TB, 'r', 0, hd * 0.5, HOR - 136 * U, 150 * U);
-  layer(TA, TB, 'c', 0, hd * 0.6 + t * 3, HOR - 52 * U + hv * 0.5, 84 * U);
-  layer(TA, TB, 'r', 1, hd * 0.7, HOR - 92 * U, 130 * U);
-  layer(TA, TB, 'r', 2, hd * 0.85, HOR - 56 * U, 115 * U);
+  layer(TA, TB, 'r', 0, hd * 0.5, HOR - 136 * U + plxDy(0), 150 * U);
+  layer(TA, TB, 'c', 0, hd * 0.6 + t * 3, HOR - 52 * U + hv * 0.5 + plxDy(1), 84 * U);
+  layer(TA, TB, 'r', 1, hd * 0.7, HOR - 92 * U + plxDy(1), 130 * U);
+  layer(TA, TB, 'r', 2, hd * 0.85, HOR - 56 * U + plxDy(2), 115 * U);
   ctx.fillStyle = PAL[palA].valley; ctx.fillRect(0, HOR + 54 * U, W, H);
-  layer(TA, TB, 'c', 1, hd + t * 7, HOR - 34 * U - hv, 120 * U);
+  layer(TA, TB, 'c', 1, hd + t * 7, HOR - 34 * U - hv + plxDy(2), 120 * U);
 }
 
 // ═════════ 一次性素材：影子、光點、神光、前景散景葉、暗角 ═════════
@@ -1481,6 +1483,7 @@ function updHero(s, t, dt, dist, sp){
   // 上坡多陡（0～1）：看腳下往前三段的平均坡度，階梯段不算（階梯有自己的節奏）；慢慢變
   const gr = nSt ? 0 : (eAt(si + 3) - eAt(si)) / (3 * SEG);
   hero.up += (clamp(gr / GAIT.upFull, 0, 1) - hero.up) * Math.min(1, dt * 2);
+  climbUpd(si, dt);
   if (Math.abs(dd) < 3 && hero.pd >= 0) {
     let inc = dd / (nSt ? 2 * stepL : STRIDE * GAIT.stride[gait.lvl] * (1 - (1 - GAIT.upStride) * hero.up)) * TAU;
     if (nSt && dd > 0) {
@@ -1509,6 +1512,28 @@ function updHero(s, t, dt, dist, sp){
   if (st !== hero.st) { if (hero.st !== -1 && mv && !isRain && !isSnow) S.burst(hero.sx + ((st & 1) ? 10 : -10) * hero.u, hero.sy - 2, 'dust', 2); hero.st = st; }
   updGait(s, dt, dist);
 }
+// 爬坡感（地平線不動）：參數在 LOOK.climb
+// gr：腳下往前幾段的坡度（-1 下坡～1 上坡，慢慢變），遠山跟著上下挪幾像素；系統設定減少動態就是 0
+// crK、crD：前方有坡頂（路先往上、翻過去往下掉）時，坡頂前的路提早往下彎多少（0～1）、坡頂離登山客幾公尺（都慢慢變，不會一下子跳）
+const CRS = { k:0, d:0 };
+function crestOf(si){
+  const C = LOOK.climb, n0 = Math.round(C.look[0] / SEG), n1 = Math.round(C.look[1] / SEG), e0 = eAt(si);
+  let pk = si, pe = e0;
+  for (let q = 1; q <= n1; q++) { const e = eAt(si + q); if (e > pe) { pe = e; pk = si + q; } }
+  const dk = pk - si;
+  CRS.d = dk * SEG;
+  CRS.k = dk < n0 || dk >= n1 ? 0 : clamp((pe - eAt(pk + Math.round(C.after / SEG))) / C.drop, 0, 1) * clamp((pe - e0) / C.rise, 0, 1) * clamp((n1 - dk) / (n1 * 0.3), 0, 1);   // 太近（已經到頂）、太遠、翻過去沒往下掉、沒比腳下高都不算
+  return CRS;
+}
+function climbUpd(si, dt){
+  const C = LOOK.climb, e = Math.min(1, dt * C.ease), g = (eAt(si + 4) - eAt(si)) / (4 * SEG), still = RMOT && RMOT.matches;
+  hero.gr += ((still ? 0 : clamp(g / C.gradeFull, -1, 1)) - hero.gr) * e;
+  const c = crestOf(si);
+  hero.crK += (c.k - hero.crK) * e;
+  if (c.k > 0) hero.crD += (c.d - hero.crD) * (hero.crK < 0.02 ? 1 : Math.min(1, e * 2));   // 剛出現的坡頂直接對準位置（那時候還沒彎），之後慢慢跟
+}
+S.climb = function(){ return { gr:hero.gr, crK:hero.crK, crD:hero.crD }; };   // 測試用：現在的坡度、坡頂前多彎多少、坡頂多遠
+S.crestAt = function(){ const out = []; let last = -99; for (let i = 0; i < N; i++) { const c = crestOf(i); if (c.k > 0.6 && i + c.d / SEG - last > 20) { last = i + c.d / SEG; out.push(Math.round(i * SEG)); } } return out; };   // 測試用：走到哪裡（公尺）前方開始有明顯的坡頂
 // ───────── 步態：累了慢慢走、偶爾停下來喘氣／喝水／擦汗／看風景、開心時小跳、上階梯和轉彎換圖 ─────────
 function rnd(r){ return r[0] + Math.random() * (r[1] - r[0]); }
 function gaitReset(){ gait.act = null; gait.pace = 1; gait.tB = rnd(GAIT.breath[1]); gait.tH = rnd(GAIT.hop); gait.tI = rnd(GAIT.idle); gait.lookM = -1; gait.cur = ''; gait.prev = ''; gait.k = 1; gait.mode = 'walk'; gait.modeT = 9; gait.bendT = 0; gait.tired = false; }
@@ -3213,7 +3238,8 @@ S.render = function(s){
   hero.pan += ((benchO ? benchO.side * PXO.bench * 0.7 : 0) - hero.pan) * Math.min(1, dt * 2); if (!benchO && Math.abs(hero.pan) < 0.002) hero.pan = 0;   // 離開長椅後鏡頭回到正中間：剩一點點就直接歸零（不會永遠偏一點點）
   const bob = RMOT && RMOT.matches ? 0 : hero.mv;   // 鏡頭跟著步伐極輕微上下晃（一步一次）；系統設定減少動態就不晃
   let j, x = 0, dx = -off * cAt(b);
-  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc; x += dx; dx += cAt(b + j); }
+  const crX = CREST * LOOK.climb.k * hero.crK, crS = hero.crD * LOOK.climb.lead;   // 前方有坡頂：從登山客到坡頂這段的 lead 成開始，路再多往下彎（坡頂提早、清楚地翻過去）
+  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ), dr = Math.max(0, dc - crS); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc - crX * dr * dr; x += dx; dx += cAt(b + j); }
   const hj = HZ / SEG + off; jhG = Math.floor(hj); fhG = hj - jhG;
   camX = lerp(pC[jhG], pC[jhG + 1], fhG) + hero.pan + Math.sin(hero.ph) * 0.012 * bob;
   camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH - Math.abs(Math.sin(hero.ph)) * 0.022 * bob;
