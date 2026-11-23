@@ -58,7 +58,7 @@ let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
 let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積雪多少；snowFall：正在下的雪有多密（兩個都會慢慢變化）
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
 const cSkyT = [0,0,0], cSkyB = [0,0,0], cGrade = [255,255,255], cSun = [0.8,0.12], cSunCol = [255,246,216];
-let SHADOW = null, CONTACT = null, CANOPY = [], DAPPLE = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
+let SHADOW = null, CONTACT = null, CAST = null, CANOPY = [], DAPPLE = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
 const SHOW_FG = false;   // 畫面上下兩端的前景花草（frame_top／frame_bottom）：玩家意見先拿掉，想恢復改成 true
 const WARM_A = 0.5;     // 午後暖光濾鏡強度（soft-light，再乘上太陽可見度）
 const RIM_A = 0.75;     // 前景框（杜鵑、蕨葉）輪廓光強度
@@ -1269,6 +1269,11 @@ function buildStatic(){
   SHADOW = mk(64, 32); let g = SHADOW.getContext('2d'); g.scale(1, 0.5);
   let gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(25,35,20,0.45)'); gr.addColorStop(0.55, 'rgba(25,35,20,0.24)'); gr.addColorStop(1, 'rgba(25,35,20,0)');   // 接觸陰影：深褐綠（跟草地同色系，不會像灰色貼紙）
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  // 投影（跟著太陽拉長的那一截，castFlush 畫）：同樣的顏色，中間深一點、拉長了才看得出來
+  CAST = mk(64, 32); g = CAST.getContext('2d'); g.scale(1, 0.5);
+  const ca = LOOK.shadow.castA;
+  gr = g.createRadialGradient(32, 32, 1, 32, 32, 32); gr.addColorStop(0, 'rgba(25,35,20,' + ca + ')'); gr.addColorStop(0.5, 'rgba(25,35,20,' + (ca * 0.7).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(25,35,20,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   // 接觸陰影：貼著底部、比較小比較深的一片，石頭、灌木、長椅才像壓在地上（不是浮著的貼紙）
   CONTACT = mk(64, 32); g = CONTACT.getContext('2d'); g.scale(1, 0.5);
   gr = g.createRadialGradient(32, 32, 1, 32, 32, 32); gr.addColorStop(0, 'rgba(22,20,18,0.7)'); gr.addColorStop(0.45, 'rgba(22,20,18,0.42)'); gr.addColorStop(1, 'rgba(22,20,18,0)');
@@ -1758,7 +1763,7 @@ function drawMate(mt, j, f, t, fade){
   JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
   hero.ph = mt.d / STRIDE * TAU + 1.3; hero.mv = mt.rest ? 0 : 1; hero.lean = mt.rest ? 0 : 0.45; hero.py = 0; hero.mga = Math.sin(t * 2) * 0.3;
   ctx.globalAlpha = fade;
-  ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
+  footShadow(X, Y, u, 86, 34, SCALE.hero * 100, 1, j);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
     LIT.on = true;   // 隊友跟自己一樣上光（逆光、輪廓光）
@@ -1790,7 +1795,8 @@ function petArt(s, x, y, u, t){
   if (!walk) return false;
   const sitting = hero.mv < 0.3 || s.sleep, h = PET_H[id] || 44;
   const sit = !sitting ? null : ART.get('pet_' + id + '_sit') ? 'pet_' + id + '_sit' : (id === 'shiba' && ART.get('shiba_sit') ? 'shiba_sit' : null);   // 坐姿：pet_<id>_sit，柴犬也接受第一批的 shiba_sit
-  ctx.drawImage(SHADOW, x - 27 * u, y - 10 * u, 50 * u, 20 * u);
+  if (LIT.on) footShadow(x, y, u, 50, 20, h, 1, jhG);   // 登山畫面：影子跟著太陽
+  else ctx.drawImage(SHADOW, x - 27 * u, y - 10 * u, 50 * u, 20 * u);   // 廣場
   ctx.save(); ctx.translate(x, y); ctx.scale(u, u);
   if (sit) artFrame(ctx, sit, 0, 0, 0, h * 0.95);
   else artFrame(ctx, walk, sitting ? 0 : Math.floor(hero.ph / TAU * 8), 0, 0, h);   // 小跑步：一個步伐循環跑兩輪
@@ -1884,7 +1890,7 @@ function drawHero(s, t, bx, by, bs){
   // 腳底影子：跨步時兩腳前後張開，影子前後拉長一點、左右縮一點；再疊一個貼著鞋底的小深影（坐在長椅上就只有椅面上一小片）
   const sd = sit ? 0 : Math.abs(Math.sin(hero.ph)) * hero.mv, sw = 86 * (1 - 0.06 * sd), sh = 34 * (1 + 0.3 * sd);
   if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
-  else ctx.drawImage(SHADOW, X - sw * 0.56 * u, Y - sh * 0.5 * u, sw * u, sh * u);
+  else footShadow(X, Y, u, sw, sh, SCALE.hero * 100, LOOK.shadow.hero, jhG);   // 跟著太陽拉長，比一般影子深一點
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
   if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
@@ -1993,16 +1999,66 @@ const SHC = []; for (let q = -40; q <= 40; q++) SHC.push(q < 0 ? 'rgba(34,40,80,
 function zAt(j){ return (bG + offG) * SEG + pZ[j]; }
 // 路旁貼圖：a 是整體不透明度（遠處淡入、貼近鏡頭淡出都乘在這裡），sh 是影子的不透明度（0＝不畫）
 // 遠處很小的東西不是「小於幾像素就不畫」，而是在 2～4.5 像素之間慢慢淡入；離鏡頭不到 1.5 公尺的慢慢淡出（gz 由 proj 算好）
-// 一種東西的地面影子（往左下偏，光從右上來）＋貼著底部的深色接觸陰影（最寬約 1.3 公尺：樹只壓在樹幹底下，石頭、灌木、長椅整個底部都壓著）
-// 合成一張存在這張圖上（單位：公尺，畫的時候乘上比例）；影子本來就是模糊的，每公尺 24 像素就夠
+// 一種東西的地面影子：貼著底部的深色接觸陰影（最寬約 1.3 公尺：樹只壓在樹幹底下，石頭、灌木、長椅整個底部都壓著）＋腳下一圈淡淡的腳印影子，
+// 合成一張存在這張圖上（單位：公尺，畫的時候乘上比例；跟太陽方向無關，做一次就好）；影子本來就是模糊的，每公尺 24 像素就夠
+// 跟著太陽拉長的那一截（投影）另外畫：往鏡頭這邊（畫面下方）伸過去的部分會落在「比較近、比較晚畫」的地面上，
+// 要等那幾段地面畫完才畫（castQ 排隊，castFlush 在那段地面畫完時畫），不然會被近處的地面蓋掉
 const SHD_PPM = 24;
+const SHD = { dx:-0.48, dy:0.88, len:0.32, cast:1 };
+function shdUpd(){
+  const L = LOOK.shadow, ax = clamp((cSun[0] - 0.5) * L.azK, -0.95, 0.95);
+  SHD.dx = -ax; SHD.dy = Math.sqrt(1 - ax * ax);   // 太陽在右前方 → 影子往左、往鏡頭這邊（畫面下方）
+  SHD.len = lerp(L.len[0], L.len[1], clamp((cSun[1] - L.hi) / (L.lo - L.hi), 0, 1));
+  SHD.cast = lookT(L.cast) * clamp(0.25 + sunVis * 0.75, 0, 1);   // 陰天、雨天看不太到太陽：投影淡，只剩接觸陰影壓著
+}
+// 投影的形狀：從腳印（寬 sw、高 shh 的橢圓）往影子方向伸出 E（物體高 ht × 影子長度），畫成一個轉了角度的橢圓
+// G：中心 (cx, cy)（從腳底量）、角度 ang、長 L、寬 wd（單位跟傳進來的一樣）
+const G_CAST = { cx:0, cy:0, ang:0, L:0, wd:0, E:0 };
+function castGeo(sw, shh, ht){
+  const ux0 = SHD.dx, uy0 = SHD.dy * LOOK.shadow.flat, m = Math.hypot(ux0, uy0) || 1, ux = ux0 / m, uy = uy0 / m, G = G_CAST;
+  const hd = Math.hypot(sw * 0.5 * ux, shh * 0.5 * uy), E = SHD.len * ht * m;
+  G.E = E; G.ang = Math.atan2(uy, ux); G.L = E + hd; G.wd = 2 * Math.hypot(sw * 0.5 * uy, shh * 0.5 * ux) * 0.9; G.cx = ux * E * 0.5; G.cy = uy * E * 0.5;
+  return G;
+}
+// 投影排隊：[中心 x, 中心 y, 角度, 長, 寬, 不透明度, 要在第幾段地面畫完後畫]（畫面像素）；每次畫世界（drawWorld）開始清空、結束時剩下的全部畫掉
+const CQ = { a:new Float32Array(7 * 1024), n:0, j:0, lo:0 };
+// 腳底在畫面 (x, y)、比例 sc（每單位幾像素）、腳印 sw × shh、高 ht、不透明度 a、站在第 j 段
+function castQ(x, y, sc, sw, shh, ht, a, j){
+  if (!(a > 0.01) || qs.light > 0.99 || CQ.n >= 1024) return;   // 畫質最低那兩級不畫投影，只留接觸陰影
+  const G = castGeo(sw, shh, ht); if (G.E * sc < 2) return;
+  const cx = x + G.cx * sc, cy = y + G.cy * sc, L = G.L * sc, wd = G.wd * sc, ye = cy + Math.abs(Math.sin(G.ang)) * L / 2 + Math.abs(Math.cos(G.ang)) * wd / 2;
+  let t = j; while (t > CQ.lo && pY[t] < ye) t--;   // 影子伸到哪一段：那段（和中間幾段）的地面畫完才畫
+  const o = CQ.n++ * 7, q = CQ.a;
+  q[o] = cx; q[o + 1] = cy; q[o + 2] = G.ang; q[o + 3] = L; q[o + 4] = wd; q[o + 5] = a * (1 - qs.light); q[o + 6] = t;
+}
+// 第 j 段地面畫完：輪到的投影畫上去（j 給 -Infinity 就全部畫掉）。同一張影子圖，WebGL 是同一批
+function castFlush(j){
+  if (!CQ.n) return;
+  const q = CQ.a, a0 = ctx.globalAlpha; let w = 0;
+  for (let r = 0; r < CQ.n; r++) {
+    const o = r * 7;
+    if (q[o + 6] < j) { if (w !== r) q.copyWithin(w * 7, o, o + 7); w++; continue; }
+    ctx.save(); ctx.translate(q[o], q[o + 1]); ctx.rotate(q[o + 2]); ctx.globalAlpha = q[o + 5];
+    ctx.drawImage(CAST, -q[o + 3] / 2, -q[o + 4] / 2, q[o + 3], q[o + 4]); ctx.restore();
+  }
+  CQ.n = w; ctx.globalAlpha = a0;
+}
+// 人、寵物腳下的影子（腳底 (X, Y)、u：每公分幾像素、腳印 sw × shh 公分、身高 ht 公分、站在第 j 段）：腳印馬上畫，投影排隊；dark：深淺倍數，超過 1 再疊一層
+function footShadow(X, Y, u, sw, shh, ht, dark, j){
+  const a0 = ctx.globalAlpha;
+  ctx.drawImage(SHADOW, X - sw * 0.5 * u, Y - shh * 0.5 * u, sw * u, shh * u);
+  if (dark > 1) { ctx.globalAlpha = a0 * Math.min(1, dark - 1); ctx.drawImage(SHADOW, X - sw * 0.5 * u, Y - shh * 0.5 * u, sw * u, shh * u); ctx.globalAlpha = a0; }
+  castQ(X, Y, u, sw, shh, ht, a0 * SHD.cast * Math.min(dark, 1.6), j);
+}
+// 接觸陰影的大小位置（每種東西算一次）
+function sprContact(sp){ if (!sp.ct) { const cw = Math.min(sp.w * 0.78, 1.3), ch = Math.min(cw * 0.3, sp.hm * 0.3); sp.ct = { x:-cw * 0.55, y:-ch * 0.62, w:cw, h:ch }; } return sp.ct; }
 function sprShadow(sp){
-  const dw = sp.w, dh = sp.hm, sw = dw * 1.05, shh = Math.min(sw * 0.36, dh * 0.5), cw = Math.min(dw * 0.78, 1.3), ch = Math.min(cw * 0.3, dh * 0.3);
-  const x0 = Math.min(-sw * 0.62, -cw * 0.55), y0 = Math.min(-shh * 0.55, -ch * 0.62), x1 = Math.max(sw * 0.38, cw * 0.45), y1 = Math.max(shh * 0.45, ch * 0.38);
+  const dw = sp.w, dh = sp.hm, sw = dw * 1.05, shh = Math.min(sw * 0.36, dh * 0.5), ct = sprContact(sp);
+  const x0 = Math.min(-sw * 0.5, ct.x), y0 = Math.min(-shh * 0.55, ct.y), x1 = Math.max(sw * 0.5, ct.x + ct.w), y1 = Math.max(shh * 0.45, ct.y + ct.h);
   const c = mk((x1 - x0) * SHD_PPM, (y1 - y0) * SHD_PPM), g = c.getContext('2d'), kx = c.width / (x1 - x0), ky = c.height / (y1 - y0);
-  g.drawImage(SHADOW, (-sw * 0.62 - x0) * kx, (-shh * 0.55 - y0) * ky, sw * kx, shh * ky);
-  g.globalAlpha = 0.85; g.drawImage(CONTACT, (-cw * 0.55 - x0) * kx, (-ch * 0.62 - y0) * ky, cw * kx, ch * ky);
-  return (sp.sd = { c:c, x:x0, y:y0, w:x1 - x0, h:y1 - y0 });
+  g.drawImage(SHADOW, (-sw * 0.5 - x0) * kx, (-shh * 0.55 - y0) * ky, sw * kx, shh * ky);
+  g.globalAlpha = 0.85; g.drawImage(CONTACT, (ct.x - x0) * kx, (ct.y - y0) * ky, ct.w * kx, ct.h * ky);
+  return (sp.sd = { c:c, x:x0, y:y0, w:x1 - x0, h:y1 - y0, sw:sw, shh:shh });
 }
 // 伸進路面的植物走到登山客旁邊時慢慢變透明（從他身後 1 公尺到身前 0.2 公尺），才不會擋到人；以前是一走到他前面就整株消失。要在 proj 之後叫（用 gz）
 function intrA(rw, xo, w){ const k = clamp((rw + 0.3 - (xo - w * 0.5)) / 0.4, 0, 1); return 1 - k * (1 - clamp((gz - HZ + 0.2) / 1.2, 0, 1)); }
@@ -2010,10 +2066,14 @@ function drawSpr(sp, x, y, sc, fq, sh, a){
   // 只有在鏡頭後面（真正的距離被 proj 壓到下限）才不畫；鏡頭前再近都照原本大小畫，自己滑出畫面（以前離鏡頭 1.5 公尺內慢慢變透明，畫面邊緣的東西會提早不見）
   const dw = sp.w * sc, dh = sp.hm * sc, k = a * clamp((dh - 2) / 2.5, 0, 1) * (gz > NEAR_GZ ? 1 : 0); if (k < 0.01) return;
   const x0 = x - dw * 0.5; if (offView(x0, y - dh, dw, dh)) return;
-  sh *= 1 - qs.light;
-  if (sh > 0.01) {   // 地面影子＋接觸陰影：每種東西先合成一張（sprShadow），一次畫完（以前每棵樹、每叢草都要畫兩次）
-    const d = sp.sd || sprShadow(sp);
-    ctx.globalAlpha = k * sh; ctx.drawImage(d.c, x + d.x * sc, y + d.y * sc, d.w * sc, d.h * sc);
+  if (sh > 0.01) {   // 地面影子＋接觸陰影：每種東西先合成一張（sprShadow），一次畫完（以前每棵樹、每叢草都要畫兩次）；跟著太陽伸出去的投影排隊（castQ）
+    const lc = qs.light;   // 畫質最低那兩級只留接觸陰影（一張小圖），不畫腳印和投影；換級時兩種交叉淡換
+    if (lc < 0.99) {
+      const d = sp.sd || sprShadow(sp);
+      ctx.globalAlpha = k * sh * (1 - lc); ctx.drawImage(d.c, x + d.x * sc, y + d.y * sc, d.w * sc, d.h * sc);
+      castQ(x, y, sc, d.sw, d.shh, sp.hm, k * sh * SHD.cast, CQ.j);
+    }
+    if (lc > 0.01) { const ct = sprContact(sp); ctx.globalAlpha = k * sh * lc * 0.85; ctx.drawImage(CONTACT, x + ct.x * sc, y + ct.y * sc, ct.w * sc, ct.h * sc); }
   }
   const px = dw * DPR;
   ctx.globalAlpha = k;
@@ -2537,10 +2597,10 @@ function drawWorld(b, t, jHi, jLo, far){
   const snowTrees = snowAmt > 0.5 && SPR.coniferS;
   const lightA = (isNight || isRain || isFog || isSnow) ? 0 : clamp((sunVis - 0.3) / 0.5, 0, 1) * (1 - qs.light);   // 樹影、光斑：要有太陽才畫
   let j, k, pi = AP.length - 1;
-  heroDone = !!far; lodSkip = false;
+  heroDone = !!far; lodSkip = false; CQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
   for (j = jHi; j >= jLo; j--) {
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
-    const skipG = lodSkip; lodSkip = false;
+    const skipG = lodSkip; lodSkip = false; CQ.j = j;
     const lod = j > jLo && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1;
     if (lod) { lodSave(j); lodSkip = true; }
     // 整段地面都在畫面下緣以外：不畫地面，但路旁的樹、草叢照畫（高的樹根部在畫面外、樹冠還看得到），讓它們自己滑出畫面邊緣
@@ -2729,6 +2789,7 @@ function drawWorld(b, t, jHi, jLo, far){
       }
       if (farA(j, turfJ(), 8) > 0 && TURF.length && snowAmt < 0.9) drawTurf(i, j, y1, y2, s1, fq, fade, DS, dW1, Math.min(gw1, rw + lerp(30, 7, wallAt(i)))); if (lightA > 0.01) groundLight(i, j, t, fq, fade * lightA);   // 森林步道外側被植物牆擋住，草叢只蓋到路邊幾公尺（省效能）   // 畫在路面之後：路邊第一排草會垂到土坎上
     }
+    castFlush(j);   // 這段地面畫完：落在這段（和更遠幾段）的投影畫上去，再畫這段的植物、道具
     if (lod) lodRestore(j);   // 植物、道具照原本這一段的位置畫
     // 路旁植物：每段 4 個固定亂數位置（由遠到近）；森林步道的樹離路比較近、比較密，兩邊像一道樹牆
     const wl = wallAt(i), treeP = al ? lerp(0.5, 0.06, clamp(z0 / total, 0, 1)) : lerp(treeBase, 0.8, wl), spread = 26 * (1 - 0.6 * wl);
@@ -2832,6 +2893,7 @@ function drawWorld(b, t, jHi, jLo, far){
     for (k = 0; k < mates.length; k++) { const mt = mates[k]; if (mt.d >= z0 && mt.d < z0 + SEG) drawMate(mt, j, (mt.d - z0) / SEG, t, fade); }
   }
   if (!heroDone) { drawHero(s, t); heroDone = true; }
+  castFlush(-Infinity);   // 還沒輪到的投影（伸到畫面最下面那段之外）全部畫掉
   ctx.globalAlpha = 1;
 }
 
@@ -3105,7 +3167,7 @@ S.render = function(s){
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
   if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
-  updPalette(wx, frac, dt); litUpd(); updHero(s, t, dt, dist, sp); stepMates(dt);
+  updPalette(wx, frac, dt); litUpd(); shdUpd(); updHero(s, t, dt, dist, sp); stepMates(dt);
   if (ctx.gpu) ctx.begin();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
