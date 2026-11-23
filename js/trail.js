@@ -145,7 +145,7 @@ const GAIT = {
   bendHold:1,                           // 彎度要連續超過門檻這麼多秒（真的在走路的時間）才換轉身圖
   stairIn:0.45, stairOut:0.25,          // 爬階梯傾身多大換階梯走路圖（換回來的門檻小一點，不會在階梯段頭尾來回換）
   upFull:0.35, upStride:0.75, upPace:0.8,   // 上坡（不是階梯）：坡度到 35% 算最陡，最陡時步子只剩 0.75、前進速度只剩 0.8（一步一步踩上去，腳不在地上滑）
-  walkHz:1.0,                           // 平路每秒走幾步：每座山都一樣（山友紀錄的速度從每秒 0.24 到 0.83 公尺都有，步數固定、步子大小跟著速度變，走路的樣子才不會一座山快、一座山像慢動作）
+  walkHz:1.1,                           // 平路每秒走幾步：每座山都一樣（山友紀錄的速度從每秒 0.24 到 0.83 公尺都有，步數固定、步子大小跟著速度變，走路的樣子才不會一座山快、一座山像慢動作）
   stairHz:1.15,                         // 爬階梯每秒踩幾階：每座山都一樣（但不會比平路走得快：慢的山照原本速度）
   stairPace:0.85,                       // 爬階梯：前進速度只剩這麼多（背大背包一階一階往上，約一秒一步多一點）
   tiredOut:4,                           // 累了以後體力要回到 tired + 4 % 才換回一般走路圖
@@ -433,11 +433,15 @@ function texSnap(yA, y0, yB, h, q, n){ return h > 0.01 ? (yA - Math.round(lerp(y
 // 每條貼圖用同一個橫向比例，條與條交界在路緣那邊會錯開「條高 × 0.26」像素左右（路中間不錯開）：近處花紋大看得出來（像撕開的紙），
 // 所以近處（每公尺超過 SUB_NEAR_S 像素）的路面切細一點；一段最多切 SUB_MAX 條，畫面下緣以外那截不切
 const SUB_MAX = 64, SUB_PX_NEAR = 4, SUB_NEAR_S = 100;
-function texRun(T, uc, xA, yA, sA, xB, yB, sB, zA, a, path, sub){
+function texRun(T, uc, xA, yA, sA, xB, yB, sB, zA, a, path, sub, tv){
   const h = yA - yB;
   a *= clamp((h - TEX_MINPX) / TEX_MINPX, 0, 1);   // 遠處這段在畫面上不到一兩個像素高：貼圖的花紋已經看不出來，慢慢淡掉不畫（省效能）
   if (!T || a < 0.01) return;
-  const y0 = Math.min(yA, H + 2), n = clamp(Math.ceil((y0 - yB) / (sub || (sA > SUB_NEAR_S ? SUB_PX_NEAR : SUB_PX))), 1, SUB_MAX), dzA = F / sA;   // 畫面下緣以外的那截不切（看不到）
+  // 從畫面哪裡開始切：中心線進了畫面下緣的那裡。路旁坡面往上升時，坡面的邊比中心線早進畫面：tv（0～1）是坡面最早進畫面的比例，切點跟著往近端挪。
+  // 中心線整段都在畫面下緣以外、坡面也沒進來（y0 ≤ yB）就不畫：以前會反方向切一條 y0→yB 的橫條，距離差變負的、貼圖被拉成一條條直紋
+  const yc = Math.min(yA, H + 2), y0 = tv == null ? yc : Math.min(yA, Math.max(yc, lerp(yA, yB, clamp(tv, 0, 1))));
+  if (y0 <= yB) return;
+  const n = clamp(Math.ceil((y0 - yB) / (sub || (sA > SUB_NEAR_S ? SUB_PX_NEAR : SUB_PX))), 1, SUB_MAX), dzA = F / sA;   // 畫面下緣以外的那截不切（看不到）
   let tp = texSnap(yA, y0, yB, h, 0, n);
   for (let q = 1; q <= n; q++) {
     const t = texSnap(yA, y0, yB, h, q, n);
@@ -2158,6 +2162,16 @@ function bandEnd(i, side, DS, nS, dW, gw, mo, x, y, s, X, Y, D, Ht){
 const tLvS = new Int8Array(16);
 // 這一邊草地那幾條帶子在 a～b 這一截的形狀（給 texRun；重複用同一個函式，不每段每邊產生新的小函式，少一點記憶體回收的停頓）
 let gNS = 0;
+// 這一側坡面的貼圖要從這段的幾成開始切（0＝近端、1＝遠端）：每一小塊坡面（兩條相鄰的帶子）上緣進畫面下緣的比例，取最早的；整塊在畫面左右以外的不算
+function grassVisT(nS){
+  let t = 1;
+  for (let k = 1; k < nS - 1; k++) {
+    if (Math.max(tX1[k], tX1[k + 1], tX2[k], tX2[k + 1]) < 0 || Math.min(tX1[k], tX1[k + 1], tX2[k], tX2[k + 1]) > W) continue;
+    const m1 = Math.min(tY1[k], tY1[k + 1]), m2 = Math.min(tY2[k], tY2[k + 1]), tk = m1 <= H + 2 ? 0 : m2 >= H + 2 ? 1 : (m1 - H - 2) / (m1 - m2);
+    if (tk < t) t = tk;
+  }
+  return t;
+}
 function grassPath(a, b){
   for (let k = 1; k < gNS - 1; k++) { ctx.moveTo(lerp(tX1[k], tX2[k], a), lerp(tY1[k], tY2[k], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], a), lerp(tY1[k + 1], tY2[k + 1], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], b), lerp(tY1[k + 1], tY2[k + 1], b)); ctx.lineTo(lerp(tX1[k], tX2[k], b), lerp(tY1[k], tY2[k], b)); ctx.closePath(); }
 }   // 兩側各自的坡面明暗（畫草叢時查）
@@ -2380,6 +2394,25 @@ const SOFT_PN = 12, SOFT_P = new Float32Array((SOFT_K + 1) * 2 * SOFT_PN);   // 
 const SBAND = new Float32Array(18);   // 兩邊草地第一、二條線的近端、遠端 x、y 和兩條線相距幾公尺（drawWorld 畫草地時記下來，路緣的磨損草色帶照這個貼在地形上）
 const softSH = new Int8Array(2);       // 兩邊草地第一條蓋的陡坡陰影／受光是第幾階（0＝沒蓋）：草唇蓋同一層，草唇和草地之間不會有一條明暗交界
 // 很陡的坡蓋的那層陰影／受光是第幾階（SHC 的 -40～40；緩坡 0 不蓋）
+// 第 k 條坡面帶子蓋的陰影／受光（q）：跟前一條（qp）差很多時，一開始那段先從前一條的濃度一小階一小階換成自己的，
+// 以前整條帶子一整塊同濃度，兩條交界是一條筆直的斜硬邊（亮的平坡接到暗的陡坡，路邊草地上最明顯）
+const SHC_RAMP_MIN = 6, SHC_RAMP_N = 2, SHC_RAMP_W = 0.8;   // 差幾階以上才漸層、分幾小條、漸層佔這條帶子寬的幾成
+function shcBand(k, q, qp){
+  if (!q && !qp) return;
+  let u0 = 0;
+  if (Math.abs(q - qp) >= SHC_RAMP_MIN) {
+    for (let m = 0; m < SHC_RAMP_N; m++) {
+      const ua = SHC_RAMP_W * m / SHC_RAMP_N, ub = SHC_RAMP_W * (m + 1) / SHC_RAMP_N, qm = Math.round(qp + (q - qp) * (m + 0.5) / SHC_RAMP_N);
+      if (!qm) continue;
+      ctx.fillStyle = SHC[qm + 40];
+      quad(lerp(tX1[k], tX1[k + 1], ua), lerp(tY1[k], tY1[k + 1], ua), lerp(tX1[k], tX1[k + 1], ub), lerp(tY1[k], tY1[k + 1], ub), lerp(tX2[k], tX2[k + 1], ub), lerp(tY2[k], tY2[k + 1], ub), lerp(tX2[k], tX2[k + 1], ua), lerp(tY2[k], tY2[k + 1], ua));
+    }
+    u0 = SHC_RAMP_W;
+  }
+  if (!q) return;
+  ctx.fillStyle = SHC[q + 40];
+  quad(lerp(tX1[k], tX1[k + 1], u0), lerp(tY1[k], tY1[k + 1], u0), tX1[k + 1], tY1[k + 1], tX2[k + 1], tY2[k + 1], lerp(tX2[k], tX2[k + 1], u0), lerp(tY2[k], tY2[k + 1], u0));
+}
 function shcQ(t){ const v = Math.abs(t); return v <= 0.3 ? 0 : Math.round((v - 0.3) / 0.7 * 40) * (t < 0 ? -1 : 1); }
 const softG = new Int8Array(2);        // 兩邊草地第一條的明暗（drawWorld 畫草地時記下來，草唇用同一個顏色）
 // 一段平路兩邊的路緣（路面畫完之後叫）：x1、yb、s1 近端，x2、y2、s2 遠端，w1、w2 兩端的路半寬（像素），a 不透明度，ta 草地貼圖的不透明度，zA 這段近端的世界位置
@@ -2830,14 +2863,13 @@ function drawWorld(b, t, jHi, jLo, far){
           ctx.fill();
         }
         if (TEX.grass && ta > 0.03) {   // 草地貼圖：近處切成薄橫條各自對齊透視，跟前後段接得起來（下雪時淡掉，露出底下積雪的白色坡面）
-          gNS = nS; texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * GRASS_A * (1 - snowFall * snowAmt * 0.85), grassPath, SUB_GRASS);
+          gNS = nS; texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * GRASS_A * (1 - snowFall * snowAmt * 0.85), grassPath, SUB_GRASS, grassVisT(nS));
           ctx.globalAlpha = fade;
         }
         // 很陡的坡再蓋一層陰影／受光（蓋在貼圖上，從 0.3 開始由 0 慢慢加深，不會突然出現；遠處跟著霧變淡）。緩坡只靠底色，少蓋一層省效能
         ctx.globalAlpha = fade * (1 - fq * 0.8);
         for (k = 1; k < nS - 1; k++) {
-          const q = shcQ(tSh[k]); if (!q) continue;
-          ctx.fillStyle = SHC[q + 40]; quad(tX1[k], tY1[k], tX1[k + 1], tY1[k + 1], tX2[k + 1], tY2[k + 1], tX2[k], tY2[k]);
+          shcBand(k, shcQ(tSh[k]), k > 1 ? shcQ(tSh[k - 1]) : shcQ(tSh[k]));
         }
         ctx.globalAlpha = fade;
         if (isWood && side < 0) {                // 木棧道架在地面上：光從右上來，左邊草地上落一條棧道的影子

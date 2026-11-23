@@ -60,6 +60,7 @@
       for (const k in SV.encSeen) if (!ENID.has(k)) delete SV.encSeen[k];
     }
   } catch(e){ SV = blank(); }
+  SX.fitDone = () => SV.done;   // 體能（data.js 的 SX.fitness）從這份存檔的登頂次數算，登山客的步速跟著變
   // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
   if (!SV.born) { const ds = [...Object.values(SV.stamps), ...Object.values(SV.bagLog).map(x => x && x.first), ...Object.values(SV.encSeen).map(x => x && x.first), ...SV.photos.map(p => p.date)].filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d)); SV.born = ds.length ? new Date(Math.min(...ds)).toLocaleDateString('zh-TW') : today(); }
   let saveWarned = false;
@@ -1306,6 +1307,7 @@
     const hm = sec >= 3600 ? `${Math.floor(sec / 3600)} 小時 ${Math.floor(sec % 3600 / 60)} 分` : `${Math.floor(sec / 60)} 分`;
     const bTot = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0), bGot = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0);
     const row = (name, n, tot) => `<div class="pfRow"><span>${name}</span><div class="dyBar"><i style="width:${tot ? Math.min(100, n / tot * 100) : 0}%"></i></div><b>${n} / ${tot}</b></div>`;
+    const fit = SX.fitness(SV.done);
     const who = (SX.social && SX.social.acct && SX.social.acct.name) || '山友';
     modal(`<button class="cbtn sm mBack" id="pfX">← 返回</button><h3>我的山行紀錄</h3>
       <div class="pfHead">${petSvg(SV.pet)}<div><b>${who}</b>${SV.title ? `<small>${SV.title}</small>` : ''}<small>${SV.born} 開始登山・第 ${days} 天</small></div></div>
@@ -1317,6 +1319,7 @@
         <div class="paper"><small>連續上山</small><b>${(SV.daily && SV.daily.streak) || 0} 天</b></div>
         <div class="paper"><small>最長連續</small><b>${Math.max(S.bestStreak || 0, (SV.daily && SV.daily.streak) || 0)} 天</b></div>
       </div>
+      <div class="paper pfFit"><small>體能</small><b>${fit.toFixed(3)}</b><div class="dyBar"><i style="width:${(fit - 1) / (SX.FIT.MAX - 1) * 100}%"></i></div><p>每次登頂都會讓身體慢慢變強，越難的山第一次登頂加得越多</p></div>
       <div class="grp">成就</div>
       ${row('徽章', bGot, bTot)}
       ${row('寶物', SX.TREASURES.filter(x => SV.bag[x.id] > 0).length, SX.TREASURES.length)}
@@ -1331,7 +1334,9 @@
   function arrive(){
     arrived = true; st.dist = M.dist; st.fin = true; st.rest = false; st.stopAt = null;
     $('#restSheet').classList.remove('on');
+    const fit0 = SX.fitness(SV.done);
     SV.done[M.id] = (SV.done[M.id] || 0) + 1;
+    const fit1 = SX.fitness(SV.done), fitUp = fit1 - fit0 > 1e-9 ? `體能 +${(fit1 - fit0).toFixed(3)}（${fit1.toFixed(3)}）` : '';
     SV.stamps[M.id] = SV.stamps[M.id] || today();
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
     if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
@@ -1357,6 +1362,7 @@
         ${gift ? `<div class="giftRow ${RAR_CLS[gift.rarity] || ''}" style="${RAR_BG[gift.rarity] || ''}">${trSvg(gift)}<span><small>第一次登頂的禮物</small><b>${gift.name}</b><span class="chip" style="background:${RAR_COL[gift.rarity]}">${gift.rarity}</span></span></div>` : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
         <p class="summitBig">集印帳蓋上新的章了！</p>
+        ${fitUp ? `<p class="summitBig fitUp">${fitUp}</p>` : ''}
         ${nxt ? `<p class="summitBig">下一座推薦：${nxt.name}（難度 ${'★'.repeat(nxt.diff)}）</p>` : ''}
         <div class="mBtns"><button class="cbtn go" id="aMap">${nxt ? '看下一座' : '回地圖'}</button></div>`, true);
       $('#aMap').onclick = () => { closeModal(); SV.cur = null; save(); go('map'); if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
