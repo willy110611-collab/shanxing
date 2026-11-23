@@ -63,7 +63,7 @@
     if (p === '/login') { if (String(b.password).length < 6) throw new Error('名字或密碼不對'); return Object.assign({}, FAKE_ACCT, { login: b.name }); }   // 假伺服器：密碼少於 6 個字就當作打錯
     if (p === '/password') return { ok: true, login: String(b.login).toLowerCase() };
     // 入園名額：假的名額表（數字故意跟伺服器不同，只看畫面用）。玉山 5／12 還有位子；嘉明湖 8／8 滿了；加 &fakequota=open 兩座都有位子
-    if (p === '/quota') { fakeQ = fakeQ || [{ id: 'yushan', name: '玉山主峰', cap: 12, used: 5, peaks: ['yushan'] }, { id: 'jiaming', name: '嘉明湖', cap: 8, used: /[?&]fakequota=open\b/.test(location.search) ? 3 : 8, peaks: ['jiaming', 'sancha'] }];
+    if (p === '/quota') { fakeQ = fakeQ || [{ id: 'yushan', name: '玉山主峰', cap: 12, used: 5, peaks: ['yushan'] }, { id: 'jiaming', name: '嘉明湖', cap: 8, used: /[?&]fakequota=open\b/.test(location.search) ? 3 : 8, peaks: ['jiaming', 'xiangyang', 'sancha'] }];
       return { day: '', quotas: fakeQ.map(q => Object.assign({}, q)), mine: fakeMine.slice() }; }
     if (p === '/quota/claim') { const q = (fakeQ || []).find(x => x.peaks.includes(b.mountain)); if (!q) return { ok: true, open: true };
       if (fakeMine.includes(q.id)) return { ok: true, used: q.used, cap: q.cap, again: true };

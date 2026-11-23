@@ -20,8 +20,8 @@ const PING = JSON.stringify({ type: 'ping' }), PONG = JSON.stringify({ type: 'po
 const QUOTA = {
   // 玉山主峰：排雲山莊 136 床（2026-09-01 起由 116 床增加）＋單攻 60 人＝每天 196。來源：udn.com/news/story/7266/9655516
   yushan: { name: '玉山主峰', cap: 196, peaks: ['yushan'] },
-  // 嘉明湖（走到嘉明湖、三叉山的路線）：每天 176。來源：台東林管處較早的總量管制報導 thenewslens.com/article/58242（可能已經過時，要再查新的公告）
-  jiaming: { name: '嘉明湖', cap: 176, peaks: ['jiaming', 'sancha'] },
+  // 嘉明湖（向陽步道：走到嘉明湖、向陽山、三叉山都算）：每天 176。來源：台東林管處較早的總量管制報導 thenewslens.com/article/58242（可能已經過時，要再查新的公告）
+  jiaming: { name: '嘉明湖', cap: 176, peaks: ['jiaming', 'xiangyang', 'sancha'] },
   // 雪山主峰：雪山登山口每天 160 人（平日、假日一樣，官方入園總量）。來源：hike.taiwan.gov.tw/bed_1.aspx（宿營地與床位概況）
   xueshan: { name: '雪山主峰', cap: 160, peaks: ['xueshan'] },
 };

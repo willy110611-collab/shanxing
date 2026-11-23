@@ -127,17 +127,20 @@
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
 
-  function toast(msg, ms = 2200){ MO.toast(msg, ms); }
-  // 背景通知（隱藏任務完成、離開時自己走了多遠）：讀取畫面還沒收、有彈出視窗、或正在跳別的提示時先排隊，
-  // 等視窗關掉、上一則提示收起來才一則一則跳出來，不會蓋住「你不在的時候」這類視窗的標題
+  let bgNote = null;   // 正在顯示的那則背景通知 [文字, 毫秒]；玩家按出來的提示是 null
+  function toast(msg, ms = 2200){ bgNote = null; MO.toast(msg, ms); }
+  // 背景通知（隱藏任務完成、離開時自己走了多遠、這次的小目標）：讀取畫面還沒收、有彈出視窗、或正在跳別的提示時先排隊，
+  // 等視窗關掉、上一則提示收起來才一則一則跳出來，不會蓋住「你不在的時候」這類視窗的標題。
+  // 已經跳出來的背景通知，碰到視窗打開（modal）就先收起來、排回最前面，視窗關掉再跳
   const noticeQ = [];
   function notice(msg, ms = 2800){ noticeQ.push([msg, ms]); pumpNotice(); }
   function pumpNotice(){
     const L = $('#loading');
     const diary = screen === 'climb' && st && st.away;   // 「你不在的時候」日記等一下就會打開：等它看完
     if (!noticeQ.length || (L && !L.classList.contains('done')) || diary || $('#modal').classList.contains('on') || $('#toast').classList.contains('on')) return;
-    const [msg, ms] = noticeQ.shift(); toast(msg, ms);
+    const n = noticeQ.shift(); toast(n[0], n[1]); bgNote = n;
   }
+  function holdNotice(){ if (!bgNote || !$('#toast').classList.contains('on')) return; noticeQ.unshift(bgNote); bgNote = null; MO.toastOff(); }
   function fitNotice(){ if (!fitDecayed) return; fitDecayed = false; notice('好久沒運動，體能掉了一點，多爬幾趟就會回來', 3600); }
   fitNotice();
   $('#toast').addEventListener('transitionend', e => { if (e.propertyName === 'opacity' && !e.target.classList.contains('on')) pumpNotice(); });
@@ -146,7 +149,7 @@
   document.addEventListener('pointerdown', e => { lastTap = { x: e.clientX, y: e.clientY }; }, { passive:true });
 
   // rise：奇遇、登頂、寶物這種卡片，由下面彈上來（一般視窗是放大跳出）
-  function modal(html, rise){ const c = $('#mCard'); c.innerHTML = html; c.scrollTop = 0; c.classList.toggle('rise', !!rise); $('#modal').classList.add('on'); paused = true; if (rise) MO.rise(c); }
+  function modal(html, rise){ holdNotice(); const c = $('#mCard'); c.innerHTML = html; c.scrollTop = 0; c.classList.toggle('rise', !!rise); $('#modal').classList.add('on'); paused = true; if (rise) MO.rise(c); }
   function closeModal(){ $('#modal').classList.remove('on'); paused = false; if (st && screen === 'climb') st.last = Date.now(); queueMicrotask(pumpNotice); }   // 等這次點擊處理完（可能馬上又開下一個視窗）再看要不要跳排隊的通知
 
   // ───────── 天氣 ─────────
@@ -675,7 +678,7 @@
     }
     if (!g) return;
     st.seg = { m:g.m, name:g.name };
-    toast(`這次的小目標：${g.name}（約 ${segMin()} 分鐘）`, 3200);
+    notice(`這次的小目標：${g.name}（約 ${segMin()} 分鐘）`, 3200);
   }
   const segRoll = mid => Math.random() < SEG_LUCK ? rollTreasure(mid, x => x.rarity === '普通' && !AUTO_GIVEN.has(x.id)) : null;   // 不給登頂紀念章這種本來就會拿到的
   function reachSeg(){
@@ -685,7 +688,7 @@
     const got = [];
     if (g.m % 500) { takePhoto(g.m, true, g.name); got.push('明信片收進相簿'); }   // 500 公尺點本來就會拍一張
     const tr = segRoll(M.id); if (tr) { gainTreasure(tr, 'quiet'); got.push(`撿到「${tr.name}」`); }
-    toast(`✓ 到了${g.name}${got.length ? '・' + got.join('・') : ''}`, 3400);
+    notice(`✓ 到了${g.name}${got.length ? '・' + got.join('・') : ''}`, 3400);
     say(pick(SX.LINES.seg)); A.chime();
     segEl.textContent = `✓ 到了：${g.name}`; segEl.classList.add('on', 'done'); segDoneT = 3;
     save();

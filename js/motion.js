@@ -118,6 +118,8 @@
     if (again && !calm()) run(t, [{ transform:'translate(-50%,0) scale(.94)' }, { transform:'translate(-50%,0)' }], { duration:300, easing:SPRING });
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), ms);   // 停留的時間（不是動畫）
   }
+  // 提示先收起來（視窗打開時，背景通知讓位）
+  function toastOff(){ const t = $('#toast'); if (!t) return; clearTimeout(t._h); t.classList.remove('on'); }
 
   // ───── 交錯出場：一個接一個淡入上升，每個間隔 40～60 毫秒，全部最多半秒 ─────
   function stagger(root, sel){
@@ -348,5 +350,5 @@
   // 換到另一張以後（減少動態時沒有滑動），新的那張淡入
   function viewSwap(el){ return calm() ? run(el, [{ opacity:0 }, { opacity:1 }], { duration:160 }) : Promise.resolve(null); }
 
-  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager };
+  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager };
 })();
