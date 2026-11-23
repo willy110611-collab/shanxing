@@ -852,11 +852,15 @@
   // 台詞
   const BUB_X = 30, BUB_Y = 18;   // 對話框離頭的中心往旁邊幾像素、從頭頂往下幾像素（框的下緣）
   function say(txt, ms = 2600){
-    const b = $('#bubble'), cp = SC.charPos();
-    // 對話框放在頭的旁邊（不擋住前面的路，2026-11-24 回報）：預設在右邊，放不下就放左邊；尾巴指向頭
-    b.textContent = txt; const bw = b.offsetWidth, W0 = b.parentElement.clientWidth, R = cp.x + BUB_X + bw <= W0 - 8 || W0 - cp.x >= cp.x, x = R ? Math.min(cp.x + BUB_X, W0 - 8 - bw) : Math.max(8, cp.x - BUB_X - bw);   // 放得下的那一邊（都放不下就放空間大的那邊）
-    b.classList.toggle('left', !R); b.style.left = x + 'px'; b.style.top = (cp.y + BUB_Y) + 'px';
+    const b = $('#bubble');
+    b.textContent = txt; b._w = b.offsetWidth; placeBubble();
     b.classList.add('on'); clearTimeout(b._h); b._h = setTimeout(() => b.classList.remove('on'), ms);
+  }
+  // 對話框跟著頭：說話那一刻人可能還沒坐到長椅上（開始休息的下一格才畫在長椅上，2026-11-24 回報泡泡沒對在長椅上的人），所以對話框開著時每一格都重新放
+  // 放在頭的旁邊（不擋住前面的路）：預設在右邊，放不下就放左邊；尾巴指向頭
+  function placeBubble(){
+    const b = $('#bubble'), cp = SC.charPos(), bw = b._w, W0 = b.parentElement.clientWidth, R = cp.x + BUB_X + bw <= W0 - 8 || W0 - cp.x >= cp.x, x = R ? Math.min(cp.x + BUB_X, W0 - 8 - bw) : Math.max(8, cp.x - BUB_X - bw);   // 放得下的那一邊（都放不下就放空間大的那邊）
+    b.classList.toggle('left', !R); b.style.left = x + 'px'; b.style.top = (cp.y + BUB_Y) + 'px';
   }
 
   // ───────── 寶物 ─────────
@@ -1679,6 +1683,7 @@
       say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'snow' ? SX.LINES.snow : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
     wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
     SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, vBase: baseSpeed(M) * devX(), boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam, ft:ftNow, fps:fpsNow });   // ft、fps：給自動畫質量真正每格花多久
+    if ($('#bubble').classList.contains('on')) placeBubble();
     if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
     updTag();
     hudT -= dt; if (hudT <= 0) { hudT = 0.2; hudTick(); }
