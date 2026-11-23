@@ -856,9 +856,12 @@
   }
 
   // 台詞
+  const BUB_X = 30, BUB_Y = 18;   // 對話框離頭的中心往旁邊幾像素、從頭頂往下幾像素（框的下緣）
   function say(txt, ms = 2600){
     const b = $('#bubble'), cp = SC.charPos();
-    b.textContent = txt; b.style.left = cp.x + 'px'; b.style.top = (cp.y - 12) + 'px';
+    // 對話框放在頭的旁邊（不擋住前面的路，2026-11-24 回報）：預設在右邊，放不下就放左邊；尾巴指向頭
+    b.textContent = txt; const bw = b.offsetWidth, W0 = b.parentElement.clientWidth, R = cp.x + BUB_X + bw <= W0 - 8, x = R ? cp.x + BUB_X : Math.max(8, cp.x - BUB_X - bw);
+    b.classList.toggle('left', !R); b.style.left = x + 'px'; b.style.top = (cp.y + BUB_Y) + 'px';
     b.classList.add('on'); clearTimeout(b._h); b._h = setTimeout(() => b.classList.remove('on'), ms);
   }
 

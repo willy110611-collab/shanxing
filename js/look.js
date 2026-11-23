@@ -15,7 +15,8 @@ SX.look = {
     sunset: { sat:1.10, con:1.07 },
     dusk:   { sat:1.02, con:1.06 },
     night:  { sat:0.88, con:1.02 },
-    fog:    { sat:0.84, con:0.92 }
+    fog:    { sat:0.84, con:0.92 },
+    rain:   { sat:0.86, con:1.0 }    // 雨天：顏色灰一點（濕濕的）
   },
   // 逆光：太陽在前方天空，登山客、寵物、隊友是背對太陽的，身上整體壓暗一點、往偏藍紫的顏色混一點
   back: { dawn:0.12, day:0.14, sunset:0.2, dusk:0.18, night:0 },
