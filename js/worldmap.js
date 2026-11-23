@@ -28,7 +28,7 @@ const S = {
   cam:{x:280,y:400,z:1}, tgt:{x:280,y:400,z:1}, camInit:false,
   data:{ mountains:[], coast:[], ridge:[], done:{}, prog:{}, current:null, locked:{}, photos:{}, pet:null },
   T:null, dirty:true, running:false, raf:0, last:0, t:0, drawn:0, input:0,
-  cb:null, bgCb:null, hits:[], pos:{}, hover:null, sel:null, anim:{}, tw:{},
+  cb:null, bgCb:null, hits:[], pos:{}, view:null, viewKey:'', rev:0, hover:null, sel:null, anim:{}, tw:{},
   sprites:null, shadowSp:null, rays:null, tb1:null, tb2:null,
   ripples:[], puffs:[], drift:[], ro:null,
   bx:{x0:0, x1:WW, y0:0, y1:WH}      // 相機可以看的範圍（有立體地圖美術圖時＝圖的範圍）
@@ -292,7 +292,7 @@ function buildTerrain(D){
 // ───────── 資料套用 ─────────
 function buildScene(){
   const T = S.T;
-  S.pos = {};
+  S.pos = {}; S.rev++;
   S.data.mountains.forEach(m => { const p = T.P(m.lon, m.lat); S.pos[m.id] = { gx:p[0], gy:p[1], x:p[0], y:p[1] - T.hAt(p[0], p[1]) * LIFT }; });
   // 海面漣漪
   const r = rng(5); S.ripples = [];
@@ -512,12 +512,13 @@ const REC_W = 22;   // 「推薦」小金牌的寬（地圖單位）
 const isRec = id => { const D = S.data; return D.rec === id && D.current !== id && !D.locked[id]; };
 const WALKER_BOX = { x0:22, x1:78, y0:-MAP_HIKER_H - MAP_TAG_H - 8, y1:3 };   // 目前在爬的山：木牌右邊登山客、寵物和頭上「登山中」小牌站的地方（drawWalkers），別的木牌要讓開
 // 讓位的候選位置：[x 偏幾個半寬, y 偏幾個木牌框高]
-const PIN_OFFS = [[0,0],[1,-.125],[-1,-.125],[1.9,-.125],[-1.9,-.125],[0,-.625],[1,-.75],[-1,-.75],[1.9,-.75],[-1.9,-.75],[0,-1.25],[1,-1.375],[-1,-1.375]];
-function layoutPins(c, order, ps){
+const PIN_OFFS = [[0,0],[1,-.125],[-1,-.125],[1.9,-.125],[-1.9,-.125],[0,-.625]];   // 再遠就離自己的山太遠了：這幾個位置都放不下就算「擠」，改收成山脈牌或小圓點（見 buildView）
+function layoutPins(c, order, ps, byRank){
   const placed = [], out = {};
   // 目前挑戰的山先放，維持在原位；不看「選中／滑過」，點一座山時木牌才不會跳來跳去
+  // byRank（旗子太擠時）：改依重要度先放，放不下的標 fail（之後縮成小圓點），不硬疊
   const pri = o => (o.m.id === S.data.current ? 0 : 1);
-  const list = order.slice().sort((a, b) => pri(a) - pri(b) || b.q.y - a.q.y);
+  const list = order.slice().sort((a, b) => (byRank ? pinRank(a.m) - pinRank(b.m) : pri(a) - pri(b)) || b.q.y - a.q.y);
   for (const o of list){
     const s = ps, b = pinBox(c, o.m); let best = null;
     for (const f of PIN_OFFS){
@@ -525,14 +526,15 @@ function layoutPins(c, order, ps){
       const r = { x0:o.q.x + (b.x0 + ox) * s, x1:o.q.x + (b.x1 + ox) * s, y0:o.q.y + (b.y0 + oy) * s, y1:o.q.y + (b.y1 + oy) * s };
       if (!placed.some(p => r.x0 < p.x1 + 2 && r.x1 > p.x0 - 2 && r.y0 < p.y1 + 2 && r.y1 > p.y0 - 2)){ best = { ox, oy, r }; break; }
     }
-    if (!best){ const b0 = b; best = { ox:0, oy:0, r:{ x0:o.q.x + b0.x0 * s, x1:o.q.x + b0.x1 * s, y0:o.q.y + b0.y0 * s, y1:o.q.y + b0.y1 * s } }; }
-    placed.push(best.r); out[o.m.id] = best;
+    if (!best){ const b0 = b; best = { ox:0, oy:0, fail:true, r:{ x0:o.q.x + b0.x0 * s, x1:o.q.x + b0.x1 * s, y0:o.q.y + b0.y0 * s, y1:o.q.y + b0.y1 * s } }; }
+    out[o.m.id] = best; if (byRank && best.fail) continue;
+    placed.push(best.r);
     if (pri(o) === 0) { const k = ps, W = WALKER_BOX; placed.push({ x0:o.q.x + W.x0 * k, x1:o.q.x + W.x1 * k, y0:o.q.y + W.y0 * k, y1:o.q.y + W.y1 * k }); }   // 登山客小人不蓋到別座山的名字
   }
   return out;
 }
 function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
-  const D = S.data, id = m.id, done = D.done[id] || 0, locked = !!D.locked[id], cur = D.current === id, rec = isRec(id);   // rec：建議下一座（game.js recommendNext）
+  const D = S.data, id = m.id, st = m.st, done = st ? st.done : D.done[id] || 0, locked = st ? st.locked : !!D.locked[id], cur = st ? false : D.current === id, rec = !st && isRec(id);   // rec：建議下一座（game.js recommendNext）
   const a = S.anim[id] || (S.anim[id] = 1), want = (S.hover === id || S.sel === id) ? 1.14 : 1; S.anim[id] = a + (want - a) * .2;
   ps *= S.anim[id];
   c.save(); c.translate(x, y); c.scale(ps, ps);
@@ -553,7 +555,7 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   if (G.art){
     drawPinArt(c, G, locked);   // 還沒解鎖：旗子、木牌褪色
     c.save(); c.translate(G.cx, py); c.rotate(G.tilt);
-    c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-G.need / 2 + 8.4, 0, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke();
+    if (!st){ c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-G.need / 2 + 8.4, 0, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke(); }
     c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, .6);
     c.restore();
     if (done) drawCrown(c, G.cx - w / 4, py - ph / 2 + 2);
@@ -568,7 +570,7 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   c.lineWidth = .35; c.strokeStyle = 'rgba(90,56,30,.55)'; c.beginPath(); c.moveTo(-w / 2 + 3, py - ph / 2 + 2.2); c.quadraticCurveTo(0, py - ph / 2 + 3.4, w / 2 - 3, py - ph / 2 + 2); c.moveTo(-w / 2 + 3, py + ph / 2 - 2); c.quadraticCurveTo(0, py + ph / 2 - 3.2, w / 2 - 3, py + ph / 2 - 2.2); c.stroke();
   c.fillStyle = '#5a3a22'; c.beginPath(); c.arc(-w / 2 + 2.6, py, .8, 0, TAU); c.arc(w / 2 - 2.6, py, .8, 0, TAU); c.fill();
   c.fillStyle = '#fbf0d5'; c.strokeStyle = 'rgba(58,42,32,.7)'; c.lineWidth = .6; irr(c, -w / 2 + 5, py - 5, w - 10, 10, 2.2, idx * 5 + 9); c.fill(); c.stroke();
-  c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-w / 2 + 8.4, py, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke();
+  if (!st){ c.fillStyle = DIFFC[clamp(m.diff - 1, 0, 4)]; c.beginPath(); c.arc(-w / 2 + 8.4, py, 2.3, 0, TAU); c.fill(); c.lineWidth = .6; c.strokeStyle = INK; c.stroke(); }
   c.fillStyle = INK; c.font = `11px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(name, 3, py + .6);
   if (done) drawCrown(c, 0, py - ph / 2 + .6);
   }
@@ -589,6 +591,78 @@ function drawPin(c, m, idx, x, y, ps, t, ox = 0, oy = 0){
   }
   c.restore();
   S.hits.push({ id, x0:x + Math.min(-12, ox + G.x0 - 4) * ps, x1:x + Math.max(cur ? 26 : 12, ox + G.x1) * ps, y0:y + (oy + G.y0) * ps, y1:y + 8 * ps, y });
+}
+
+// ───────── 顯示層級：山脈牌／旗子／小圓點 ─────────
+// 只在「畫面倍率、資料、尺寸、選中的山」變了才重算（getView），平常每格只讀結果；不要把這段搬進 render 每格跑
+// 旗子（山群、單座山）在這個倍率放得下就照原樣；放不下時：同山脈有 RANGE_MIN 根以上互相擠到的，收成一塊山脈牌；
+// 還是放不下的，依重要度（正在爬 > 可爬沒爬過 > 可爬爬過 > 還沒解鎖）留旗子，其餘縮成小圓點，拉近就自己展開
+const RANGE_MIN = 3;        // 一個山脈至少幾根旗子才收成山脈牌
+const RANGE_ZMAX = 2.4;     // 畫面倍率超過這個就不收山脈牌（已經拉很近了，擠的縮小圓點就好）
+const VIEW_ZSTEP = .02;      // 倍率變多少才重算
+const DOT_R = 4.6, DOT_HIT = 13;   // 小圓點半徑、點擊範圍（畫面像素）
+const pinScale = z => clamp(.72 + .22 * z, .85, 1.5) * (S.vw < 500 ? 1.05 : 1);
+function pinRank(m){   // 越小越重要
+  const D = S.data, st = m.st || { done:D.done[m.id] || 0, locked:!!D.locked[m.id] };
+  if (m.id === S.sel) return -1;
+  if (m.isRange ? m.st.cur : D.current === m.id) return 0;
+  return st.locked ? 3 : st.done ? 2 : 1;
+}
+function rangeItem(r, mem, k){
+  const D = S.data, d = mem.filter(m => D.done[m.id] > 0).length;
+  const st = { done:d, locked:mem.every(m => D.locked[m.id]), cur:mem.some(m => D.current === m.id) };
+  const m = { id:'range:' + r.id, name:r.name + ' 已登頂 ' + d + '／' + mem.length, isRange:true, range:r.id, st };
+  const ps = mem.map(x => S.pos[x.id]);
+  return { m, i:1000 + k, kind:'range', mem, ox:0, oy:0, p:{ x:ps.reduce((a, q) => a + q.x, 0) / ps.length, y:ps.reduce((a, q) => a + q.y, 0) / ps.length } };
+}
+function buildView(){
+  const D = S.data, c = S.ctx, z = S.cam.z, s = S.base * z, ps = pinScale(z);
+  const mem = D.mountains.filter(m => S.pos[m.id]);
+  const items = mem.map((m, i) => ({ m, i, kind:'pin', p:S.pos[m.id], ox:0, oy:0 }));
+  const place = (list, byRank) => { list.forEach(o => o.q = { x:o.p.x * s, y:o.p.y * s }); return layoutPins(c, list, ps, byRank); };   // 排位只看彼此相對位置，不看鏡頭在哪
+  let out = place(items, false), res = items;
+  const fails = items.filter(o => out[o.m.id].fail);
+  if (fails.length){
+    // 1) 擠的山脈收成山脈牌（正在爬、選中的旗子不收，留在原位）
+    let list = items.slice();
+    if (z <= RANGE_ZMAX){
+      const byR = {}; mem.forEach(m => { if (m.range) (byR[m.range] || (byR[m.range] = [])).push(m); });
+      let k = 0;
+      SX.RANGES.forEach(r => {
+        const g = byR[r.id]; if (!g || g.length < RANGE_MIN || !g.some(m => fails.some(o => o.m === m))) return;
+        const keep = new Set(g.filter(m => m.id === D.current || m.id === S.sel));
+        if (g.length - keep.size < RANGE_MIN) return;
+        list = list.filter(o => o.m.range !== r.id || keep.has(o.m)); list.push(rangeItem(r, g, k++));
+      });
+    }
+    // 2) 還放不下的，依重要度留旗子，其餘縮成小圓點
+    out = place(list, true);
+    res = list.map(o => (out[o.m.id].fail ? Object.assign(o, { kind:'dot' }) : o));
+  }
+  res.forEach(o => { const L = out[o.m.id]; o.ox = L ? L.ox : 0; o.oy = L ? L.oy : 0; });
+  res.sort((a, b) => a.p.y - b.p.y);
+  const by = {}; res.forEach(o => by[o.m.id] = o);
+  return { items:res, by };
+}
+function getView(){
+  const key = Math.round(S.cam.z / VIEW_ZSTEP) + '|' + S.vw + '|' + S.vh + '|' + S.rev;
+  if (!S.view || S.viewKey !== key){ S.view = buildView(); S.viewKey = key; }
+  return S.view;
+}
+function dotColor(o){ const st = o.m.st, D = S.data; return (st ? st.cur : D.current === o.m.id) ? '#f6c945' : D.locked[o.m.id] ? '#a9a39a' : D.done[o.m.id] ? '#8fcf6e' : '#e8574a'; }
+function drawDot(c, o, x, y){
+  c.fillStyle = 'rgba(40,25,10,.3)'; c.beginPath(); c.ellipse(x + 1, y + 2.4, DOT_R, DOT_R * .45, 0, 0, TAU); c.fill();
+  c.fillStyle = dotColor(o); c.strokeStyle = INK; c.lineWidth = 1.2; c.beginPath(); c.arc(x, y - DOT_R, DOT_R, 0, TAU); c.fill(); c.stroke();
+  S.hits.push({ id:o.m.id, x0:x - DOT_HIT, x1:x + DOT_HIT, y0:y - DOT_R * 2 - DOT_HIT + 6, y1:y + 6, y });
+}
+// 點山脈牌／小圓點：不開卡片，鏡頭拉近過去
+function zoomInto(o){
+  S.input = performance.now(); S.sel = null;
+  const pts = o.kind === 'range' ? o.mem.map(m => S.pos[m.id]) : [o.p];
+  let a = 1e9, b = -1e9, c0 = 1e9, d = -1e9; pts.forEach(q => { a = Math.min(a, q.x); b = Math.max(b, q.x); c0 = Math.min(c0, q.y); d = Math.max(d, q.y); });
+  const fit = Math.min(S.vw * .62 / (Math.max(b - a, 1) * S.base), S.vh * .4 / (Math.max(d - c0, 1) * S.base));
+  S.tgt.z = clamp(Math.max(fit, S.tgt.z * 1.5), 1, 3.4); const k = S.base * S.tgt.z;
+  S.tgt.x = (a + b) / 2; S.tgt.y = (c0 + d) / 2 - 16 + S.vh * .05 / k; clampCam(S.tgt);
 }
 
 function makeRays(){
@@ -626,7 +700,6 @@ function render(t){
   c.setTransform(dpr, 0, 0, dpr, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
   drawSea(c, t, s);
   if (!S.T){ return; }
-  const ps = clamp(.72 + .22 * cam.z, .85, 1.5) * (vw < 500 ? 1.05 : 1);
   c.setTransform(dpr * s, 0, 0, dpr * s, dpr * (vw / 2 - cam.x * s), dpr * (vh / 2 - cam.y * s));
   const T = S.T;
   if (T.art){   // 美術圖已經有海浪和雲
@@ -638,11 +711,10 @@ function render(t){
   drawDrift(c, t);
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   S.hits = [];
-  const order = S.data.mountains.map((m, i) => ({ m, i, p:S.pos[m.id] })).filter(o => o.p).sort((a, b) => a.p.y - b.p.y);
+  const V = getView(), ps = pinScale(cam.z), order = V.items;   // 排位、山脈牌、小圓點只在倍率等變了才重算（getView）
   order.forEach(o => o.q = w2s(o.p.x, o.p.y));
-  const lay = layoutPins(c, order, ps);
   const drawOrder = order.filter(o => o.m.id !== S.sel).concat(order.filter(o => o.m.id === S.sel));   // 選中的最後畫，放大時蓋在別人上面
-  for (const o of drawOrder){ const q = o.q; if (q.x < -90 || q.x > vw + 90 || q.y < -60 || q.y > vh + 90) continue; const L2 = lay[o.m.id] || { ox:0, oy:0 }; drawPin(c, o.m, o.i, q.x, q.y, ps, t, L2.ox, L2.oy); }
+  for (const o of drawOrder){ const q = o.q; if (q.x < -90 || q.x > vw + 90 || q.y < -60 || q.y > vh + 90) continue; if (o.kind === 'dot') drawDot(c, o, q.x, q.y); else drawPin(c, o.m, o.i, q.x, q.y, ps, t, o.ox, o.oy); }
   // 金色光芒（右上斜射）與暖霧
   if (S.rays){ c.save(); c.globalCompositeOperation = 'screen'; c.globalAlpha = .62 + .22 * Math.sin(t * .6); c.drawImage(S.rays, Math.sin(t * .2) * 6, 0, vw, vh); c.restore(); }
   const hz = c.createLinearGradient(0, 0, 0, vh * .2); hz.addColorStop(0, 'rgba(255,242,214,.32)'); hz.addColorStop(1, 'rgba(255,242,214,0)'); c.fillStyle = hz; c.fillRect(0, 0, vw, vh * .2);
@@ -682,7 +754,8 @@ function hitAt(x, y){
   return best && best.id;
 }
 function select(id){
-  S.sel = id; S.input = performance.now(); focus(id);
+  const o = S.view && S.view.by[id]; if (o && o.kind !== 'pin'){ zoomInto(o); return; }   // 山脈牌、小圓點：拉近就好
+  S.sel = id; S.rev++; S.input = performance.now(); focus(id);
   clearTimeout(S.selT); S.selT = setTimeout(() => { if (S.cb) S.cb(id); }, 380);
 }
 function bindInput(cv){
@@ -691,7 +764,16 @@ function bindInput(cv){
   const screenToWorld = (sx, sy, cam) => { const s = S.base * cam.z; return { x:(sx - S.vw / 2) / s + cam.x, y:(sy - S.vh / 2) / s + cam.y }; };
   const startPinch = () => { const a = [...ptrs.values()], d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) || 1, mx = (a[0].x + a[1].x) / 2, my = (a[0].y + a[1].y) / 2;
     pinch = { d, z:S.tgt.z, w:screenToWorld(mx, my, S.tgt) }; };
+  let lastTap = null;
+  const DOUBLE_ZOOM = 1.8;   // 雙擊一次放大幾倍
+  const doubleZoom = (sx, sy) => {
+    S.input = performance.now();
+    if (S.tgt.z > 3.4 / DOUBLE_ZOOM + .05){ reset(); return; }
+    const w = screenToWorld(sx, sy, S.tgt); S.tgt.z = clamp(S.tgt.z * DOUBLE_ZOOM, 1, 3.4); const s = S.base * S.tgt.z;
+    S.tgt.x = w.x - (sx - S.vw / 2) / s; S.tgt.y = w.y - (sy - S.vh / 2) / s; clampCam(S.tgt);
+  };
   cv.style.touchAction = 'none';
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(n => cv.addEventListener(n, e => e.preventDefault()));   // iOS Safari：雙指不要縮放整個網頁
   cv.addEventListener('pointerdown', e => {
     S.input = performance.now();
     try { cv.setPointerCapture(e.pointerId); } catch (_) {}
@@ -719,9 +801,11 @@ function bindInput(cv){
       S.dragging = false;
       const dtp = performance.now() - (down ? down.t : 0);
       if (e.type === 'pointerup' && down && moved < 8 && dtp < 450){
-        const id = hitAt(p.x, p.y);
-        if (id) select(id);
-        else { S.sel = null; if (S.bgCb) S.bgCb(); }
+        const id = hitAt(p.x, p.y), now = performance.now();
+        if (!id && lastTap && now - lastTap.t < 320 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 28){   // 雙擊空白處：放大一階，已經最大就回到全景
+          lastTap = null; doubleZoom(p.x, p.y);
+        } else if (id){ lastTap = null; select(id); }
+        else { lastTap = { x:p.x, y:p.y, t:now }; if (S.sel){ S.sel = null; S.rev++; } if (S.bgCb) S.bgCb(); }
       } else if (moved >= 8 && performance.now() - lastMv < 80){ S.tgt.x += vel.x * .28; S.tgt.y += vel.y * .28; clampCam(S.tgt); }
     } else if (ptrs.size === 1){ const r = [...ptrs.values()][0]; down = null; moved = 99; r.x = r.x; }
   };
@@ -752,7 +836,7 @@ SX.worldmap = {
     bindInput(cv);
     if (window.ResizeObserver){ S.ro = new ResizeObserver(() => resize()); S.ro.observe(host); }
     window.addEventListener('resize', resize);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { S.tw = {}; });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { S.tw = {}; S.rev++; });
     resize();
   },
   setData(d){
@@ -760,13 +844,13 @@ SX.worldmap = {
     if (n.mountains && n.mountains !== o.mountains || n.coast && n.coast !== o.coast || n.ridge && n.ridge !== o.ridge) S.dirty = true;
     S.data = { mountains:n.mountains || o.mountains, coast:n.coast || o.coast, ridge:n.ridge || o.ridge,
       done:n.done || {}, prog:n.prog || {}, current:n.current || null, locked:n.locked || {}, photos:n.photos || {}, pet:n.pet || null, rain:!!n.rain, rec:n.rec || null };   // rain：現在下雨（登山口的人和寵物穿雨衣）
-    S.tw = {}; ensure();
+    S.tw = {}; S.rev++; ensure();
   },
   onSelect(fn){ S.cb = fn; },
   onBackground(fn){ S.bgCb = fn; },       // 點到空白處（game.js 用來收起資訊卡）
-  focus(id){ S.sel = id; S.input = performance.now(); focus(id); },
-  reset(){ S.sel = null; S.input = performance.now(); reset(); },
-  clearSelection(){ S.sel = null; S.input = performance.now(); },   // 路標縮回原大小的動畫要用滿格速度畫
+  focus(id){ S.sel = id; S.rev++; S.input = performance.now(); focus(id); },
+  reset(){ S.sel = null; S.rev++; S.input = performance.now(); reset(); },
+  clearSelection(){ S.sel = null; S.rev++; S.input = performance.now(); },   // 路標縮回原大小的動畫要用滿格速度畫
   start(){
     if (S.running) return; S.running = true; S.last = performance.now(); resize(); ensure();
     S.raf = requestAnimationFrame(frame);
