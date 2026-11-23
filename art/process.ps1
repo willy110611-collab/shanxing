@@ -43,7 +43,8 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
   } else {
     # 透明圖存 WebP（同畫質比 png 小十倍左右）
     $out = Join-Path $here "$name.webp"; $tmp = Join-Path $tmpDir "$name.webp"
-    $max = if ($name -match '_walk$') { 1600 } elseif ($name -match '^frame_') { 1080 } else { 720 }
+    # 寵物（含第一批 shiba_walk）的舊四格走路圖只剩世界地圖和備用：寵物在畫面上不到 60 像素高，800 寬（每格 200）就夠
+    $max = if ($name -match '^hiker_.*walk$') { 1600 } elseif ($name -match '_walk$') { 800 } elseif ($name -match '^frame_') { 1080 } else { 720 }
     # 去洋紅底：colorkey 只去掉很接近洋紅的底（太強會連粉紅杜鵑花一起吃掉），殘邊交給遊戲載入時的 despill 清
     ffmpeg -v error -y -i $_.FullName -vf "format=rgba,colorkey=0xFF00FF:0.22:0.06,scale='min($max,iw)':-2" -c:v libwebp -quality 82 $tmp
   }

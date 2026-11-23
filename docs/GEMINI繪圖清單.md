@@ -508,3 +508,16 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `hut_369` | `02.素材` | 16:9 | 洋紅底。A long single-storey Taiwan high-mountain lodge in the style of Xueshan 369 Lodge: a low wooden building with a **bright yellow corrugated metal roof**, a row of small windows, a few steps up to the door, set on a grassy slope, 3/4 view, no text on signs. |
 | `hut_jiaming` | `02.素材` | 16:9 | 洋紅底。A small simple one-storey Taiwan alpine refuge hut like the Jiaming Lake shelter: a low grey-green metal-and-wood cabin with a shallow roof, one door and two small windows, a few rocks around it, 3/4 view, no text on signs. |
 | `plaza_bg` | `08.登山口廣場` | 9:16 | 不用去背（滿版）。Same as the current plaza background, but the gate where the trail enters the forest must be a **simple rustic Taiwanese trailhead archway made of two rough log posts and one log crossbeam with a blank wooden sign board**, NOT a Japanese torii gate (no curved top beam, no double crossbeam, no red or black shrine style). |
+
+## 第 21 批：寵物一步八格走路、藍鵲飛行（全部洋紅底）
+
+| 檔名 | 放進 | 比例 | 內容 |
+|---|---|---|---|
+| `pet_shiba_step8` | `05.寵物` | 16:9 | 洋紅底。The shiba (柴犬設定) with its small backpack seen from directly behind, 1 row × 8 frames walking, same size and same head height in every frame. |
+| `pet_shiba_rain_step8` | `05.寵物` | 16:9 | 洋紅底。Same poses as pet_shiba_step8, wearing the tiny yellow hooded raincoat. |
+| `pet_bear_step8` | `05.寵物` | 16:9 | 洋紅底。The Formosan black bear cub (same as pet_bear_walk, backpack) seen from directly behind, 1 row × 8 frames walking, same size and head height. |
+| `pet_bear_rain_step8` | `05.寵物` | 16:9 | 洋紅底。Same poses as pet_bear_step8, wearing the yellow raincoat. |
+| `pet_leopardcat_step8` | `05.寵物` | 16:9 | 洋紅底。The leopard cat (same as pet_leopardcat_walk) seen from directly behind, 1 row × 8 frames walking, same size and head height. |
+| `pet_leopardcat_rain_step8` | `05.寵物` | 16:9 | 洋紅底。Same poses as pet_leopardcat_step8, wearing the yellow raincoat. |
+| `pet_magpie_fly12` | `05.寵物` | 16:9 | 洋紅底。The Taiwan blue magpie seen from behind flying, 12-frame wing-flap loop in 2 rows of 6; wings never cross into the next cell. |
+| `pet_magpie_rain_fly12` | `05.寵物` | 16:9 | 洋紅底。Same poses as pet_magpie_fly12, wearing the tiny yellow rain cape. |
