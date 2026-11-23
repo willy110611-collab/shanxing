@@ -315,6 +315,7 @@
       <div class="rc-feat"><em>終點：</em>${m.end}</div>
       ${grade ? `<div class="rc-feat"><em>官方分級：</em>${gradeChip(grade)} ${SX.GRADES[grade].text}（百岳第 ${m.by} 名）</div>` : ''}
       ${permit ? `<div class="rc-feat"><em>入山管制：</em>${permit.reason}（目前 ${permit.have} 人）。到山友大廳邀好友一起爬，對方接受就會入隊；寵物不算人數。</div>` : ''}
+      ${ok ? '<div class="rc-feat" id="rcQuota" hidden></div>' : ''}
       ${busy ? `<div class="rc-feat"><em>還在山上：</em>你正在爬${trN}，一次只能走一條路線。想改爬${m.name}，要先下山（${trN}的進度會歸零）。</div>
         ${permit ? permitBtns(`<button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button>`) : `<div class="rc-btns"><button class="cbtn sm" id="rcBackTo">回到${trN}繼續爬</button></div>
         <div class="rc-btns"><button class="cbtn go" id="rcSwitch">下山，改爬${m.name}</button></div>`}`
@@ -339,13 +340,54 @@
     if (busy) {
       $('#rcBackTo').onclick = () => { A.unlock(); A.chime(); startClimb(tr); };
       const sw = $('#rcSwitch');   // 換山會把另一座的進度歸零：按兩次（第一次換成確認字樣），避免誤按
-      if (sw) sw.onclick = e => { e.stopPropagation(); A.unlock(); if (!sw.dataset.arm) { A.pop(); sw.dataset.arm = 1; sw.textContent = `再按一次確定（${trN}歸零）`; return; } A.chime(); goDown(tr); startClimb(id); };
+      // 換山：先登記好入園名額才下山（名額滿了就不會白白把另一座歸零）
+      if (sw) sw.onclick = e => { e.stopPropagation(); A.unlock(); if (!sw.dataset.arm) { A.pop(); sw.dataset.arm = 1; sw.textContent = `再按一次確定（${trN}歸零）`; return; } A.chime(); quotaGate(id, () => { goDown(tr); startClimb(id, false, true); }); };
     }
     else if (ok) {
       $('#rcPet').onclick = () => openPets(id);
       if (!permit) $('#rcGo').onclick = e => { A.unlock(); A.chime(); MO.beat(e.currentTarget).then(on => {   // 縮成圓、打勾（不到 0.4 秒）再出發；卡片收起或換掉就不出發
         if (on && card.classList.contains('on')) startClimb(id); }); };
     }
+    card.dataset.mt = id;
+    if (ok) { paintQuota(id); if (SX.social && SX.social.quotaLoad) SX.social.quotaLoad().then(() => { if (card.dataset.mt === id && card.classList.contains('on')) paintQuota(id); }); }   // 打開卡片時拿今天的人數（一分鐘內拿過就用快取）
+  }
+  // ───────── 熱門山每日入園名額 ─────────
+  // 哪幾座山有名額、每天幾個只在伺服器；這裡只問 SX.social（quotaInfo／quotaClaim）。不在名額表的山一律不擋
+  // 已經在這座山上（onTrail）接著走不用名額，永遠不會被趕下山；沒有夜間限制
+  const QUOTA_FULL = '今天名額滿了，明天再來';
+  const quotaInfo = id => SX.social && SX.social.quotaInfo ? SX.social.quotaInfo(id) : null;
+  // 卡片上的「今日入園 5／12」，滿了就把出發的大綠鈕換成不能按
+  function paintQuota(id){
+    const el = $('#rcQuota'), q = el && quotaInfo(id); if (!el) return;
+    el.hidden = !q; if (!q) return;
+    const blocked = q.full && onTrail() !== id;
+    el.innerHTML = `<em>今日入園 ${q.used}／${q.cap}</em>${q.mine ? '（你今天登記過了）' : blocked ? '（滿了）' : ''}<br>熱門的山每天人數有限，跟真的一樣要排隊。`;
+    if (!blocked) return;
+    ['#rcGo', '#rcSwitch'].forEach(s => { const b = $(s); if (!b) return;
+      b.textContent = QUOTA_FULL; b.setAttribute('aria-disabled', 'true');
+      b.onclick = e => { e.stopPropagation(); MO.shake(b); toast('熱門的山每天人數有限，台灣時間半夜 12 點重新開放', 3200); }; });
+  }
+  // 出發前登記名額，可以出發才跑 go()；滿了說明、沒有帳號就先取個暱稱
+  function quotaGate(id, go){
+    if (!SX.social || !SX.social.quotaClaim || onTrail() === id) { go(); return; }
+    SX.social.quotaClaim(id).then(r => {
+      if (r.ok) go();
+      else if (r.full) { toast(QUOTA_FULL, 3200); if (screen === 'map') showRoute(id); }
+      else if (r.needAcct) askNickname(id, go);
+    });
+  }
+  // 沒有帳號的人要爬有名額的山：入園要登記名字，取個暱稱就好（跟山友大廳一樣的帳號，不用密碼）
+  function askNickname(id, go){
+    modal(`<h3>入園登記</h3><p class="summitBig">${SX.M[id].name}每天人數有限，跟真的一樣要登記名字才能入園。取個暱稱就好，不用密碼；其他山友也會看到這個名字。</p>
+      <label class="fl"><input id="qnIn" class="txtIn" maxlength="12" placeholder=" "><span><b>暱稱（最多 12 個字）</b></span></label>
+      <div class="mBtns"><button class="cbtn" id="qnNo">先不要</button><button class="cbtn go" id="qnOk">登記，出發</button></div>`);
+    $('#qnNo').onclick = () => { A.pop(); closeModal(); };
+    $('#qnOk').onclick = async () => {
+      const v = $('#qnIn').value.trim(); if (!v) { toast('先取個暱稱吧'); return; }
+      $('#qnOk').disabled = true;
+      try { await SX.social.register(v); closeModal(); toast(`歡迎，${v}！`); quotaGate(id, go); }
+      catch(e){ toast(e.message, 3200); $('#qnOk').disabled = false; }
+    };
   }
   // 正在進行的季節小標籤（山群的山跟著山群的季節走）
   function seasonChips(id){
@@ -391,11 +433,13 @@
   // ───────── 登山 ─────────
   let M = null, st = null, t = 0, arrived = false, paused = false, ptrHold = false, keyHold = false;
   let lineT = 8, coldT = 0, lastEnc = null;
-  function startClimb(id, force){
+  // quotaOk：入園名額已經登記好了（quotaGate 登記完再叫回來）
+  function startClimb(id, force, quotaOk){
     const m = SX.M[id]; if (!m) return;
     if (!force && !unlocked(m)) { toast('這座山還不能爬'); return; }
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
+    if (!force && !quotaOk && tr !== id) { quotaGate(id, () => startClimb(id, false, true)); return; }   // 熱門山：先登記今天的入園名額
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
     M = m; SV.cur = id; st = P(id);
     if (!cont) Object.assign(st, newProg());

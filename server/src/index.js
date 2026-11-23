@@ -14,6 +14,37 @@ const PACE_MAX = 30;               // 一起爬：遊戲端給的步調最多幾
 // 心跳：要跟 js/social.js 的 PING／PONG 一字不差。房間用 setWebSocketAutoResponse 直接回 PONG，不叫醒房間、不算錢
 const PING = JSON.stringify({ type: 'ping' }), PONG = JSON.stringify({ type: 'pong' });
 
+// ───────── 熱門山每日入園名額 ─────────
+// 名額表只寫在這裡（遊戲端打開山的卡片時跟 GET /api/quota 拿）。不在表裡的山一律不限人數。
+// 數字照真實世界每天的入園總量，不跟玩家人數縮放。peaks：遊戲裡哪些山（js/data.js 的 id）出發時要佔這個名額
+const QUOTA = {
+  // 玉山主峰：排雲山莊 136 床（2026-09-01 起由 116 床增加）＋單攻 60 人＝每天 196。來源：udn.com/news/story/7266/9655516
+  yushan: { name: '玉山主峰', cap: 196, peaks: ['yushan'] },
+  // 嘉明湖（走到嘉明湖、三叉山的路線）：每天 176。來源：台東林管處較早的總量管制報導 thenewslens.com/article/58242（可能已經過時，要再查新的公告）
+  jiaming: { name: '嘉明湖', cap: 176, peaks: ['jiaming', 'sancha'] },
+  // 雪山主峰：雪山登山口每天 160 人（平日、假日一樣，官方入園總量）。來源：hike.taiwan.gov.tw/bed_1.aspx（宿營地與床位概況）
+  xueshan: { name: '雪山主峰', cap: 160, peaks: ['xueshan'] },
+};
+const QUOTA_OF = {};   // 山 id → 名額代號（由上面的表算出來，不另外寫）
+for (const [k, q] of Object.entries(QUOTA)) for (const id of q.peaks) QUOTA_OF[id] = k;
+const QUOTA_RL_WINDOW = 10 * 60 * 1000, QUOTA_RL_MAX = 20;   // 登記名額：每人 10 分鐘最多送 20 次（同一天同一座山本來就只算一次，這只是擋亂送）
+// 台灣日期（UTC+8），半夜 12 點換日；名額每天重新算
+const twDay = t => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
+// 測試用時鐘：只有本機 wrangler dev 加 --var TEST_CLOCK:1 時，才看 X-Test-Now 標頭（正式環境沒有這個變數，永遠用真的時間）
+const clock = (env, req) => (env.TEST_CLOCK === '1' && +req.headers.get('X-Test-Now')) || now();
+// 登記一個名額：一句有條件的新增（今天人數還沒滿才寫進去；同一人同一天同一座山已經有就不重寫），人數由資料表的 trigger 跟著加一
+// 一句 SQL 在 D1 裡是一次做完的，兩個人同時搶最後一格也只會有一個成功
+async function quotaClaim(env, key, player, t){
+  const day = twDay(t), cap = QUOTA[key].cap;
+  const r = await env.DB.prepare('INSERT INTO quota_spots (day, quota, player, at) SELECT ?1, ?2, ?3, ?4 WHERE COALESCE((SELECT n FROM quota_count WHERE day = ?1 AND quota = ?2), 0) < ?5 ON CONFLICT(day, quota, player) DO NOTHING')
+    .bind(day, key, player, t, cap).run();
+  const c = await env.DB.prepare('SELECT n FROM quota_count WHERE day = ? AND quota = ?').bind(day, key).first();
+  const used = c ? c.n : 0;
+  if (r.meta.changes) return { ok: true, used, cap };
+  const had = await env.DB.prepare('SELECT 1 FROM quota_spots WHERE day = ? AND quota = ? AND player = ?').bind(day, key, player).first();
+  return had ? { ok: true, used, cap, again: true } : { ok: false, full: true, used, cap };
+}
+
 // ───────── 小工具 ─────────
 const now = () => Date.now();
 const rid = (n = 16) => [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -141,6 +172,8 @@ export default {
     }
     await env.DB.prepare('DELETE FROM push_queue WHERE created < ?').bind(now() - 3 * 864e5).run();
     await env.DB.prepare('DELETE FROM login_fails WHERE first < ?').bind(now() - LOGIN_WINDOW).run();   // 猜密碼紀錄過了時間就清掉
+    const old = twDay(now() - 3 * 864e5);   // 入園名額：三天前的紀錄用不到了
+    await env.DB.batch([env.DB.prepare('DELETE FROM quota_spots WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM quota_count WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM rate_limits WHERE first < ?').bind(now() - QUOTA_RL_WINDOW)]);
   },
   async fetch(req, env){
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors(env, req) });
@@ -249,6 +282,15 @@ export default {
         return E(env, req, '廣場都客滿了，等一下再來', 503);
       }
 
+      // 熱門山入園名額：名額表＋今天用了幾個（不用登入也能看）；有帶登入碼的話多回「我今天已經登記了哪幾座」
+      if (path === '/api/quota' && M === 'GET') {
+        const t = clock(env, req), day = twDay(t), keys = Object.keys(QUOTA);
+        const used = {}; for (const r of (await env.DB.prepare('SELECT quota, n FROM quota_count WHERE day = ?').bind(day).all()).results) used[r.quota] = r.n;
+        const who = req.headers.get('Authorization') ? await auth(env, req) : null;
+        const mine = who ? (await env.DB.prepare(`SELECT quota FROM quota_spots WHERE day = ? AND player = ? AND quota IN (${keys.map(() => '?').join(',')})`).bind(day, who.id, ...keys).all()).results.map(r => r.quota) : [];
+        return J(env, req, { day, quotas: keys.map(k => ({ id: k, name: QUOTA[k].name, cap: QUOTA[k].cap, used: Math.min(used[k] || 0, QUOTA[k].cap), peaks: QUOTA[k].peaks })), mine });
+      }
+
       // 以下都要登入
       const me = await auth(env, req);
       if (!me) return E(env, req, 'unauthorized', 401);
@@ -284,6 +326,19 @@ export default {
         await env.DB.prepare('UPDATE players SET name = ?, mountain = ?, dist = ?, pet = ?, seen = ?, walked = ?, summits = ?, wk = ?, wk_base = ? WHERE id = ?')
           .bind(name, b.mountain === undefined ? me.mountain : (b.mountain ? String(b.mountain).slice(0, 24) : null), +b.dist >= 0 ? +b.dist : me.dist, b.pet === undefined ? me.pet : (b.pet ? String(b.pet).slice(0, 16) : null), now(), walked, summits, wk, wkBase, me.id).run();
         return J(env, req, { ok: true, name, week: Math.round(walked - wkBase) });
+      }
+
+      // 熱門山入園名額：出發時登記（同一天同一座山再出發不會多算）。不在名額表的山直接放行，不寫資料庫
+      // 離線時出發的，遊戲端之後補送（帶 day）：只收今天的，滿了就算了
+      if (path === '/api/quota/claim' && M === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        const key = QUOTA_OF[String(b.mountain || '')], t = clock(env, req);
+        if (!key) return J(env, req, { ok: true, open: true });
+        if (b.day && b.day !== twDay(t)) return J(env, req, { ok: false, stale: true });
+        const rl = await env.DB.prepare('INSERT INTO rate_limits (k, n, first) VALUES (?1, 1, ?2) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ?2 - first >= ?3 THEN 1 ELSE n + 1 END, first = CASE WHEN ?2 - first >= ?3 THEN ?2 ELSE first END RETURNING n')
+          .bind('quota:' + me.id, now(), QUOTA_RL_WINDOW).first();
+        if (rl && rl.n > QUOTA_RL_MAX) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        return J(env, req, Object.assign({ quota: key, name: QUOTA[key].name }, await quotaClaim(env, key, me.id, t)));
       }
 
       // 雲端存檔（不含照片圖檔）
