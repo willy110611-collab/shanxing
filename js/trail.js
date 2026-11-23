@@ -3063,12 +3063,17 @@ S.burst = function(x, y, kind, n){
     p.life = p.max;
   }
 };
+// 粒子畫在整體調色之後（調色不會再乘到它們）：塵土的顏色自己乘上這一格的時間天氣調色，晚上才不會在暗暗的路上亮亮的發光
+const DUSTC = [0, 0, 0];
 function drawParts(dt){
+  const D = LOOK.dust, dA = D.a * (isNight ? D.night : 1);
+  for (let c = 0; c < 3; c++) DUSTC[c] = D.col[c] * cGrade[c] / 255;
+  const dCss = css(DUSTC);
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]; if (!p.on) continue;
     p.life -= dt; if (p.life <= 0) { p.on = 0; continue; }
     const k = p.life / p.max; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
-    if (p.kind === 0) { ctx.globalAlpha = k * 0.5; dot(ctx, p.x, p.y, p.sz * (1.8 - k), '#e2cda6'); }
+    if (p.kind === 0) { ctx.globalAlpha = k * dA; dot(ctx, p.x, p.y, p.sz * (1.8 - k), dCss); }   // 一般混色（不是加亮）
     else if (p.kind === 1) {
       p.vy += 160 * dt; ctx.globalAlpha = Math.min(1, k * 2); ctx.fillStyle = p.col;
       ctx.beginPath(); ctx.ellipse(p.x, p.y, p.sz, p.sz * 0.45, p.rot, 0, TAU); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 0.8; ctx.stroke();
