@@ -8,6 +8,8 @@ const ONLINE_MS = 3 * 60 * 1000;   // 多久內有動靜算「在線」
 const PLAZA_CAP = 50;              // 一個登山口廣場最多幾人
 const PLAZA_MAX = 40;              // 最多開到第幾個廣場
 const SAY_MAX = 40;                // 廣場說話一次最多幾個字（頭上冒字用；hello 會告訴遊戲端，輸入框照這個限制）
+// 心跳：要跟 js/social.js 的 PING／PONG 一字不差。房間用 setWebSocketAutoResponse 直接回 PONG，不叫醒房間、不算錢
+const PING = JSON.stringify({ type: 'ping' }), PONG = JSON.stringify({ type: 'pong' });
 
 // ───────── 小工具 ─────────
 const now = () => Date.now();
@@ -321,7 +323,11 @@ export default {
 // ───────── 即時房間：大廳聊天、一起爬的同步 ─────────
 // 用 WebSocket Hibernation，沒人說話時不計費。
 export class Room extends DurableObject {
-  constructor(ctx, env){ super(ctx, env); }
+  constructor(ctx, env){
+    super(ctx, env);
+    // 廣場和一起爬都是這個房間：收到一字不差的 PING，Cloudflare 直接回 PONG，不會叫醒房間（webSocketMessage 不會跑）
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
+  }
   async fetch(req){
     const who = JSON.parse(req.headers.get('X-Player') || '{}'), plaza = +req.headers.get('X-Plaza') || 0;
     // 廣場客滿（同一個人重連不算）：回 409，讓外面改試下一個廣場
@@ -371,7 +377,7 @@ export class Room extends DurableObject {
       this.broadcast({ type: 'emote', who: { id: a.id }, k }, ws);
     } else if (d.type === 'cheer') {
       this.broadcast({ type: 'cheer', who: { id: a.id, name: a.name }, to: String(d.to || '').slice(0, 20) }, ws);
-    } else if (d.type === 'ping') ws.send('{"type":"pong"}');
+    } else if (d.type === 'ping') ws.send(PONG);   // 字串跟 PING 不完全一樣的舊版遊戲（例如多了空白）還是照樣回
   }
   async webSocketClose(ws){ const a = ws.deserializeAttachment() || {}; try { ws.close(); } catch (e) {} this.broadcast({ type: 'leave', who: { id: a.id, name: a.name } }); }
   async webSocketError(ws){ try { ws.close(); } catch (e) {} }

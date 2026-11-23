@@ -3,6 +3,12 @@
 (function(){
   const API = self.SX_API;                 // 後端網址寫在 js/config.js（sw.js 也要用）
   const WS = API.replace(/^http/, 'ws') + '/ws';
+  // 連線的節奏都在這裡。心跳字串要跟 server/src/index.js 的 PING／PONG 一字不差（伺服器用 setWebSocketAutoResponse 直接回，不叫醒房間）
+  const PING = JSON.stringify({ type: 'ping' }), PONG = JSON.stringify({ type: 'pong' });
+  const PING_MS = 25000;            // 心跳間隔
+  const LOBBY_REFRESH_MS = 60000;   // 大廳畫面多久重新拿一次好友、邀請（打開大廳、切到好友分頁、加好友、送邀請、回覆邀請時會立刻拿）
+  const PARTY_STATE_MS = 10000;     // 一起爬：多久回報一次自己的進度（隊友在登山畫面上照估計的步調慢慢走，不會跳）
+  const REPORT_MS = 60000;          // 回報在爬哪座山、累積距離、拿回本週公里數（/me）：只有 report 這一處在送
   const KEY = 'shanxing-net-v1', KEY_PARTY = 'shanxing-party-v1', KEY_ADMIN = 'shanxing-admin-key';
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -85,8 +91,8 @@
       if (!alive || !acct) return;
       const pet = name === 'lobby' && SX.game && SX.game.pet ? `&pet=${encodeURIComponent(SX.game.pet() || '')}` : '';   // 廣場上帶著現在的寵物
       ws = new WebSocket(`${WS}?room=${encodeURIComponent(name)}&t=${encodeURIComponent(acct.token)}${pet}`);
-      ws.onopen = () => { tries = 0; clearInterval(ping); ping = setInterval(() => R.send({ type: 'ping' }), 25000); on({ type: 'open' }); };
-      ws.onmessage = e => { let d; try { d = JSON.parse(e.data); } catch(_){ return; } on(d); };
+      ws.onopen = () => { tries = 0; clearInterval(ping); ping = setInterval(() => { if (ws && ws.readyState === 1) ws.send(PING); }, PING_MS); on({ type: 'open' }); };
+      ws.onmessage = e => { if (e.data === PONG) return; let d; try { d = JSON.parse(e.data); } catch(_){ return; } on(d); };
       ws.onclose = () => { clearInterval(ping); on({ type: 'closed' }); if (alive) setTimeout(connect, Math.min(15000, 1000 * 2 ** tries++)); };
       ws.onerror = () => {};
     };
@@ -132,7 +138,7 @@
     render(); if (!acct) return;
     refresh();
     if (!lobby) lobby = room('lobby', onLobby);
-    clearInterval(open._t); open._t = setInterval(refresh, 20000);
+    clearInterval(open._t); open._t = setInterval(refresh, LOBBY_REFRESH_MS);
   }
   function close(){ clearInterval(open._t); if (PZ()) PZ().unmount(); if (lobby) { lobby.close(); lobby = null; } }
   // 登山口廣場：伺服器傳來的事件同步到畫面
@@ -151,7 +157,7 @@
   async function refresh(){
     if (!acct) return;
     try {
-      const [f, i] = await Promise.all([api('/friends'), api('/invites'), report()]);
+      const [f, i] = await Promise.all([api('/friends'), api('/invites')]);   // 我的本週公里數（/me）由 report 每分鐘拿，這裡不重複拿
       friends = f.friends || []; invites = i.invites || [];
       checkParty();
       if (tab === 'friends') renderFriends();
@@ -302,7 +308,7 @@
       try { const d = await api('/me', { json: { name: v } }); acct.name = d.name; store(KEY, acct); toast('改好了'); } catch(err){ toast(err.message, 3000); } };
     $('#showRc').onclick = () => showRecovery(false);
     $('#rsF').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn').value.trim(); if (!v) return;
-      try { await restore(v); toast(`歡迎回來，${acct.name}`); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); badCode($('#rsF'), $('#rsIn')); } };
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); report(); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); badCode($('#rsF'), $('#rsIn')); } };
     $('#cdUp').onclick = () => { lastSaved = ''; cloudSave(false); toast('備份好了'); };
     $('#cdDown').onclick = () => offerCloudLoad();
     myPhotos();
@@ -345,7 +351,7 @@
   }
   function tick(){
     const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
-    // 一起爬：連到隊伍房間，每 4 秒回報自己的進度
+    // 一起爬：連到隊伍房間，每 PARTY_STATE_MS 回報自己的進度
     if (party && climbing && M.id === party.mountain) {
       if (!pRoom) pRoom = room('party:' + party.id, d => {
         if (d.type === 'hello') (d.people || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = x.state; });
@@ -354,7 +360,7 @@
         else if (d.type === 'leave' && d.who.id !== acct.id && mates[d.who.id]) mates[d.who.id] = Object.assign({}, mates[d.who.id], { rest: true });
         partyBox();
       });
-      if (Date.now() - stateT > 4000) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep) }); }
+      if (Date.now() - stateT >= PARTY_STATE_MS) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep) }); }
     } else if (pRoom && !climbing) { pRoom.close(); pRoom = null; mates = {}; }
     partyBox();
   }
@@ -368,7 +374,7 @@
     if (climbing) { body.mountain = M.id; body.dist = Math.round(st.dist); }
     return api('/me', { json: body }).then(d => { myWeek = d.week || 0; }).catch(() => {});
   }
-  setInterval(report, 60000);
+  setInterval(report, REPORT_MS);
 
   // ───────── 雲端存檔：有帳號就每 3 分鐘、離開畫面時備份一次（不含照片圖檔）─────────
   let lastSaved = '';
@@ -492,5 +498,5 @@
   { const lb = $('#lobbyBody'); if (lb) MO.pull(lb, () => !!acct && (tab === 'friends' || tab === 'me'), () => tab === 'me' ? myPhotos() : refresh()); }
   { const mc = $('#mCard'); if (mc) MO.pull(mc, () => !!acct && !!mc.querySelector('.svWall') && $('#modal').classList.contains('on'), () => { const w = mc.querySelector('.svWall'); return w && fillWall(w.dataset.mt, +w.dataset.mark, mc); }); }
   SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite };
-  if (acct) { refresh(); }
+  if (acct) { refresh(); report(); }
 })();

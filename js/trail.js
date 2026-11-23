@@ -1776,14 +1776,30 @@ function drawDog(x, y, u, s, t){
   c.restore();
 }
 // ───────── 一起爬的隊友：換一套衣服顏色，用同一套走路動畫畫在他實際走到的位置 ─────────
+// 隊友的進度大約 10 秒才來一次：用前後兩次算出他的步調 v，中間照這個步調往前走（腳步跟著動），
+// 再慢慢修正到「最新回報＋這段時間該走的路」，不會一下衝過去、再站著等下一次
+const MATE_VMAX = 8;      // 估出來的步調最多幾公尺／秒（切到背景回來時間差很大，估太快就壓住）
+const MATE_FIX = 0.25;    // 每秒修正落差的比例（約 4 秒追平）
+const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去
 let mates = [];
 S.setMates = function(list){
+  const now = performance.now() / 1000;
   mates = (list || []).map(m => {
-    const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0);
-    return { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest: !!m.rest };
+    const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0), rest = !!m.rest;
+    const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, v: old ? old.v : 0, at: old ? old.at : now };
+    if (old && tg !== old.target) { mt.v = clamp((tg - old.target) / Math.max(1, now - old.at), 0, MATE_VMAX); mt.at = now; }
+    if (rest) mt.v = 0;
+    return mt;
   });
 };
-function stepMates(dt){ for (const mt of mates) mt.d += (mt.target - mt.d) * Math.min(1, dt * 1.5); }
+function stepMates(dt){
+  const now = performance.now() / 1000;
+  for (const mt of mates) {
+    const aim = mt.target + mt.v * Math.min(now - mt.at, 15), gap = aim - mt.d;   // 估計他現在走到哪（最多往前估 15 秒，斷線時不會一直走下去）
+    if (Math.abs(gap) > MATE_SNAP) { mt.d = aim; continue; }
+    mt.d += Math.max(0, mt.v + gap * MATE_FIX) * dt;   // 只往前走：估過頭就站著等（不會倒退走）
+  }
+}
 function drawMate(mt, j, f, t, fade){
   const d0 = curS ? curS.dist || 0 : 0, near = Math.abs(mt.d - d0) < 1.6;
   proj(j, f, false);

@@ -1435,8 +1435,23 @@
   setInterval(() => { if (st && !document.hidden) save(); }, 10000);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { ptrHold = false; keyHold = false; if (st && screen === 'climb' && !paused && !arrived) st.last = Date.now(); save(); A.setOn(false); }
-    else { catchUp(); A.setOn(SV.set.sound); }
+    else { catchUp(); A.setOn(SV.set.sound); checkNewVersion(); }
   });
+  // 有新版就自動換上：從主畫面打開的 App（iPhone）會一直留在背景，切回來只是接著跑舊的頁面、不會重新載入，
+  // 所以回到前景時（和開著的時候每 10 分鐘）問一次網站現在是第幾版（sw.js 的 CACHE 名字，跟 index.html 的 ?v= 一起加一），
+  // 比這一頁新就存檔、重新載入；有視窗開著（拍照、看寶物…）先不打斷，下次再問
+  const BUILD = +((($('script[src*="js/game.js"]') || {}).src || '').match(/[?&]v=(\d+)/) || [0, 0])[1];
+  const VERSION_CHECK_MS = 10 * 60 * 1000;
+  let verAsk = 0;
+  function checkNewVersion(){
+    if (!BUILD || document.hidden || Date.now() - verAsk < 30000) return;
+    verAsk = Date.now();
+    fetch('sw.js', { cache:'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
+      const v = +((t.match(/shanxing-v(\d+)/) || [0, 0])[1]);
+      if (v > BUILD && !$('#modal').classList.contains('on')) { save(); if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}); location.reload(); }
+    }).catch(() => {});
+  }
+  setInterval(checkNewVersion, VERSION_CHECK_MS);
 
   // 每座山自己的插圖（登頂、集印章）還沒畫的話，先用山群主峰的那張
   const groupArt = (pre, id) => SX.art.has(pre + id) ? pre + id : pre + (SX.GROUP[SX.groupOf(id)] ? SX.GROUP[SX.groupOf(id)].lead : id);
