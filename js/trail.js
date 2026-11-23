@@ -2014,9 +2014,10 @@ function shdUpd(){
 }
 // 投影的形狀：從腳印（寬 sw、高 shh 的橢圓）往影子方向伸出 E（物體高 ht × 影子長度），畫成一個轉了角度的橢圓
 // G：中心 (cx, cy)（從腳底量）、角度 ang、長 L、寬 wd（單位跟傳進來的一樣）
+// dz：離鏡頭幾公尺。往鏡頭這邊的影子是躺在地上的，越遠看起來越扁（最多 LOOK.shadow.flat）：遠處的樹影只往左邊斜，不會在畫面上拉成一條直直往下的黑帶
 const G_CAST = { cx:0, cy:0, ang:0, L:0, wd:0, E:0 };
-function castGeo(sw, shh, ht){
-  const ux0 = SHD.dx, uy0 = SHD.dy * LOOK.shadow.flat, m = Math.hypot(ux0, uy0) || 1, ux = ux0 / m, uy = uy0 / m, G = G_CAST;
+function castGeo(sw, shh, ht, dz){
+  const ux0 = SHD.dx, uy0 = SHD.dy * Math.min(LOOK.shadow.flat, CAMH / Math.max(dz, 0.5)), m = Math.hypot(ux0, uy0) || 1, ux = ux0 / m, uy = uy0 / m, G = G_CAST;
   const hd = Math.hypot(sw * 0.5 * ux, shh * 0.5 * uy), E = SHD.len * ht * m;
   G.E = E; G.ang = Math.atan2(uy, ux); G.L = E + hd; G.wd = 2 * Math.hypot(sw * 0.5 * uy, shh * 0.5 * ux) * 0.9; G.cx = ux * E * 0.5; G.cy = uy * E * 0.5;
   return G;
@@ -2024,9 +2025,9 @@ function castGeo(sw, shh, ht){
 // 投影排隊：[中心 x, 中心 y, 角度, 長, 寬, 不透明度, 要在第幾段地面畫完後畫]（畫面像素）；每次畫世界（drawWorld）開始清空、結束時剩下的全部畫掉
 const CQ = { a:new Float32Array(7 * 1024), n:0, j:0, lo:0 };
 // 腳底在畫面 (x, y)、比例 sc（每單位幾像素）、腳印 sw × shh、高 ht、不透明度 a、站在第 j 段
-function castQ(x, y, sc, sw, shh, ht, a, j){
+function castQ(x, y, sc, sw, shh, ht, a, j, dz){
   if (!(a > 0.01) || qs.light > 0.99 || CQ.n >= 1024) return;   // 畫質最低那兩級不畫投影，只留接觸陰影
-  const G = castGeo(sw, shh, ht); if (G.E * sc < 2) return;
+  const G = castGeo(sw, shh, ht, dz); if (G.E * sc < 2) return;
   const cx = x + G.cx * sc, cy = y + G.cy * sc, L = G.L * sc, wd = G.wd * sc, ye = cy + Math.abs(Math.sin(G.ang)) * L / 2 + Math.abs(Math.cos(G.ang)) * wd / 2;
   let t = j; while (t > CQ.lo && pY[t] < ye) t--;   // 影子伸到哪一段：那段（和中間幾段）的地面畫完才畫
   const o = CQ.n++ * 7, q = CQ.a;
@@ -2049,7 +2050,7 @@ function footShadow(X, Y, u, sw, shh, ht, dark, j){
   const a0 = ctx.globalAlpha;
   ctx.drawImage(SHADOW, X - sw * 0.5 * u, Y - shh * 0.5 * u, sw * u, shh * u);
   if (dark > 1) { ctx.globalAlpha = a0 * Math.min(1, dark - 1); ctx.drawImage(SHADOW, X - sw * 0.5 * u, Y - shh * 0.5 * u, sw * u, shh * u); ctx.globalAlpha = a0; }
-  castQ(X, Y, u, sw, shh, ht, a0 * SHD.cast * Math.min(dark, 1.6), j);
+  castQ(X, Y, u, sw, shh, ht, a0 * SHD.cast * Math.min(dark, 1.6), j, F / (u * 100));
 }
 // 接觸陰影的大小位置（每種東西算一次）
 function sprContact(sp){ if (!sp.ct) { const cw = Math.min(sp.w * 0.78, 1.3), ch = Math.min(cw * 0.3, sp.hm * 0.3); sp.ct = { x:-cw * 0.55, y:-ch * 0.62, w:cw, h:ch }; } return sp.ct; }
@@ -2072,7 +2073,7 @@ function drawSpr(sp, x, y, sc, fq, sh, a){
     if (lc < 0.99) {
       const d = sp.sd || sprShadow(sp);
       ctx.globalAlpha = k * sh * (1 - lc); ctx.drawImage(d.c, x + d.x * sc, y + d.y * sc, d.w * sc, d.h * sc);
-      castQ(x, y, sc, d.sw, d.shh, sp.hm, k * sh * SHD.cast, CQ.j);
+      castQ(x, y, sc, d.sw, d.shh, sp.hm, k * sh * SHD.cast, CQ.j, F / sc);
     }
     if (lc > 0.01) { const ct = sprContact(sp); ctx.globalAlpha = k * sh * lc * 0.85; ctx.drawImage(CONTACT, x + ct.x * sc, y + ct.y * sc, ct.w * sc, ct.h * sc); }
   }
