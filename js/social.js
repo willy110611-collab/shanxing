@@ -29,7 +29,9 @@
   // 開發測試用：網址加 ?fakenet=1（或 localStorage 的 sx_fakenet 設成 '1'）就完全不連伺服器，
   // 用一個假帳號和假的好友、邀請、照片（晚 0.8 秒才回來，看得到骨架畫面和下拉更新；加 &fakems=8000 等更久）。玩家看不到入口；進入方式寫在管理手冊
   const FAKE = /[?&]fakenet=1\b/.test(location.search) || (() => { try { return localStorage.getItem('sx_fakenet') === '1'; } catch(e){ return false; } })();
-  let acct = FAKE ? { id: 'dev', token: 'dev', name: '測試山友', code: 'TEST0001' } : load(KEY, null);          // { id, token, name, code }（假帳號不存進手機）
+  // 再加 &fakenew=1：一開始沒有帳號，看取暱稱、換手機登入的卡片
+  const FAKE_ACCT = { id: 'dev', token: 'dev0123456789abcdef0123456789abcdef0123456789ab', name: '測試山友', code: 'TEST0001', login: null };
+  let acct = FAKE ? (/[?&]fakenew=1\b/.test(location.search) ? null : Object.assign({}, FAKE_ACCT)) : load(KEY, null);   // { id, token, name, code, login }（假帳號不存進手機）
   // 一起爬的隊伍：{ id:隊伍房間（同一隊最早的那張邀請）, ids:這隊所有邀請, mountain, host:邀請人, mates:[{id,name}]（不含自己）}
   // 舊存檔只有 with（一位隊友）：換成 mates，host 等下次讀到邀請再補
   let party = load(KEY_PARTY, null);
@@ -51,6 +53,10 @@
     if (p === '/friends') return { friend: { name: '新朋友' } };
     if (p === '/invites') return { invites: [] };
     if (p === '/me') return opt.body ? { week: 3400 + fakeN * 50, name: acct.name } : acct;
+    const b = opt.body ? JSON.parse(opt.body) : {};
+    if (p === '/register') return Object.assign({}, FAKE_ACCT, { name: b.name });
+    if (p === '/login') { if (String(b.password).length < 6) throw new Error('名字或密碼不對'); return Object.assign({}, FAKE_ACCT, { login: b.name }); }   // 假伺服器：密碼少於 6 個字就當作打錯
+    if (p === '/password') return { ok: true, login: String(b.login).toLowerCase() };
     if (p === '/photos' && !opt.body) fakeN++;   // 照片也是：每拿一次，海拔、審核狀態變一點
     if (p === '/photos' && q.get('mine')) return { photos: [{ id: 'd1', mountain: 'xiangshan', alt: 183, status: 'ok' }, { id: 'd2', mountain: 'qixing', alt: 1020, status: fakeN % 2 ? 'ok' : 'pending' }] };
     if (p === '/photos' && !opt.body) return { photos: [{ id: 'd3', by: '阿山', alt: 160 + fakeN, status: 'ok', owner: 'f1' }, { id: 'd4', by: '雲雀', alt: 230, status: 'ok', owner: 'f3' }].slice(0, 1 + (fakeN % 2)) };
@@ -67,7 +73,7 @@
     try { r = await fetch(API + path, { method: opt.method || (opt.body ? 'POST' : 'GET'), headers: h, body: opt.body }); }
     catch(e){ throw new Error('連不上伺服器，檢查一下網路'); }
     const d = await r.json().catch(() => ({}));
-    if (r.status === 401 && acct) { throw new Error('登入失效，請到「我的帳號」用復原碼重新登入'); }
+    if (r.status === 401 && acct) { throw new Error('登入失效，請到「我的帳號」用名字＋密碼或復原碼重新登入'); }
     if (!r.ok) throw new Error(d.error || ('連線出了點狀況（' + r.status + '），晚點再試'));
     return d;
   }
@@ -78,8 +84,28 @@
   }
   async function restore(token){
     const old = acct; acct = { token: token.trim() };
-    try { const me = await api('/me'); acct = { id: me.id, token: token.trim(), name: me.name, code: me.code }; store(KEY, acct); return acct; }
+    try { const me = await api('/me'); acct = { id: me.id, token: token.trim(), name: me.name, code: me.code, login: me.login || null }; store(KEY, acct); return acct; }
     catch(e){ acct = old; throw new Error('復原碼不對，或帳號已停用'); }
+  }
+  // 換手機：登入名＋密碼（伺服器給這支手機自己的登入碼，之後跟復原碼登入一樣）
+  async function loginPw(name, password){
+    const old = acct; acct = null;   // 不帶舊帳號的登入碼
+    try { const d = await api('/login', { json: { name, password } }); acct = { id: d.id, token: d.token, name: d.name, code: d.code, login: d.login || null }; store(KEY, acct); return acct; }
+    catch(e){ acct = old; throw e; }
+  }
+  // 換手機登入的表單（大廳歡迎卡、我的帳號共用）：先給「名字＋密碼」，沒設密碼的人再點開「貼上復原碼」
+  // sfx：同一個畫面上表單的代號；done：登入成功後要做的事
+  const loginHtml = sfx => `<form class="lgF" id="lgF${sfx}">${flIn(`id="lgN${sfx}" class="txtIn" maxlength="12" autocomplete="username"`, '登入名')}
+      <div class="pw">${flIn(`id="lgP${sfx}" type="password" maxlength="64" autocomplete="current-password"`, '密碼')}<button class="cbtn sm">登入</button></div></form>
+    <button class="linkBtn" id="rsT${sfx}">沒設密碼？改貼復原碼</button>
+    <form class="pw" id="rsF${sfx}" hidden>${flIn(`id="rsIn${sfx}"`, '貼上復原碼')}<button class="cbtn sm">登入</button></form>`;
+  function bindLogin(sfx, done){
+    $('#rsT' + sfx).onclick = () => { $('#rsF' + sfx).hidden = false; $('#rsT' + sfx).hidden = true; $('#rsIn' + sfx).focus(); };
+    $('#lgF' + sfx).onsubmit = async e => { e.preventDefault();
+      const n = $('#lgN' + sfx).value.trim(), p = $('#lgP' + sfx).value; if (!n || !p) { toast('名字和密碼都要填'); return; }
+      try { await loginPw(n, p); toast(`歡迎回來，${acct.name}`); done(); } catch(err){ toast(err.message, 3000); badCode($('#lgF' + sfx), $('#lgP' + sfx)); } };
+    $('#rsF' + sfx).onsubmit = async e => { e.preventDefault(); const v = $('#rsIn' + sfx).value.trim(); if (!v) return;
+      try { await restore(v); toast(`歡迎回來，${acct.name}`); done(); } catch(err){ toast(err.message, 3000); badCode($('#rsF' + sfx), $('#rsIn' + sfx)); } };
   }
 
   // ───────── 即時房間（WebSocket，自動重連）─────────
@@ -107,7 +133,8 @@
   let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false, chatHid = false;   // chatHid：廣場聊天框收起來，只剩一顆「聊天」小牌
   const PZ = () => SX.plaza;
   // 還沒有帳號：大廳裡面放一張「取暱稱」的木牌卡（不用蓋住整個畫面的彈出視窗，上面的「← 地圖」永遠按得到）
-  // 不想取名字可以按「先不要」回地圖，之後想來再來；換手機的人直接在這張卡貼復原碼
+  // 不想取名字可以按「先不要」回地圖，之後想來再來。取好暱稱就直接進大廳開始玩（不跳復原碼卡，換手機的方法收在「我的帳號」）
+  // 換手機的人在這張卡用「名字＋密碼」登入，沒設密碼的再點開「貼上復原碼」
   function renderWelcome(){
     const body = $('#lobbyBody'); if (!body) return;
     if (PZ()) PZ().unmount();
@@ -116,25 +143,83 @@
       <p class="summitBig">取個暱稱，其他山友會看到這個名字。不急的話，可以先不要。</p>
       ${flIn('id="nmIn" class="txtIn" maxlength="12"', '暱稱（最多 12 個字）')}
       <div class="mBtns"><button class="cbtn" id="nmNo">先不要</button><button class="cbtn go" id="nmOk">進入大廳</button></div>
-      <p class="tiny">已經有帳號（換新手機）？貼上復原碼：</p>
-      <form class="pw" id="rsF0">${flIn('id="rsIn0"', '貼上復原碼')}<button class="cbtn sm">登入</button></form></div>`;
+      <p class="tiny">已經有帳號（換新手機）？用名字＋密碼登入：</p>
+      ${loginHtml('0')}</div>`;
     $('#nmNo').onclick = () => { if (A().pop) A().pop(); if (G().go) G().go('map'); };
     $('#nmOk').onclick = async () => {
       const v = $('#nmIn').value.trim(); if (!v) { toast('先取個暱稱吧'); return; }
       $('#nmOk').disabled = true;
-      try { await register(v); showRecovery(true, open); } catch(e){ toast(e.message, 3200); $('#nmOk').disabled = false; }
+      try { await register(v); toast(`歡迎，${acct.name}！換手機的方法在「我的帳號」`, 3600); open(); } catch(e){ toast(e.message, 3200); $('#nmOk').disabled = false; }
     };
-    $('#rsF0').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn0').value.trim(); if (!v) return;
-      try { await restore(v); toast(`歡迎回來，${acct.name}`); open(); offerCloudLoad(); } catch(err){ toast(err.message, 3000); badCode($('#rsF0'), $('#rsIn0')); } };
+    bindLogin('0', () => { open(); offerCloudLoad(); });
   }
-  function showRecovery(first, then){
-    const mc = $('#mCard'); mc.innerHTML = `<h3>${first ? '帳號建好了！' : '我的復原碼'}</h3>
-      <p class="summitBig">這是你的<b>復原碼</b>，換手機或清掉瀏覽器資料時，用它找回帳號。<br>請截圖或抄下來，不要給別人。</p>
+  // 「我的帳號」按「顯示復原碼」才出現（備用的換手機方法，不強迫）
+  function showRecovery(){
+    const mc = $('#mCard'); mc.innerHTML = `<h3>我的復原碼</h3>
+      <p class="summitBig">沒設密碼也能換手機的備用方法：換手機或清掉瀏覽器資料時，貼上這組碼就能找回帳號。不要給別人。</p>
       <div class="codeBox" id="rcBox">${esc(acct.token)}</div>
-      <div class="mBtns"><button class="cbtn" id="rcCopy">複製</button><button class="cbtn go" id="rcOk">我存好了</button></div>`;
+      <div class="mBtns"><button class="cbtn" id="rcCopy">複製</button><button class="cbtn" id="rcSave">存到手機</button><button class="cbtn go" id="rcOk">關閉</button></div>`;
     $('#modal').classList.add('on');
-    $('#rcCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(acct.token).then(() => toast('已複製'), () => toast('請長按文字複製')); };
-    $('#rcOk').onclick = () => { $('#modal').classList.remove('on'); then && then(); };
+    $('#rcCopy').onclick = () => copyCode();
+    $('#rcSave').onclick = () => saveCode();
+    $('#rcOk').onclick = () => $('#modal').classList.remove('on');
+  }
+  const CODE_TITLE = '山行小日子 復原碼';
+  const codeText = () => `${CODE_TITLE}\n${acct.token}\n換手機時到「山友大廳」貼上這組碼，就能找回帳號。不要給別人。`;
+  function copyCode(){ navigator.clipboard && navigator.clipboard.writeText(acct.token).then(() => toast('已複製'), () => toast('請長按文字複製')); }
+  // 復原碼畫成一張小卡（羊皮紙底），存進手機相簿最不會弄丟
+  function codeCard(){
+    const c = document.createElement('canvas'), W = 640, H = 300; c.width = W; c.height = H;
+    const x = c.getContext('2d'), F = getComputedStyle(document.documentElement);
+    const fT = F.getPropertyValue('--fontT').trim() || 'serif', fB = F.getPropertyValue('--fontB').trim() || 'sans-serif';
+    x.fillStyle = '#f6ead0'; x.fillRect(0, 0, W, H);
+    x.strokeStyle = '#4a3423'; x.lineWidth = 6; x.strokeRect(10, 10, W - 20, H - 20);
+    x.fillStyle = '#4a3423'; x.textAlign = 'center';
+    x.font = `34px ${fT}`; x.fillText(CODE_TITLE, W / 2, 70);
+    x.font = '26px ui-monospace, Consolas, monospace';
+    const t = acct.token, half = Math.ceil(t.length / 2);
+    x.fillText(t.slice(0, half), W / 2, 135); x.fillText(t.slice(half), W / 2, 172);
+    x.font = `20px ${fB}`; x.fillStyle = '#6b5440';
+    x.fillText('換手機時到「山友大廳」貼上這組碼，就能找回帳號。', W / 2, 228);
+    x.fillText('不要給別人。', W / 2, 258);
+    return c;
+  }
+  // 「存到手機」：能分享圖片就分享（iPhone 可以直接「儲存影像」到相簿）→ 只能分享文字就分享文字 → 都不行就複製＋下載小卡
+  async function saveCode(){
+    const c = codeCard(), name = '山行小日子-復原碼.png';
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    const file = blob && typeof File === 'function' ? new File([blob], name, { type: 'image/png' }) : null;
+    try {
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: CODE_TITLE }); return; }
+      if (navigator.share) { await navigator.share({ title: CODE_TITLE, text: codeText() }); return; }
+    } catch(e){ if (e && e.name === 'AbortError') return; }   // 自己按取消就算了
+    if (navigator.clipboard) navigator.clipboard.writeText(codeText()).catch(() => {});
+    const a = document.createElement('a'); a.href = c.toDataURL('image/png'); a.download = name; a.click();
+    toast('已複製，也下載了一張復原碼小卡', 3000);
+  }
+  // 設定／更改換手機用的密碼：登入名（預設是暱稱，不能跟別人重複）＋密碼打兩次
+  function showPassword(){
+    const mc = $('#mCard'), has = !!acct.login;
+    mc.innerHTML = `<h3>${has ? '更改換手機用的密碼' : '設定換手機用的密碼'}</h3>
+      <p class="summitBig">換新手機時，輸入「登入名」和「密碼」就能找回帳號。登入名不會給其他山友看到。</p>
+      <form id="pwF" class="pwF">
+        ${flIn(`id="pwN" class="txtIn" maxlength="12" autocomplete="username" value="${esc(acct.login || acct.name)}"`, '登入名（2～12 個字）')}
+        ${flIn('id="pwP" class="txtIn" type="password" maxlength="64" autocomplete="new-password"', '密碼（至少 6 個字）')}
+        ${flIn('id="pwP2" class="txtIn" type="password" maxlength="64" autocomplete="new-password"', '再輸入一次密碼')}
+        <div class="mBtns"><button type="button" class="cbtn" id="pwNo">取消</button><button class="cbtn go" id="pwOk">存好密碼</button></div>
+      </form>`;
+    $('#modal').classList.add('on');
+    $('#pwNo').onclick = () => $('#modal').classList.remove('on');
+    $('#pwF').onsubmit = async e => { e.preventDefault();
+      const n = $('#pwN').value.trim(), p = $('#pwP').value, p2 = $('#pwP2').value;
+      if (n.length < 2) { toast('登入名至少 2 個字'); badCode($('#pwF'), $('#pwN')); return; }
+      if (p.length < 6) { toast('密碼至少 6 個字'); badCode($('#pwF'), $('#pwP')); return; }
+      if (p !== p2) { toast('兩次密碼不一樣'); badCode($('#pwF'), $('#pwP2')); return; }
+      $('#pwOk').disabled = true;
+      try { const d = await api('/password', { json: { login: n, password: p } }); acct.login = d.login; store(KEY, acct);
+        $('#modal').classList.remove('on'); toast(`設好了！換手機時用「${d.login}」和密碼登入`, 3600); renderMe(); }
+      catch(err){ toast(err.message, 3200); badCode($('#pwF'), $('#pwN')); $('#pwOk').disabled = false; }
+    };
   }
   function open(){
     render(); if (!acct) return;
@@ -297,20 +382,28 @@
     if (!p && party) { const done = load('shanxing-party-done', []); done.push(...(party.ids || [party.id])); store('shanxing-party-done', done.slice(-30)); }
     party = p; store(KEY_PARTY, p); if (pRoom) { pRoom.close(); pRoom = null; } partyBox();
   }
+  const pwState = () => acct.login ? `已設定。換新手機時，用登入名「${acct.login}」和密碼登入。` : '還沒設定。設了以後，換新手機只要輸入名字和密碼。';
   function renderMe(){
     const body = $('#lobbyBody'); if (!body) return;
     body.innerHTML = `
       <div class="setRow"><h4>暱稱</h4><form class="pw" id="nmF">${flIn(`id="nmIn2" maxlength="12" value="${esc(acct.name)}"`, '暱稱')}<button class="cbtn sm">改名</button></form></div>
-      <div class="setRow"><h4>復原碼</h4><p>換手機時用來找回帳號，不要給別人。</p><button class="cbtn sm" id="showRc">顯示復原碼</button></div>
-      <div class="setRow"><h4>換手機：用復原碼登入</h4><form class="pw" id="rsF">${flIn('id="rsIn"', '貼上復原碼')}<button class="cbtn sm">登入</button></form></div>
+      <div class="setRow"><h4>換手機用的密碼</h4><p id="pwSt">${esc(pwState())}</p>
+        <div class="mBtns" style="justify-content:flex-start"><button class="cbtn sm" id="pwSet">${acct.login ? '更改密碼' : '設定換手機用的密碼'}</button></div></div>
+      <div class="setRow"><h4>備用：復原碼</h4><p>不用記密碼的另一個方法。存到手機裡，不要給別人。</p>
+        <div class="mBtns" style="justify-content:flex-start"><button class="cbtn sm" id="showRc">顯示復原碼</button><button class="cbtn sm" id="saveRc">存到手機</button></div></div>
+      <div class="setRow"><h4>換手機：登入原本的帳號</h4>${loginHtml('')}</div>
       <div class="setRow"><h4>雲端存檔</h4><p>進度每 3 分鐘自動備份到雲端（照片不備份），換手機登入後就能載回來。</p>
         <div class="mBtns" style="justify-content:flex-start"><button class="cbtn sm" id="cdUp">立刻備份</button><button class="cbtn sm" id="cdDown">從雲端載入</button></div></div>
       <div class="setRow"><h4>我上傳的照片</h4><div id="myPh">${MO.skeletonGrid(2)}</div></div>`;
     $('#nmF').onsubmit = async e => { e.preventDefault(); const v = $('#nmIn2').value.trim(); if (!v) return;
       try { const d = await api('/me', { json: { name: v } }); acct.name = d.name; store(KEY, acct); toast('改好了'); } catch(err){ toast(err.message, 3000); } };
-    $('#showRc').onclick = () => showRecovery(false);
-    $('#rsF').onsubmit = async e => { e.preventDefault(); const v = $('#rsIn').value.trim(); if (!v) return;
-      try { await restore(v); toast(`歡迎回來，${acct.name}`); report(); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); } catch(err){ toast(err.message, 3000); badCode($('#rsF'), $('#rsIn')); } };
+    $('#showRc').onclick = () => showRecovery();
+    $('#saveRc').onclick = () => saveCode();
+    $('#pwSet').onclick = () => showPassword();
+    bindLogin('', () => { report(); if (lobby) { lobby.close(); lobby = room('lobby', onLobby); } refresh(); renderMe(); setTimeout(offerCloudLoad, 600); });
+    // 舊帳號、別的手機設過密碼：跟伺服器問一下現在有沒有設密碼
+    if (!FAKE) api('/me').then(me => { if ((me.login || null) === (acct.login || null)) return; acct.login = me.login || null; store(KEY, acct);
+      const st = $('#pwSt'), bt = $('#pwSet'); if (st) st.textContent = pwState(); if (bt) bt.textContent = acct.login ? '更改密碼' : '設定換手機用的密碼'; }).catch(() => {});
     $('#cdUp').onclick = () => { lastSaved = ''; cloudSave(false); toast('備份好了'); };
     $('#cdDown').onclick = () => offerCloudLoad();
     myPhotos();

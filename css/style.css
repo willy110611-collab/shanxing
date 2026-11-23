@@ -686,6 +686,12 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .lbWelcome{margin:10px auto 0;flex:none}
 .lbWelcome .pw{margin-top:4px}
 .lbWelcome .tiny{margin-top:12px}
+/* 換手機登入（名字＋密碼，備用的貼復原碼）、設定密碼的表單 */
+.lgF .txtIn{margin:0}
+.lgF>.fl{margin-top:8px}
+.pwF .txtIn{margin:8px 0}
+.pw[hidden],.linkBtn[hidden]{display:none}
+.linkBtn{display:inline-block;margin-top:6px;padding:6px 2px;background:none;border:0;font:inherit;font-size:13px;color:var(--ink2);text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
 /* 讀取畫面收起時：字和進度條先藏起來，背景再慢慢淡掉，不會跟後面畫面的字疊在一起 */
 .loading.done .ldBox{visibility:hidden}
 /* 相簿（百岳帳、徽章…內容很長）：紙張跟著內容一路捲到底，不會捲到一半就露出底下的木桌 */
