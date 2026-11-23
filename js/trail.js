@@ -3641,26 +3641,22 @@ function artFrame(c, id, i, cx, by, h, flip, fl){
   c.globalAlpha = a0; c.globalCompositeOperation = g0;
   return true;
 }
-// 人身上的光斑：光線貼圖第 3 組（暖色剪影）只貼這一格的一小塊（三層由大到小疊成柔邊），所以只亮在人身上；位置 LIT.du、LIT.dv（0～1）
+// 人身上的光斑：光線貼圖第 3 組（暖色剪影）只貼光斑那一帶，所以只亮在人身上；位置 LIT.du、LIT.dv（0～1）
 // 2026-11-24 回報爬階梯時登山客身上、身後的階梯上有一塊方方正正的亮框：以前光斑是「剪影貼圖切三個由大到小的長方形」用加亮疊上去，
-// 長方形的邊就是硬邊（身上看得到方框），WebGL 加亮又把切出來那塊的空白處也加亮一點（身後的階梯上一個淡淡的亮框）。
-// 現在先在一張小畫布（DAP_H 像素高）上畫這一格的暖色剪影，再用一個柔邊的橢圓漸層只留光斑那一團（destination-in），整張用加亮貼上去：
-// 光斑邊緣是軟的，剪影外面完全是空的。只有光斑碰到人身上那一兩秒才做（每格一張小圖）
-const DAP_H = 160, DAP_R = [0.42, 0.22];   // 小畫布多高（像素）；光斑橢圓的半寬、半高（這一格圖寬、高的幾成）
-let DAPC = null;
+// 長方形的邊就是硬邊（身上看得到方框），WebGL 的加亮又把切出來那塊的空白處也加亮一點（身後的階梯上一個淡淡的亮框）。
+// 現在切成 DAP_N 條細橫條，每條的濃度照橢圓的高度平滑變（上下沒有硬邊），每條再疊兩層寬窄不同的（左右也是慢慢淡掉）；用一般混色蓋上去，剪影外面一定是空的
+const DAP_N = 10, DAP_R = [0.42, 0.22], DAP_P = [0, 0, 0, 0];   // 幾條、光斑橢圓的半寬、半高（這一格圖寬、高的幾成）
 function heroDapple(c, id, i, cx, by, h, flip, L, a0){
-  const e = ART.get(id), n = e.frames.length, f = e.frames[((i % n) + n) % n], H = h * (e.hk || 1), w = H * f.w / f.h, k = DAP_H / H;
-  const cw = Math.max(2, Math.ceil(2 * w * k));
-  if (!DAPC) DAPC = mk(cw, DAP_H); else if (DAPC.width !== cw || DAPC.height !== DAP_H) { if (c.drop) c.drop(DAPC); DAPC.width = cw; DAPC.height = DAP_H; }
-  const g = DAPC.getContext('2d'), u = ART.mirrored(id, i, flip) ? 1 - LIT.du : LIT.du;
-  g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.clearRect(0, 0, cw, DAP_H);
-  g.setTransform(k, 0, 0, k, 0, 0); ART.drawOver(g, id, i, w, H, h, flip, L.c, L.rh * 3, L.k);   // 這一格的暖色剪影（畫在小畫布正中間）
-  const rx = DAP_R[0] * w * k, ry = DAP_R[1] * DAP_H, gr = g.createRadialGradient(0, 0, 0, 0, 0, 1);
-  gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.45, 'rgba(0,0,0,0.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-  g.setTransform(rx, 0, 0, ry, cw / 2 + (u - 0.5) * w * k, LIT.dv * DAP_H); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(-1, -1, 2, 2);   // destination-in 會把填的範圍外面也清空
-  if (c.drop) c.drop(DAPC);   // WebGL：內容每格不一樣，重新傳
-  c.globalCompositeOperation = 'source-over'; c.globalAlpha = a0 * LIT.dap;   // 一般混色（暖色蓋上去一點）：WebGL 的加亮連剪影外面也會加到一點顏色
-  c.drawImage(DAPC, cx - w, by - H, 2 * w, H);
+  const u = ART.mirrored(id, i, flip) ? 1 - LIT.du : LIT.du, v = LIT.dv, ry = DAP_R[1];
+  c.globalCompositeOperation = 'source-over';
+  for (let s = 0; s < DAP_N; s++) {
+    const t = (s + 0.5) / DAP_N * 2 - 1, k = (1 - t * t) * (1 - t * t), hw = DAP_R[0] * Math.sqrt(1 - t * t);   // 這一條在橢圓的哪裡：中間最亮最寬
+    DAP_P[1] = clamp(v - ry + 2 * ry * s / DAP_N, 0, 1); DAP_P[3] = clamp(v - ry + 2 * ry * (s + 1) / DAP_N, 0, 1); if (DAP_P[3] - DAP_P[1] < 0.005) continue;
+    for (let q = 0; q < 2; q++) {
+      const ww = hw * (q ? 0.55 : 1); DAP_P[0] = clamp(u - ww, 0, 1); DAP_P[2] = clamp(u + ww, 0, 1); if (DAP_P[2] - DAP_P[0] < 0.01) continue;
+      c.globalAlpha = a0 * LIT.dap * k * 0.5; ART.drawOver(c, id, i, cx, by, h, flip, L.c, L.rh * 3, L.k, DAP_P);
+    }
+  }
 }
 // 地上的光斑（groundLight 第二部分，同一組亂數）走到登山客身上：在光斑前後 LOOK.dapple.span 公尺內，光從頭頂滑到腳底；左右照光斑在路上的位置
 let dapForce = null;
