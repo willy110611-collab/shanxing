@@ -1783,6 +1783,21 @@
   let gpsWatch = null, gpsPrev = null, gpsTotal = 0;
   const DEV_HASH = 'acac170fa5097902002a7e1e522ac96c9838c1193505835d2a990e0cd7917fef';
   let devPeek = false, devTaps = 0, devTapT = 0;
+  // 資料來源：全部從 SX.SOURCES 畫（網址只寫在 data.js），連結一律開新分頁
+  function sourcesHtml(){
+    const S = SX.SOURCES;
+    const a = (url, name) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a>`;
+    const li = x => `<li>${x.url ? a(x.url, x.name) : x.name}<span>${x.org || ''}</span></li>`;
+    const mt = SX.MOUNTAINS.map(m => {
+      const c = S.mountain[m.id], none = c.url === SX.NOSRC;
+      return `<li>${none ? m.name : a(c.url, m.name)}<span>${none ? SX.NOSRC + '官方數據：' : ''}${c.note}</span></li>`;
+    }).join('');
+    return `<div class="setRow srcRow"><h4>資料來源</h4>
+        <p>山的距離、海拔和時間，盡量用官方公布的數字；官方沒寫的，沿用山友的紀錄。</p>
+        <ul class="srcList">${S.main.map(li).join('')}</ul>
+        <details><summary>每座山的出處</summary><ul class="srcList">${mt}</ul></details>
+        <ul class="srcList srcCr">${S.credit.map(li).join('')}</ul></div>`;
+  }
   function renderSettings(){
     const s = SV.set;
     $('#setBody').innerHTML = `
@@ -1794,6 +1809,7 @@
         <p>山友邀你一起爬、對方接受邀請，或關掉遊戲後快到山頂時，手機會跳通知。iPhone 要先「加入主畫面」，從主畫面打開才收得到。</p></div>
       <div class="setRow"><h4 id="tipsH">操作小抄</h4>
         <p>${tutIntro().map(x => x.t).join('')}</p><button class="cbtn sm" data-go="help">看新手教學</button></div>
+      ${sourcesHtml()}
       ${s.dev || devPeek ? `<div class="setRow"><h4>開發者選項</h4>
         ${s.dev ? `<p>已解鎖</p><div class="devBtns">
           <button class="cbtn sm" id="dFast">${s.devOn && s.fast ? '關閉' : '開啟'}快轉 ×20</button>

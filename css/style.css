@@ -733,6 +733,14 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .dbtn i.i-help{width:24px;height:24px;margin:1px 0;border:2px solid var(--ink);border-radius:50%;background:#fff3d0;color:var(--ink);font-style:normal;font-weight:bold;font-size:15px;line-height:20px;text-align:center;text-shadow:none;filter:none}
 .tutL li span b{display:block;font-weight:normal;font-family:var(--fontT);font-size:15.5px;margin-bottom:1px}
 .setRow [data-go="help"]{margin-top:8px}
+.srcList{list-style:none;margin:8px 0 0;padding:0}
+.srcList li{padding:6px 0;border-top:1.5px dashed rgba(90,60,30,.35);font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.srcList li:first-child{border-top:0}
+.srcList a{color:#7a4a1c;text-decoration:underline;text-underline-offset:3px}
+.srcList span{display:block;font-size:12.5px;color:var(--ink2)}
+.srcRow details{margin-top:10px}
+.srcRow summary{cursor:pointer;font-size:15px;padding:6px 0}
+.srcCr{border-top:2.5px solid rgba(90,60,30,.45);margin-top:10px}
 .tutDots{display:flex;justify-content:center;gap:7px;margin:12px 0 2px}
 .tutDots i{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);background:transparent}
 .tutDots i.on{background:#8fcf6e}
