@@ -26,7 +26,7 @@ const HIT = { note:1, btree:1, cairn:1, bench:1, view:1, treasure:1 };
 const PXO = { note:RW+0.55, btree:RW+1.9, cairn:RW+0.6, bench:RW+1.0, view:RW+2.3, treasure:RW+0.4, sign:RW+0.7, summit:RW-0.8, mycairn:RW+0.35, fall:RW+3.2, hut:RW+7.8, hut369:RW+6, hutjm:RW+4, shrine:RW+1.5, station:RW+3.6, rockwall:RW+2.2 };   // 地標放在圖寬一半以外，不會蓋到步道
 const DEFWX = { kind:'sunny', time:'day' };
 
-let cv = null, ctx = null, W = 375, H = 812, DPR = 1, F = 450, HOR = 276, CAMH = 5, U = 1;
+let cv = null, ctx = null, W = 375, H = 812, DPR = 1, F = 450, HOR = 276, HOR0 = 276, CAMH = 5, U = 1;
 let ocv = null, glc = null, c2d = null;   // ocv：真正顯示的畫布（WebGL 時是 gl2d 另外做的那張，Canvas 2D 時就是 #cv）；glc：WebGL 畫筆；c2d：Canvas 2D 畫筆
 let OX = 0, OY = 0;   // 畫進遠景快取時整張往右下挪多少（畫面外多留一圈，跨出畫面邊緣的東西不會被切掉）
 let M = null, TH = {}, seed = 1, N = 0, total = 1;
@@ -41,8 +41,8 @@ const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1, TRUNK_P = 0.14;   // TRUNK_P：森
 // 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
 // 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
 const SCALE = {
-  hero:1.76, heroSit:1.0, heroSleep:1.0, heroSummit:1.96, heroBreath:1.5, heroPose:1.74,   // heroBreath：彎腰喘氣比站著矮；heroPose：喝水、擦汗、看風景（站著）
-  bench:0.96, benchSeat:0.45, rail:1.1, sign:1.2, summit:1.5, rock:1.1, cairn:0.95, mycairn:0.45, note:1.4, treasure:0.6, view:1.75, fall:4.2,
+  hero:1.76, heroSit:1.12, heroBench:1.32, heroSleep:1.0, heroSummit:1.96, heroBreath:1.5, heroPose:1.74,   // heroBreath：彎腰喘氣比站著矮；heroPose：喝水、擦汗、看風景（站著）
+  bench:0.96, benchBack:0.95, benchSeat:0.45, rail:1.1, sign:1.2, summit:1.5, rock:1.1, cairn:0.95, mycairn:0.45, note:1.4, treasure:0.6, view:1.75, fall:4.2,
   pine:8.2, broad:6.4, bigtree:12.5, sakura:5.6, wishtree:4.4,
   rhodo:1.5, bamboo:1.3, fern:0.9, grass:0.55, flower:0.5, silver:1.9,
   railPost:1.16, railBar:0.09,              // 欄杆柱子比扶手高一點點；扶手是一根約 9 公分粗的圓木
@@ -52,6 +52,9 @@ const SCALE = {
   hut:7.5, shrine:1.2, station:3.6, rockwall:6,   // 路旁地標：排雲山莊（三層木屋）、西峰山神廟、北峰氣象站、東峰岩壁
   hut369:4.5, hutjm:3.0                          // 369 山莊（長長一層、黃屋頂，含屋頂約 4.5 公尺）、嘉明湖避難山屋（一層小屋約 3 公尺）
 };
+// 休息（2026-11-24 回報）：坐在路邊石頭上（hiker_rest）坐在路的 side 那一側、離路緣 in 公尺，不擋在階梯正中間，鏡頭往那邊移 pan 公尺；
+// 坐長椅（hiker_bench）時寵物在長椅旁邊 petBench 公分；休息時鏡頭往上抬畫面高的 lift 倍（下面的休息選單不會蓋到坐著的人）；長椅前面 benchClr 公尺內、長椅那一邊不種會擋住人的植物
+const REST = { side:1, in:0.5, pan:0.5, petBench:-95, lift:0.07, benchClr:9 };
 const RAIL_J = 64, RAIL_H = SCALE.rail, RAIL_GAP = 0.12;   // 欄杆：幾段以內畫、高度、離路緣多遠（公尺；路寬每段不一樣，離路中心多遠看 railD）
 const RAIL_ART_J = 44;   // 美術圖欄杆畫到幾段（再遠只剩一兩像素的細線，最後 10 段淡出，省效能）
 let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
@@ -68,7 +71,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, gr:0, crK:0, crD:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, pph:0, fly:1, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, gr:0, crK:0, crD:0, pan:0, lift:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, pph:0, fly:1, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -252,6 +255,11 @@ function hzOf(sp){ return sp.o ? hazed(sp.o) : sp.h; }
 function artSpr(id, hm){
   const o = keep('spr:' + id, function(){ const c0 = ART.crop(id); if (!c0) return null; const k = 1 - (SINK[id] || 0), c = sunk(c0, SINK[id] || 0); groundShade(c); if (SOFT_BASE[id]) softBase(c, hashStr(id)); return { c:c, k:k }; });
   return o ? { c:o.c, h:hazed(o), o:o, w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;   // shared：換山時不能釋放；埋進土裡的那截不算高度，寬度照原比例
+}
+// 左右鏡射的美術圖貼圖（長椅背面左右各一張，都朝前方）：做一次存起來
+function artSprM(id, hm){
+  const o = keep('sprM:' + id, function(){ const a = artSpr(id, hm); if (!a) return null; const c = mk(a.c.width, a.c.height), g = c.getContext('2d'); g.translate(c.width, 0); g.scale(-1, 1); g.drawImage(a.c, 0, 0); return { c:c, k:a.hm / hm }; });
+  return o ? { c:o.c, h:hazed(o), o:o, w:hm * o.k * o.c.width / o.c.height, hm:hm * o.k, ax:0.5, shared:true } : null;
 }
 // 樹埋進土裡：Gemini 的樹圖底部畫了一整圈樹根，照圖底貼在地面上，樹根就整片浮在地表上。
 // 每張圖往下埋「圖高的幾成」（量的是樹幹和樹根交界往下多少，只留樹幹底和樹根最上面一點點）；沒列的圖不埋。
@@ -842,7 +850,8 @@ function buildSprites(){
   SPR.btree = artOr('wish_tree', SCALE.wishtree, [sprite(SCALE.wishtree * 0.97, SCALE.wishtree, 60, function(g){ pBTree(g, r); }, SINK_DEF)]);
   SPR.cairn = artOr('cairn', SCALE.cairn, [sprite(SCALE.cairn * 1.05, SCALE.cairn, 80, function(g){ pCairn(g, true); })]);
   SPR.mycairn = artOr('cairn', SCALE.mycairn, [sprite(SCALE.mycairn * 1.33, SCALE.mycairn, 80, function(g){ pCairn(g, false); })]);
-  SPR.bench = artOr('bench', SCALE.bench, [sprite(SCALE.bench * 2.1, SCALE.bench, 80, pBench)]);
+  SPR.bench = artOr('bench_back', SCALE.benchBack, artOr('bench', SCALE.bench, [sprite(SCALE.bench * 2.1, SCALE.bench, 80, pBench)]));   // 空長椅：背對鏡頭（坐的人面向前方的風景）
+  const bl = artSprM('bench_back', SCALE.benchBack); SPR.benchL = bl ? [bl] : null;
   SPR.view = artOr('deck_view', SCALE.view, [sprite(SCALE.view * 2.1, SCALE.view, 70, pView)]);
   SPR.fall = artOr('waterfall', SCALE.fall, []);      // 只有美術圖：路旁小瀑布
   SPR.railPost = artOr('rail_post', SCALE.railPost, null); SPR.railBar = artOr('rail_bar', SCALE.railBar, null);   // 兩張都有才用美術圖欄杆，不然照舊程式畫
@@ -982,7 +991,9 @@ function buildProps(){
   // 只有美術圖才有的景物，放在最後（不影響上面固定道具的位置）：小瀑布（中低海拔）。欄杆改成沿路連續畫（railOn）
   if (ART.get('waterfall') && !TH.alpine) for (m = 600 + r() * 400; m < lim; m += 900 + r() * 600) put('fall', m, r() < 0.5 ? -1 : 1);
   props.push({ type:'summit', m:total + TOP.mark, side:1, text:'' });   // 三角點立在山頂平台上、登山客右前方（PXO.summit：平台邊緣往內 0.8 公尺）
-  landmarks(); buildBendProps(); buildWidth(); buildSoft(); buildShade();
+  landmarks();
+  props.forEach(function(p){ if (p.type === 'bench') for (let i = Math.max(0, Math.floor((p.m - REST.benchClr) / SEG)); i <= Math.min(N, Math.ceil((p.m + 1.5) / SEG)); i++) clrS[i] |= p.side < 0 ? 1 : 2; });   // 長椅前面（鏡頭這邊）那一側清空，坐著的人不會被樹叢擋住
+  buildBendProps(); buildWidth(); buildSoft(); buildShade();
   mergeProps();
 }
 // 路旁地標（只有美術圖才放）：位置照這座山的路線地標（SX.REC 的 waypoints）
@@ -1033,6 +1044,8 @@ function buildShade(){
   for (let i = 0; i <= N; i++) t[i] = treeAt(i) ? 1 : 0;
   for (let i = 0; i <= N; i++) { let s = 0, d = 0; for (let k = 0; k <= SHADE_AHEAD; k++) s |= i + k <= N ? t[i + k] : 0; for (let k = -SHADE_SPAN; k <= SHADE_SPAN; k++) d += i + k >= 0 && i + k <= N ? t[i + k] : 0; treeSh[i] = s; treeD[i] = Math.min(1, d / SHADE_SPAN); }
 }
+// 地標、長椅前面那一側（clrS）：路緣的小草叢、蕨類也不長（不然會蓋住坐在長椅上的人、擋住山神廟）
+function clrAt(i, side){ return i >= 0 && i <= N && (clrS[i] & (side < 0 ? 1 : 2)) !== 0; }
 function cleared(i, side){ return i * SEG > total - TOP.land || (i >= 0 && i <= N && (clrS[i] & (side < 0 ? 1 : 2)) !== 0); }   // 山頂再過去（往下掉的那面）不種東西
 function mergeProps(){ AP = props.concat(cairns); AP.sort(function(a, b){ return a.m - b.m; }); }
 // 彎道內側擋著一棵大樹、一顆長苔的大石頭、一片岩壁或一叢高箭竹：看起來路是為了繞過它才轉彎。
@@ -1521,7 +1534,7 @@ S.resize = function(){
   if (w === W && h === H && d === DPR && RAYS && ocv.width === Math.round(w * d)) return;
   W = w; H = h; DPR = d; ocv.width = Math.round(W * DPR); ocv.height = Math.round(H * DPR);
   if (ocv !== cv && cv.width > 1) cv.width = cv.height = 1;   // 用 WebGL 時 #cv 只接點擊，不佔記憶體
-  F = Math.min(W * 1.2, H * 0.62); HOR = Math.round(H * HORF); CAMH = FOOTF * H * HZ / F; U = H / 812;   // 鏡頭高度由「登山客腳底在畫面的位置」反推
+  F = Math.min(W * 1.2, H * 0.62); HOR0 = HOR = Math.round(H * HORF); CAMH = FOOTF * H * HZ / F; U = H / 812;   // 鏡頭高度由「登山客腳底在畫面的位置」反推
   buildRays(); if (SHOW_FG) buildFG(); FGRIM = {}; farReset();   // 尺寸變了：遠景快取重做
   // 暗角：中心放在登山客和前方步道之間，四角壓暗一點，視線自然落在人和路上
   vig = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.3, W / 2, H * 0.55, H * 0.74);
@@ -2117,7 +2130,8 @@ function walkFrame(n){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * (n || 4
 const artRain = id => { const r = rainAct(id); return r !== id && ART.get(r) ? r : id; };   // 休息、睡覺這種一定要畫的：沒有雨衣版就先用原本的
 function heroArt(c, s, t, fl, me){
   if (s.sleep) return artFrame(c, artRain('hiker_sleep'), 0, 0, 0, SCALE.heroSleep * 100, false, fl);
-  if (s.rest) return artFrame(c, artRain('hiker_rest'), 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
+  if (s.rest && benchArt && ART.get('hiker_bench')) return artFrame(c, artRain('hiker_bench'), 0, 0, 0, SCALE.heroBench * 100, false, fl);   // 坐長椅（背對鏡頭，長椅在圖裡）
+  if (s.rest) return artFrame(c, artRain('hiker_rest'), 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, !!me && REST.side < 0, fl);   // 坐在路邊石頭上（圖是往右看：坐在左邊時鏡射）
   if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return artFrame(c, artRain('hiker_summit'), 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
   if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return artFrame(c, artRain('hiker_helmet'), 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
@@ -2145,25 +2159,28 @@ function restBench(s, dist){
 }
 let benchO = null;
 // bx、by、bs：坐在長椅上時，椅面中間的畫面位置和那裡的比例（每公尺幾像素）；沒給就站在路中間
-function drawHero(s, t, bx, by, bs){
+// bart：坐長椅的美術圖（hiker_bench：長椅、背包、登山杖都在圖裡），(bx, by) 是長椅腳底；沒有 bart 時 (bx, by) 是椅面（舊的長椅圖＋坐著的人）
+function drawHero(s, t, bx, by, bs, bart){
   proj(jhG, fhG, false);
-  const onB = bx != null, sit = s.rest || s.sleep, tn = onB || sit ? 0 : hero.turn;   // tn：轉彎時腳往內側偏（坐著不偏）
-  const X = onB ? bx : gx + tn * TURN_X * gs, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100;     // 角色座標單位：公分
-  hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
+  const onB = bx != null, sit = s.rest || s.sleep, rock = s.rest && !s.sleep && !onB, tn = onB || sit ? 0 : hero.turn;   // tn：轉彎時腳往內側偏（坐著不偏）；rock：坐在路邊石頭上
+  const X = onB ? bx : rock ? gx + REST.side * (rwF(bG + jhG, fhG) - REST.in) * gs : gx + tn * TURN_X * gs, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100;     // 角色座標單位：公分
+  hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (bart ? SCALE.heroBench : sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
   ctx.globalAlpha = 1;
-  LIT.on = true;   // 自己和寵物照登山畫面的陽光上光（artFrame）
-  drawPet(s, X + 68 * u, (onB ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t, hero.pph);
+  LIT.on = true; benchArt = !!bart;   // 自己和寵物照登山畫面的陽光上光（artFrame）
+  drawPet(s, bart ? X + REST.petBench * u : rock ? X - REST.side * 70 * u : X + 68 * u, (onB && !bart ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t, hero.pph);   // 坐長椅：寵物在長椅旁邊；坐石頭：在靠路中間那一側
   // 腳底影子：跨步時兩腳前後張開，影子前後拉長一點、左右縮一點；再疊一個貼著鞋底的小深影（坐在長椅上就只有椅面上一小片）
   const sd = sit ? 0 : Math.abs(Math.sin(hero.ph)) * hero.mv, sw = 86 * (1 - 0.06 * sd), sh = 34 * (1 + 0.3 * sd);
-  if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
+  if (bart) footShadow(X, Y, u, 170, 46, SCALE.bench * 100, 1, jhG);   // 長椅連人一整片壓在地上
+  else if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
   else footShadow(X, Y, u, sw, sh, SCALE.hero * 100, LOOK.shadow.hero, jhG);   // 跟著太陽拉長，比一般影子深一點
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
   heroDapUpd(t);   // 森林裡地上的光斑走到身上（只有自己）
   if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
   ctx.restore();
-  LIT.on = false; LIT.dap = 0;
+  LIT.on = false; LIT.dap = 0; benchArt = false;
 }
+let benchArt = false;   // 這一次畫的是坐長椅的美術圖（drawHero 叫 heroArt 時用）
 
 // 給登山口廣場用：在別的畫布 c 的 (X, Y) 腳底畫一個登山客（u：每公分幾像素）
 // p：{ ph 步伐相位, mv 0～1 走動程度, sit 坐下, tint 衣服色調（-1＝自己原色，0～2＝隊友那三種）, pet, flip }
@@ -3027,11 +3044,13 @@ function drawBend(o, i, j, fq, fade, snowTrees){
   drawSpr(sp, gx + o.side * xo * gs, gy - terrH(i, o.side, xo) * gs, gs * o.sc, fq, farA(j, 64, 8), fade * (tree ? 1 : intrA(rw, xo, sp.w * o.sc)));
 }
 function drawProp(o, i, j, f, fq, t, fade){
-  const sp = o.type === 'sign' ? getSign(o.text) : (SPR[o.type] && SPR[o.type][0]); if (!sp) return;
+  const sp = o.type === 'sign' ? getSign(o.text) : o.type === 'bench' && o.side < 0 && SPR.benchL ? SPR.benchL[0] : (SPR[o.type] && SPR[o.type][0]); if (!sp) return;   // 長椅背面的圖是斜的：左邊那張鏡射，兩邊都朝前方的風景
   proj(j, f, false);
   const xo = PXO[o.type] - RW + rwAt(i), x = gx + o.side * xo * gs, y = gy - terrH(i, o.side, xo) * gs, dw = sp.w * gs, dh = sp.hm * gs;
-  drawSpr(sp, x, y, gs, fq, 1, fade);
-  if (o === benchO && !heroDone) { drawHero(curS, t, x, y - SCALE.benchSeat * 1.12 * gs, gs); heroDone = true; ctx.globalAlpha = fade; }   // 坐在長椅上：畫在長椅前面（椅面在圖高 47%，椅面中間再往後一點）
+  const bArt = o === benchO && !heroDone && !!ART.get('hiker_bench');   // 坐長椅休息：整張「人坐在長椅上」的圖取代空長椅
+  if (bArt) { drawHero(curS, t, x, y, gs, true); heroDone = true; ctx.globalAlpha = fade; }
+  else drawSpr(sp, x, y, gs, fq, 1, fade);
+  if (o === benchO && !heroDone && !bArt) { drawHero(curS, t, x, y - SCALE.benchSeat * 1.12 * gs, gs); heroDone = true; ctx.globalAlpha = fade; }   // 坐在長椅上：畫在長椅前面（椅面在圖高 47%，椅面中間再往後一點）
   ctx.globalAlpha = fade * clamp((dh - 2) / 2.5, 0, 1);
   if (o.type === 'treasure' && ctx.globalAlpha > 0.01) sparkle(x, y - dh * 0.6, gs, t, o.m);
   ctx.globalAlpha = fade;
@@ -3320,7 +3339,7 @@ function drawWorld(b, t, jHi, jLo, far){
     const eA = cleared(i, 0) && z0 > total ? 0 : fade * farA(j, EDGE_J, 8);   // 路緣草叢：最遠 8 段慢慢淡入；山頂再過去沒有
     if (eA > 0.005) for (let side = -1; side <= 1; side += 2) {
       const h0 = side < 0 ? 120 : 130;
-      if (Hh(i, h0) > EDGE_P) continue;
+      if (Hh(i, h0) > EDGE_P || clrAt(i, side)) continue;
       const arr = pick(edgeTab, Hh(i, h0 + 1)), sp = arr[(Hh(i, h0 + 2) * arr.length) | 0], m = 0.75 + 0.35 * Hh(i, h0 + 3), f = Hh(i, h0 + 4);
       const xo = rw + sp.w * m * (0.5 - (0.15 + 0.1 * Hh(i, h0 + 5)));
       if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
@@ -3333,7 +3352,7 @@ function drawWorld(b, t, jHi, jLo, far){
       const n = stairN(j), shrink = lerp(1, SE_FAR, clamp(pZ[j] / (SE_PLANT_J * SEG), 0, 1));
       for (let q = 0; q < n; q++) for (let side = -1; side <= 1; side += 2) {
         const id = i * 8 + q, h = side < 0 ? 0 : 6;
-        if (Hh(id, 730 + h) > SE_PLANT_P) continue;
+        if (Hh(id, 730 + h) > SE_PLANT_P || clrAt(i, side)) continue;
         const arr = pick(stairTab, Hh(id, 731 + h)), sp = arr[(Hh(id, 732 + h) * arr.length) | 0], f = (q + 0.55 + 0.4 * Hh(id, 733 + h)) / n;
         const m = (0.9 + 0.6 * Hh(id, 734 + h)) * shrink, rw = rwF(i, f), xo = rw + sp.w * m * (0.5 - (0.15 + 0.1 * Hh(id, 735 + h)));
         if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
@@ -3353,7 +3372,7 @@ function drawWorld(b, t, jHi, jLo, far){
     }
     // 偶爾一叢芒草或蕨類長在路緣、往路面斜：從遠處慢慢靠近，走過時比背景快很多地從畫面邊緣滑出去（離鏡頭很近，大半被畫面切掉）
     const pA = fade * farA(j, 30, 6);
-    if (pA > 0.005 && !railOn(i) && z0 < total && Hh(i, 300) < PASS_P) {
+    if (pA > 0.005 && !railOn(i) && z0 < total && Hh(i, 300) < PASS_P && !clrAt(i, Hh(i, 301) < 0.5 ? -1 : 1)) {
       const side = Hh(i, 301) < 0.5 ? -1 : 1, arr = (TH.alpine || TH.grass || Hh(i, 302) < 0.5) ? SPR.silver : SPR.fern, sp = arr[(Hh(i, 303) * arr.length) | 0];
       const sc = 1.1 + 0.35 * Hh(i, 304), xo = PASS_IN + sp.w * sc * 0.5, f = Hh(i, 305);
       if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
@@ -3722,7 +3741,9 @@ S.render = function(s){
   const camZ = dist - HZ, b = Math.floor(camZ / SEG), off = camZ / SEG - b; offG = off; bG = b;
   // 坐長椅休息：鏡頭慢慢往長椅那邊移一點，看得到人坐在椅子上；走起來再慢慢移回來
   benchO = restBench(s, dist);
-  hero.pan += ((benchO ? benchO.side * PXO.bench * 0.7 : 0) - hero.pan) * Math.min(1, dt * 2); if (!benchO && Math.abs(hero.pan) < 0.002) hero.pan = 0;   // 離開長椅後鏡頭回到正中間：剩一點點就直接歸零（不會永遠偏一點點）
+  hero.lift += ((s.rest || s.sleep ? REST.lift * H : 0) - hero.lift) * Math.min(1, dt * 2); HOR = HOR0 - Math.round(hero.lift);   // 休息時整個畫面往上抬一點（地平線跟著），坐著的人在休息選單上面
+  const panT = benchO ? benchO.side * PXO.bench * 0.7 : s.rest && !s.sleep ? REST.side * REST.pan : 0;   // 坐長椅、坐路邊石頭：鏡頭往那邊移一點
+  hero.pan += (panT - hero.pan) * Math.min(1, dt * 2); if (!panT && Math.abs(hero.pan) < 0.002) hero.pan = 0;   // 離開長椅後鏡頭回到正中間：剩一點點就直接歸零（不會永遠偏一點點）
   const bob = RMOT && RMOT.matches ? 0 : hero.mv;   // 鏡頭跟著步伐極輕微上下晃（一步一次）；系統設定減少動態就不晃
   let j, x = 0, dx = -off * cAt(b);
   const crX = CREST * LOOK.climb.k * hero.crK, crS = hero.crD * LOOK.climb.lead;   // 前方有坡頂：從登山客到坡頂這段的 lead 成開始，路再多往下彎（坡頂提早、清楚地翻過去）
