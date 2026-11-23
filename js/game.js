@@ -488,7 +488,7 @@
     $('#routeCard').classList.remove('on'); $('#modal').classList.remove('on');
     wx = wxOverride || wxHere();
     SC.setMountain(M); SC.setCairns(SV.cairns[id] || []);
-    try { HUD.setRoute(M.route); buildMarks(); } catch(e){ console.error('hud', e); }
+    try { HUD.setRoute(M.route); } catch(e){ console.error('hud', e); }
     if (screen === 'climb') catchUp(); else go('climb');
     SC.resize(); A.nextDay();
     const sc = $('#scrClimb'), ar = $('#app').getBoundingClientRect(); sc.style.setProperty('--rx', (lastTap.x - ar.left) + 'px'); sc.style.setProperty('--ry', (lastTap.y - ar.top) + 'px'); sc.classList.remove('reveal'); void sc.offsetWidth; sc.classList.add('reveal');
@@ -533,12 +533,6 @@
     $('#tuNext').onclick = () => { if (last) { A.pop(); closeModal(); } else turn(1); };
   }
   const wxHere = () => calcWx(M ? M.id : null, 0, st && M ? st.dist / M.dist : 1);   // 登山客現在所在位置的天氣（雪線以下不會下雪）
-  function buildMarks(){
-    const ms = [];
-    SC.props(0, M.dist).forEach(o => { if (o.type === 'bench') ms.push({ f:o.m / M.dist, type:'bench' }); });
-    for (let k = 500; k < M.dist; k += 500) ms.push({ f:k / M.dist, type:'photo' });
-    HUD.setMarks(ms);
-  }
 
   // 有多冷：海拔、夜晚、雨雪霧、高山的風
   function chill(m, f, w){
