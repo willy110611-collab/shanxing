@@ -766,7 +766,8 @@
   function onRest(){
     if (st.restType !== 'trail') { SV.stats.rests++; daily('rest'); }   // 路邊主動休息不算「長椅常客」和每日任務（不然一直按休息就能刷）
     A.chime();
-    say(st.restType === 'view' ? '哇，風景好漂亮' : st.restType === 'trail' ? '在路邊坐一下' : '呼～喝口熱茶');
+    const duo = SX.social && SX.social.affNear(M, 'chat');   // 好感 Lv6：好友就在旁邊，一起坐下來聊天
+    say(duo ? pick(SX.LINES.duo).replace('{n}', duo.name) : st.restType === 'view' ? '哇，風景好漂亮' : st.restType === 'trail' ? '在路邊坐一下' : '呼～喝口熱茶');
     $('#rsTitle').textContent = restTitle();
     $('#restSheet').classList.add('on');
     save(); checkQuests();
@@ -1393,7 +1394,7 @@
         <div class="paper"><small>連續上山</small><b>${(SV.daily && SV.daily.streak) || 0} 天</b></div>
         <div class="paper"><small>最長連續</small><b>${Math.max(S.bestStreak || 0, (SV.daily && SV.daily.streak) || 0)} 天</b></div>
       </div>
-      <div class="paper pfFit"><small>體能</small><b>${fitTxt}</b><div class="dyBar"><i style="width:${(fit - 1) / (SX.FIT.MAX - 1) * 100}%"></i></div><p>每次登頂都會讓身體慢慢變強，越難的山第一次登頂加得越多；太久沒爬山，體能會慢慢掉一點，多爬幾趟就會回來</p></div>
+      <div class="paper pfFit"><small>體能</small><b>${fitTxt}</b><div class="dyBar"><i style="width:${(fit - 1) / (SX.fitMax() - 1) * 100}%"></i></div><p>每次登頂都會讓身體慢慢變強，越難的山第一次登頂加得越多；太久沒爬山，體能會慢慢掉一點，多爬幾趟就會回來</p></div>
       <div class="grp">成就</div>
       ${row('徽章', bGot, bTot)}
       ${row('寶物', SX.TREASURES.filter(x => SV.bag[x.id] > 0).length, SX.TREASURES.length)}
@@ -1405,6 +1406,7 @@
   }
 
   // ───────── 登頂 ─────────
+  const escH = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));   // 山友名字放進畫面前跳脫
   function arrive(){
     arrived = true; st.dist = M.dist; st.fin = true; st.rest = false; st.stopAt = null;
     $('#restSheet').classList.remove('on');
@@ -1415,6 +1417,8 @@
     SV.stamps[M.id] = SV.stamps[M.id] || today();
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
     if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
+    const amates = SX.social ? SX.social.affMates(M.id) : [];   // 同隊的好友（含好感等級）
+    if (SX.social && SX.social.party && SX.social.party.mountain === M.id) SX.social.affTop(M.id);   // 一起登頂：告訴伺服器我登頂了（兩人都登頂才加好感）
     if (wx.kind === 'fog') S.fogTop = (S.fogTop || 0) + 1;   // 霧中登頂（徽章用）
     if (wx.kind === 'snow') S.snowTop = (S.snowTop || 0) + 1;   // 雪中登頂（徽章用）
     daily('summit');
@@ -1427,12 +1431,19 @@
       if (M !== m) return;
       const img = SC.snapshot();
       if (img) { SV.photos.push({ id:M.id, m:M.dist, alt:M.alt, img, cap:`${M.name}・登頂`, wx:wxText(wx) || '晴', date:today() }); imgDirty = true; save(); }
+      // 好感 Lv5：多一張兩人合照（等級最高的那位好友站在旁邊）；Lv10：兩人名字刻在山頂石頭上
+      const duoF = amates.filter(f => SX.affHas(f.lv, 'duo')).sort((a, b) => b.lv - a.lv)[0];
+      const duoImg = duoF ? SC.snapshot(null, { name:duoF.name, pet:SX.affHas(duoF.lv, 'pet') ? duoF.pet : null }) : '';
+      if (duoImg) { SV.photos.push({ id:M.id, m:M.dist, alt:M.alt, img:duoImg, cap:`${M.name}・和${duoF.name}的合照`, wx:wxText(wx) || '晴', date:today() }); imgDirty = true; save(); }
+      const me = (SX.social && SX.social.acct && SX.social.acct.name) || '我', carved = amates.filter(f => SX.affHas(f.lv, 'life')).map(f => f.name);
       const r = $('#app').getBoundingClientRect(); MO.sparks(r.left + r.width/2, r.top + r.height*0.4, 24); MO.petals(MO.petalKind(M), 40);
       const wall = SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) >= M.dist);
       const nx = recommendNext(), nxt = nx && nx.id !== M.id ? nx : null;   // 登頂後推薦下一座
       modal(`${SX.art.img(groupArt('summit_', M.id), '', 'artImg summitArt')}<h3>抵達終點！</h3>
         <div class="summitBig"><b>${M.name} ${M.alt.toLocaleString('en-US')} m</b>${M.end}</div>
-        ${img ? `<div class="pol"${photoAttrs(SV.photos[SV.photos.length - 1])}><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
+        ${img ? `<div class="pol"${photoAttrs(SV.photos[SV.photos.length - (duoImg ? 2 : 1)])}><img src="${img}"><p>${M.name}・登頂紀念</p></div>` : ''}
+        ${duoImg ? `<div class="pol"${photoAttrs(SV.photos[SV.photos.length - 1])}><img src="${duoImg}"><p>和${escH(duoF.name)}的合照</p></div>` : ''}
+        ${carved.length ? `<p class="summitBig carved">山頂的石頭上刻著：${escH(me)} ＆ ${carved.map(escH).join(' ＆ ')}</p>` : ''}
         ${stamp ? '<p class="summitBig">背包裡多了一枚登頂紀念章。</p>' : ''}
         ${gift ? `<div class="giftRow ${RAR_CLS[gift.rarity] || ''}" style="${RAR_BG[gift.rarity] || ''}">${trSvg(gift)}<span><small>第一次登頂的禮物</small><b>${gift.name}</b><span class="chip" style="background:${RAR_COL[gift.rarity]}">${gift.rarity}</span></span></div>` : ''}
         ${wall.length ? `<h3>山友照片牆・山頂</h3>${wallHtml(wall)}` : ''}
@@ -1651,6 +1662,7 @@
     const it = PV.list[PV.i]; if (!it || !it.like) return;
     const b = e.currentTarget, on = !SV.likes[it.like];
     if (on) SV.likes[it.like] = Date.now(); else delete SV.likes[it.like];
+    if (on && /^s:/.test(it.like) && SX.social) SX.social.affLike(it.like.slice(2));   // 山友分享的照片：是好友的照片就加好感（伺服器判斷是不是好友、每天上限）
     const ks = Object.keys(SV.likes); if (ks.length > 300) ks.sort((a, b2) => SV.likes[a] - SV.likes[b2]).slice(0, ks.length - 300).forEach(k => delete SV.likes[k]);   // 最多記 300 張
     save();
     b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); if (it.cell) it.cell.classList.toggle('liked', on);
@@ -1723,6 +1735,7 @@
       case 'encKinds': return SX.ENCOUNTERS.filter(e => SV.encSeen[e.id]).length;
       case 'stamps': return SX.MOUNTAINS.filter(m => SV.stamps[m.id]).length;
       case 'groupPeaks': return SX.peaksOf(b.group).filter(m => SV.done[m.id]).length;   // 山群徽章：這個山群登頂過幾座
+      case 'lifeMates': return SX.lifeMates();   // 一輩子的山友：好感 Lv10 的好友有幾位（好感在伺服器，social.js 拿好友清單時算）
       case 'baiyue': return SX.MOUNTAINS.filter(m => m.by && SV.done[m.id]).length;   // 完百之路：登頂過幾座不同的百岳
     }
     return 0;
@@ -1983,6 +1996,13 @@
   // 給連線模組用：雲端存檔、每日任務
   SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
     awayPace:m => baseSpeed(m) * devX(),   // 一起爬：遊戲關著時自己走的速度（隊友那邊拿來估離線時走到哪）
+    // 好友好感度：好友清單拿回來後，等級到了的稱號（Lv8）收進稱號、一輩子的山友徽章（Lv10）檢查一次；lvs：每位好友的好感等級
+    affSync:lvs => {
+      const got = SX.AFF_REWARDS.filter(r => r.title && lvs.some(lv => lv >= r.lv) && !SV.titles.includes(r.title)).map(r => r.title);
+      got.forEach(t => { SV.titles.push(t); notice(`得到專屬稱號「${t}」，到背包掛上吧`); });
+      if (got.length) save();
+      checkBadges();
+    },
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
   purgeBlackPhotos();

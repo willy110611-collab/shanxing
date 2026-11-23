@@ -45,6 +45,67 @@ async function quotaClaim(env, key, player, t){
   return had ? { ok: true, used, cap, again: true } : { ok: false, full: true, used, cap };
 }
 
+// ───────── 好友好感度 ─────────
+// 規則只寫在這裡：等級門檻、每種事件加多少、每天上限、一起走幾公尺算一次。好友清單（GET /api/friends）會把規則（aff）和每位好友的好感一起回給遊戲端，
+// 遊戲端不另外寫這些數字；js/data.js 的 SX.AFF_REWARDS 只寫每一級的獎勵（跟 LV 一樣多級）
+// 一對好友在 affinity 只有一列（lo＝兩人 id 小的、hi＝大的），兩人看到同一個數字；刪除好友就刪掉這列＝歸零
+const AFF = {
+  LV: [0, 10, 30, 60, 100, 160, 240, 340, 470, 640],   // Lv1～Lv10 的累計好感門檻
+  WALK_M: 3000, WALK_PTS: 1, WALK_CAP: 8,              // 一起走（同一隊、同一座山、兩人都在走）：每 3 公里 +1，每天每位好友最多 +8
+  TOP_PTS: 5,                                          // 一起登頂（同一隊、同一座山，兩人都登頂）：+5，同一座山一天一次
+  LIKE_PTS: 1, LIKE_CAP: 3,                            // 按對方照片的愛心：+1，每天最多 +3（同一張照片只算一次）
+  DAY_CAP: 20,                                         // 每天每位好友最多 +20（台灣日期換日）
+  WALK_CALL_MAX: 6000,                                 // 一次回報跟一位隊友一起走最多算幾公尺（遊戲端滿 WALK_M 就送，多的當怪資料丟掉）
+  RL_WINDOW: 10 * 60 * 1000, RL_MAX: 30,               // 回報好感：每人 10 分鐘最多 30 次
+};
+const AFF_RULES = { lv: AFF.LV, walkM: AFF.WALK_M, walkPts: AFF.WALK_PTS, walkCap: AFF.WALK_CAP, top: AFF.TOP_PTS, like: AFF.LIKE_PTS, likeCap: AFF.LIKE_CAP, day: AFF.DAY_CAP };   // 給遊戲端畫「怎麼增加」「還差多少」
+const affLv = pts => AFF.LV.filter(x => pts >= x).length;
+const affPair = (a, b) => a < b ? [a, b] : [b, a];
+// 一位好友的好感（好友清單用）：r 是 LEFT JOIN affinity 的欄位（還沒有這列就是 0）
+function affPub(r, day){
+  const pts = r.a_pts || 0, lv = affLv(pts);
+  return { pts, lv, next: lv < AFF.LV.length ? AFF.LV[lv] : null, km: Math.round(Math.min(r.a_mlo || 0, r.a_mhi || 0) / 10) / 100, tops: r.a_tops || 0, today: r.a_day === day ? r.a_dtot || 0 : 0 };
+}
+// 加好感：一句有條件的 UPDATE 做完（讀舊值、換日歸零、算這次能加幾點、夾在這種事件和整天的上限內、寫回），兩支手機同時送也不會超過上限
+// kind：walk（meters＝我這邊回報跟他一起走的公尺數；一起走的距離取兩人回報較小的那個，單方面亂報加不了分）／top／like
+const AFF_SQL = `UPDATE affinity SET pts = pts + c.g, day = ?3,
+  d_walk = c.dw + CASE WHEN ?4 = 'walk' THEN c.g ELSE 0 END, d_like = c.dl + CASE WHEN ?4 = 'like' THEN c.g ELSE 0 END,
+  d_top = c.dp + CASE WHEN ?4 = 'top' THEN c.g ELSE 0 END, d_tot = c.dt + c.g,
+  m_lo = c.mlo, m_hi = c.mhi, w_units = CASE WHEN ?4 = 'walk' THEN c.wu ELSE w_units END, tops = tops + CASE WHEN ?4 = 'top' THEN 1 ELSE 0 END
+  FROM (SELECT x.*, MAX(0, MIN(x.raw, ?8 - x.used, ?9 - x.dt)) AS g FROM (SELECT
+    CASE WHEN day = ?3 THEN d_walk ELSE 0 END AS dw, CASE WHEN day = ?3 THEN d_like ELSE 0 END AS dl,
+    CASE WHEN day = ?3 THEN d_top ELSE 0 END AS dp, CASE WHEN day = ?3 THEN d_tot ELSE 0 END AS dt,
+    m_lo + ?5 AS mlo, m_hi + ?6 AS mhi, CAST(MIN(m_lo + ?5, m_hi + ?6) / ?10 AS INTEGER) AS wu,
+    CASE WHEN ?4 = 'walk' THEN MAX(0, CAST(MIN(m_lo + ?5, m_hi + ?6) / ?10 AS INTEGER) - w_units) * ?11 ELSE ?7 END AS raw,
+    CASE WHEN day != ?3 THEN 0 WHEN ?4 = 'walk' THEN d_walk WHEN ?4 = 'like' THEN d_like ELSE 0 END AS used
+    FROM affinity WHERE lo = ?1 AND hi = ?2) x) AS c
+  WHERE affinity.lo = ?1 AND affinity.hi = ?2 RETURNING pts, d_tot`;
+async function affGain(env, me, mate, kind, day, meters = 0){
+  const [lo, hi] = affPair(me, mate), mine = me === lo, m = kind === 'walk' ? meters : 0;
+  const fixed = kind === 'top' ? AFF.TOP_PTS : kind === 'like' ? AFF.LIKE_PTS : 0;
+  const kindCap = kind === 'walk' ? AFF.WALK_CAP : kind === 'like' ? AFF.LIKE_CAP : AFF.DAY_CAP;
+  // 只有好友才有這一列（第一次加分時才建）；不是好友就什麼都不做
+  await env.DB.prepare('INSERT INTO affinity (lo, hi) SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM friends WHERE a = ?1 AND b = ?2) ON CONFLICT(lo, hi) DO NOTHING').bind(lo, hi).run();
+  return env.DB.prepare(AFF_SQL).bind(lo, hi, day, kind, mine ? m : 0, mine ? 0 : m, fixed, kindCap, AFF.DAY_CAP, AFF.WALK_M, AFF.WALK_PTS).first();
+}
+// 一起登頂：兩人各自回報；第二個人回報時（兩邊都登頂了）才加分，granted 從 0 變 1 只會成功一次，同一座山一天只加一次
+async function affTop(env, me, mate, mountain, day){
+  const [lo, hi] = affPair(me, mate), mine = me === lo;
+  const r = await env.DB.prepare('INSERT INTO aff_tops (lo, hi, day, mountain, by_lo, by_hi) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(lo, hi, day, mountain) DO UPDATE SET by_lo = MAX(by_lo, excluded.by_lo), by_hi = MAX(by_hi, excluded.by_hi) RETURNING by_lo, by_hi, granted')
+    .bind(lo, hi, day, mountain, mine ? 1 : 0, mine ? 0 : 1).first();
+  if (!r || !r.by_lo || !r.by_hi || r.granted) return;
+  const g = await env.DB.prepare('UPDATE aff_tops SET granted = 1 WHERE lo = ? AND hi = ? AND day = ? AND mountain = ? AND granted = 0').bind(lo, hi, day, mountain).run();
+  if (g.meta.changes) await affGain(env, me, mate, 'top', day);
+}
+// 同一隊：同一位邀請人、同一座山、INVITE_MS 內已接受的邀請（自己邀他、他邀自己、或兩人都接受同一位邀請人的邀請）
+const sameParty = (env, a, b, mountain) => env.DB.prepare(`SELECT 1 FROM invites i WHERE i.status = 'accepted' AND i.mountain = ?3 AND i.created > ?4 AND (
+    (i.host = ?1 AND i.guest = ?2) OR (i.host = ?2 AND i.guest = ?1)
+    OR (i.guest = ?1 AND EXISTS (SELECT 1 FROM invites j WHERE j.status = 'accepted' AND j.host = i.host AND j.mountain = ?3 AND j.guest = ?2 AND j.created > ?4))) LIMIT 1`)
+  .bind(a, b, mountain, now() - INVITE_MS).first();
+// 回報好感送太快：每人 AFF.RL_WINDOW 內最多 AFF.RL_MAX 次（跟入園名額同一張 rate_limits 表，一句 SQL 算次數）
+const affLimited = async (env, me) => { const r = await env.DB.prepare('INSERT INTO rate_limits (k, n, first) VALUES (?1, 1, ?2) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ?2 - first >= ?3 THEN 1 ELSE n + 1 END, first = CASE WHEN ?2 - first >= ?3 THEN ?2 ELSE first END RETURNING n').bind('aff:' + me.id, now(), AFF.RL_WINDOW).first(); return !!r && r.n > AFF.RL_MAX; };
+const INVITE_MS = 7 * 864e5;   // 邀請多久內有效（邀請清單和好感度的「同一隊」都看這個）
+
 // ───────── 小工具 ─────────
 const now = () => Date.now();
 const rid = (n = 16) => [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -173,7 +234,7 @@ export default {
     await env.DB.prepare('DELETE FROM push_queue WHERE created < ?').bind(now() - 3 * 864e5).run();
     await env.DB.prepare('DELETE FROM login_fails WHERE first < ?').bind(now() - LOGIN_WINDOW).run();   // 猜密碼紀錄過了時間就清掉
     const old = twDay(now() - 3 * 864e5);   // 入園名額：三天前的紀錄用不到了
-    await env.DB.batch([env.DB.prepare('DELETE FROM quota_spots WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM quota_count WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM rate_limits WHERE first < ?').bind(now() - QUOTA_RL_WINDOW)]);
+    await env.DB.batch([env.DB.prepare('DELETE FROM quota_spots WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM quota_count WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM rate_limits WHERE first < ?').bind(now() - Math.max(QUOTA_RL_WINDOW, AFF.RL_WINDOW)), env.DB.prepare('DELETE FROM aff_tops WHERE day < ?').bind(old)]);   // 一起登頂的紀錄也只留三天
   },
   async fetch(req, env){
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors(env, req) });
@@ -374,8 +435,12 @@ export default {
 
       // 好友
       if (path === '/api/friends' && M === 'GET') {
-        const r = await env.DB.prepare('SELECT p.* FROM friends f JOIN players p ON p.id = f.b WHERE f.a = ? AND p.banned = 0 ORDER BY p.seen DESC').bind(me.id).all();
-        return J(env, req, { friends: r.results.map(friendPub), max: friendMax(env) });
+        // 每位好友的好感一起回（一對好友一列 affinity：lo＝id 小的、hi＝大的）；aff＝規則（等級門檻、怎麼加），遊戲端照這個畫「還差多少」
+        const r = await env.DB.prepare(`SELECT p.*, a.pts AS a_pts, a.m_lo AS a_mlo, a.m_hi AS a_mhi, a.tops AS a_tops, a.day AS a_day, a.d_tot AS a_dtot
+          FROM friends f JOIN players p ON p.id = f.b LEFT JOIN affinity a ON a.lo = MIN(f.a, f.b) AND a.hi = MAX(f.a, f.b)
+          WHERE f.a = ? AND p.banned = 0 ORDER BY p.seen DESC`).bind(me.id).all();
+        const day = twDay(clock(env, req));
+        return J(env, req, { friends: r.results.map(p => ({ ...friendPub(p), aff: affPub(p, day) })), max: friendMax(env), aff: AFF_RULES });
       }
       if (path === '/api/friends' && M === 'POST') {
         const b = await req.json().catch(() => ({}));
@@ -398,12 +463,45 @@ export default {
       }
       if ((m = path.match(/^\/api\/friends\/([0-9a-f]+)$/)) && M === 'DELETE') {
         // 移除好友：兩個方向一起刪；兩人之間還沒回覆的邀請一併取消。已經接受、正在一起爬的邀請不動（爬到一半隊伍不會散）
+        // 好感度歸零：刪掉這一對的那一列（和今天的一起登頂紀錄），再加回來從 0 開始
+        const [lo, hi] = affPair(me.id, m[1]);
         await env.DB.batch([
           env.DB.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(me.id, m[1]),
           env.DB.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(m[1], me.id),
-          env.DB.prepare("DELETE FROM invites WHERE status = 'pending' AND ((host = ? AND guest = ?) OR (host = ? AND guest = ?))").bind(me.id, m[1], m[1], me.id)
+          env.DB.prepare("DELETE FROM invites WHERE status = 'pending' AND ((host = ? AND guest = ?) OR (host = ? AND guest = ?))").bind(me.id, m[1], m[1], me.id),
+          env.DB.prepare('DELETE FROM affinity WHERE lo = ? AND hi = ?').bind(lo, hi),
+          env.DB.prepare('DELETE FROM aff_tops WHERE lo = ? AND hi = ?').bind(lo, hi)
         ]);
         return J(env, req, { ok: true });
+      }
+
+      // 好友好感度：一起爬時回報（一起走的公尺數、登頂了）。之後的「好友跟隨」也走這一條
+      // { mountain, walk:{ 隊友 id: 公尺 }, top:true, mates:[隊友 id] }：每位隊友要跟我同一隊、同一座山才算；公尺數一次最多 AFF.WALK_CALL_MAX
+      if (path === '/api/affinity' && M === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        if (await affLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const mt = String(b.mountain || '').slice(0, 24), day = twDay(clock(env, req));
+        const walk = b.walk && typeof b.walk === 'object' ? b.walk : {};
+        const ids = [...new Set([...Object.keys(walk), ...(b.top && Array.isArray(b.mates) ? b.mates : [])])].map(String).filter(id => /^[0-9a-f]{16}$/.test(id) && id !== me.id).slice(0, 5);
+        const done = [];
+        for (const id of ids) {
+          if (!mt || !await sameParty(env, me.id, id, mt)) continue;
+          const meters = Math.max(0, Math.min(AFF.WALK_CALL_MAX, +walk[id] || 0));
+          if (meters > 0) await affGain(env, me.id, id, 'walk', day, meters);
+          if (b.top) await affTop(env, me.id, id, mt, day);
+          done.push(id);
+        }
+        return J(env, req, { ok: true, counted: done });
+      }
+      // 按好友照片的愛心：照片主人是好友才算；同一張照片只算一次（取消再按不再加）
+      if (path === '/api/affinity/like' && M === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        if (await affLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const pid = String(b.photo || '').replace(/[^0-9a-f]/g, '').slice(0, 40), ph = pid && await env.DB.prepare("SELECT owner FROM photos WHERE id = ? AND status = 'ok'").bind(pid).first();
+        if (!ph || ph.owner === me.id || !await env.DB.prepare('SELECT 1 FROM friends WHERE a = ? AND b = ?').bind(me.id, ph.owner).first()) return J(env, req, { ok: true, counted: false });
+        const ins = await env.DB.prepare('INSERT OR IGNORE INTO aff_likes (player, photo, created) VALUES (?, ?, ?)').bind(me.id, pid, now()).run();
+        if (ins.meta.changes) await affGain(env, me.id, ph.owner, 'like', twDay(clock(env, req)));
+        return J(env, req, { ok: true, counted: !!ins.meta.changes });
       }
 
       // 一起爬：邀請
@@ -411,7 +509,7 @@ export default {
         const r = await env.DB.prepare(`SELECT i.*, h.name AS host_name, g.name AS guest_name FROM invites i
           JOIN players h ON h.id = i.host JOIN players g ON g.id = i.guest
           WHERE (i.guest = ? OR i.host = ? OR (i.status = 'accepted' AND EXISTS (SELECT 1 FROM invites j WHERE j.guest = ? AND j.status = 'accepted' AND j.host = i.host AND j.mountain = i.mountain)))
-          AND i.created > ? ORDER BY i.created DESC LIMIT 20`).bind(me.id, me.id, me.id, now() - 7 * 864e5).all();   // 也列出同隊其他隊友接受的邀請：被邀的人才知道隊伍有幾個人
+          AND i.created > ? ORDER BY i.created DESC LIMIT 20`).bind(me.id, me.id, me.id, now() - INVITE_MS).all();   // 也列出同隊其他隊友接受的邀請：被邀的人才知道隊伍有幾個人
         return J(env, req, { invites: r.results });
       }
       if (path === '/api/invites' && M === 'POST') {
