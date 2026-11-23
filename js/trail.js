@@ -2245,7 +2245,13 @@ const CHEEK = { j:40, out:0.07 };
 const STAIR_BANK = 0.2, STAIR_LIP = 0.55;
 // 彎道上的階梯（2026-11-24 回報每一階都是水平的一條，沒有跟著路轉）：每一階跟路的方向垂直，右端離鏡頭近一點／遠一點 → 畫面上低／高幾像素（左端相反）
 // h 這條邊的高度、s 這裡每公尺幾像素、w 路半寬（公尺）、dc 路對鏡頭每往前一公尺往右偏幾公尺；回傳右端往下幾像素
-function stairTilt(h, s, w, dc){ return (camY - h) * s * s * w * dc / F; }
+// 一階的邊在彎道上左右兩端一前一後（路斜著走）：前後差 w × dc 公尺，用一階導數近似成畫面上的傾斜。
+// 前後差最多只算到這條邊離鏡頭距離的 STAIR_TILT_Z 倍：超過時近似失準，踏面、立面會扭成交叉的帶子（急彎時近處的階梯）；
+// 每條邊只看自己的距離來限制，所以相鄰兩階共用的邊算出來一樣，不會錯開
+const STAIR_TILT_Z = 0.4;
+// 路在這一段 f 處對鏡頭的橫向斜率：段與段交界取前後兩段的平均、段內線性內插（相鄰兩段共用的那一階邊，傾斜算出來一樣，急彎時不會一段一段錯開露縫）
+function dcAt(j, f){ const a = (pC[j + 1] - pC[Math.max(0, j - 1)]) / ((j > 0 ? 2 : 1) * SEG), b = (pC[j + 2] - pC[j]) / (2 * SEG); return a + (b - a) * f; }
+function stairTilt(h, s, w, dc){ const z = F / s, d = clamp(w * dc, -STAIR_TILT_Z * z, STAIR_TILT_Z * z); return (camY - h) * s * s * d / F; }
 // 一條邊 A（中心 xA、yA、半寬 wA 像素、右端往下 kA）到另一條邊 B 圍成的四邊形
 function quadE(xA, yA, wA, kA, xB, yB, wB, kB){ quad(xA - wA, yA - kA, xA + wA, yA + kA, xB + wB, yB + kB, xB - wB, yB - kB); }
 const WOOD_VAR = 0.5;     // 每塊木頭／石階深淺變化的強度
@@ -3075,6 +3081,9 @@ function drawProp(o, i, j, f, fq, t, fade){
 }
 // 遠處地面合成兩段畫：暫時把第 j 段的近端換成第 j-1 段的近端（畫完地面馬上換回來）
 const LOD_PX = 1.5, LODV = new Float64Array(6); let lodSkip = false;
+// 每段地面、路面的遠端往近處縮幾像素（近端往近處多畫 0.7 像素）：縮 1 像素時兩段之間留 0.3 像素的縫，遠處草地貼圖淡掉後，
+// 彎道上的開闊草原會露出一條條背景的亮線；縮 0.6 像素兩段剛好疊 0.1 像素，底色幾乎不會蓋到後面那段的貼圖
+const SEAM_IN = 0.6;
 function lodSave(j){ LODV[0] = pX[j]; LODV[1] = pY[j]; LODV[2] = pS[j]; LODV[3] = pZ[j]; LODV[4] = pC[j]; LODV[5] = pW[j]; pX[j] = pX[j - 1]; pY[j] = pY[j - 1]; pS[j] = pS[j - 1]; pZ[j] = pZ[j - 1]; pC[j] = pC[j - 1]; pW[j] = pW[j - 1]; }
 function lodRestore(j){ pX[j] = LODV[0]; pY[j] = LODV[1]; pS[j] = LODV[2]; pZ[j] = LODV[3]; pC[j] = LODV[4]; pW[j] = LODV[5]; }
 // 畫第 jHi 段到第 jLo 段（由遠到近）。far：畫進遠景快取（見 FAR），不畫登山客，最近那段的地面往下多畫 FAR_BLEED 像素，跟現場畫的近景接起來不會露縫
@@ -3090,7 +3099,9 @@ function drawWorld(b, t, jHi, jLo, far){
     if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a); }
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false; CQ.j = j;
-    const lod = j > jLo && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1;
+    // 彎道上這三個點不在一條直線上（中間那點偏開超過半個像素）就不合併：合成一段會切掉彎的外側，露出一條條背景的細縫
+    const lod = j > jLo && ((b + j) & 1) === 1 && pY[j - 1] - pY[j + 1] < LOD_PX && pY[j - 1] - pY[j + 1] > 0 && sAt(b + j) !== 1 && sAt(b + j - 1) !== 1
+      && Math.abs((pX[j - 1] + pX[j + 1]) / 2 - pX[j]) + gwAt(pZ[j]) * Math.abs((pS[j - 1] + pS[j + 1]) / 2 - pS[j]) + Math.abs((pY[j - 1] + pY[j + 1]) / 2 - pY[j]) < 0.5;
     if (lod) { lodSave(j); lodSkip = true; }
     // 整段地面都在畫面下緣以外：不畫地面，但路旁的樹、草叢照畫（高的樹根部在畫面外、樹冠還看得到），讓它們自己滑出畫面邊緣
     const y2 = pY[j + 1], below = y2 - 0.6 * pS[j + 1] > H + 80;   // 遠端往上 0.6 公尺（路邊的草叢、土坎）也在畫面下緣以外才算
@@ -3130,11 +3141,11 @@ function drawWorld(b, t, jHi, jLo, far){
           ctx.globalAlpha = fade;
         }
         // 草地底色：依坡面明暗連續變（以前每兩段換一次深淺、每格坡面只分三階，一段一段像色塊）
-        // 遠端往內縮 1 像素：底色的反鋸齒邊不會蓋到後面那段已經貼好的草地（以前每段交界有一條淡淡的亮線）
+        // 遠端往內縮 SEAM_IN 像素：底色的反鋸齒邊不會蓋到後面那段已經貼好的草地（以前每段交界有一條淡淡的亮線）
         // 相鄰幾條顏色一樣（遠處坡面明暗差不多）就合成一筆畫
         for (k = 1; k < nS - 1;) {
           const e = side * 0.8, c = grsC(tSh[k]); ctx.fillStyle = grs(fi, c); ctx.beginPath();
-          do { ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + 1); ctx.lineTo(tX2[k] - e, tY2[k] + 1); k++; } while (k < nS - 1 && grsC(tSh[k]) === c);
+          do { ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + SEAM_IN); ctx.lineTo(tX2[k] - e, tY2[k] + SEAM_IN); k++; } while (k < nS - 1 && grsC(tSh[k]) === c);
           ctx.fill();
         }
         if (TEX.grass && ta > 0.03) {   // 草地貼圖：近處切成薄橫條各自對齊透視，跟前後段接得起來（下雪時淡掉，露出底下積雪的白色坡面）
@@ -3167,6 +3178,8 @@ function drawWorld(b, t, jHi, jLo, far){
       const cw = isWood ? 1.07 : 1, w1 = rw * s1, w2 = rwAt(i + 1) * s2, e1 = w1 * cw + 0.6, e2 = w2 * cw + 0.6, stp = sAt(i) === 1;   // cw：路面底下多墊出去的那一圈（木棧道是看得到的深色木板邊；其他路面只墊 0.6 像素補反鋸齒的縫，以前墊出 7% 路寬，就是那條筆直的深灰路緣帶）   // 路面底色整條同一色（以前一段深一段淺，像一格一格的磁磚）
       const curbC = isWood ? LUT[13 * FOGN + fi] : LUT[22 * FOGN + fi];   // 路面底下多墊出去的那一圈：木棧道是深色的木板邊；其他路面是跟土坎同色的土（以前是一條深灰褐的直線路緣帶）
       if (stp) {
+        // 階梯底下先墊一層土（比路寬一點）：彎道上每一階兩端跟著路一前一後地斜，階梯兩端和路旁土坎之間不會露出後面的天空、雲海
+        ctx.fillStyle = curbC; quad(x1 - e1 * 1.06 - 1.5, yb, x1 + e1 * 1.06 + 1.5, yb, x2 + e2 * 1.06 + 1.5, y2 + SEAM_IN, x2 - e2 * 1.06 - 1.5, y2 + SEAM_IN);
         // 一段路切成好幾階（每階最高 STEP_H），由遠到近畫：上一階的立面 → 這一階的踏面
         // 遠處每階立面只剩幾像素時合併成一階（省效能、不糊成百葉窗）。合併不是一下子跳：中間幾階的高度跟著距離慢慢壓扁（tm 1→0），
         // 壓到 0 時跟「整段一階」長得一模一樣，才換成只畫一階
@@ -3176,63 +3189,75 @@ function drawWorld(b, t, jHi, jLo, far){
         // （這一段 f 處的畫面 x 和比例：stepS 直接算，不每階產生新的陣列）
         const sd = farA(j, 70, 10);   // 遠處只剩幾像素的階梯：每塊深淺、陰影這些細節慢慢淡掉、最後不畫（省效能），階梯本身照畫
         const seA = stoneSE() ? fade * farA(j, SE_J, 8) * (1 - snowAmt) : 0;   // 石階嵌進土裡的邊（近處才畫）
-        const dc = (pC[j + 1] - pC[j]) / SEG, stPrev = sAt(i - 1) === 1, stNext = sAt(i + 1) === 1, cka = fade * farA(j, CHEEK.j, 8), stk = lerp(0.35, 1, clamp((stairB[clamp(i, 0, N + 1)] - 0.4) / 0.6, 0, 1));   // stk：一段階梯的頭兩段壓暗、影子慢慢加深（2026-11-24 回報土路接階梯的地方路面一下子換顏色，一條硬的接縫）；dc：路對鏡頭的方向（彎道上每一階跟著路轉）；cka：每階兩側土切面
+        const stPrev = sAt(i - 1) === 1, stNext = sAt(i + 1) === 1, cka = fade * farA(j, CHEEK.j, 8), stk = lerp(0.35, 1, clamp((stairB[clamp(i, 0, N + 1)] - 0.4) / 0.6, 0, 1));   // stk：一段階梯的頭兩段壓暗、影子慢慢加深（2026-11-24 回報土路接階梯的地方路面一下子換顏色，一條硬的接縫）；每一階跟著路轉的傾斜見 dcAt、stairTilt；cka：每階兩側土切面
         for (let q = n - 1; q >= 0; q--) {
           const fa = q / n, fb = (q + 1) / n, h0 = pW[j] + rise * fa * tm, h1 = q === n - 1 ? pW[j] + rise : pW[j] + rise * fb * tm, mid = q < n - 1 ? tm : 1;   // mid：中間那幾階的細節（墨線、壓暗）跟著高度一起淡出
           const sa = stepS(j, fa), xa = stepX(j, fa, sa), sb = stepS(j, fb), xb = stepX(j, fb, sb);
           const ya = (q === 0 ? yb : HOR - (h0 - camY) * sa), yt = HOR - (h0 - camY) * sb, yr = HOR - (h1 - camY) * sb;
-          const wa = rwF(i, fa) * sa, wb = rwF(i, fb) * sb, W4 = wb * 1.04;
-          // 每條邊右端往下（左端往上）幾像素：跟這段平路接的那條邊不斜（平路的邊是水平的，斜了會露縫）
-          const ka = q === 0 && !stPrev ? 0 : stairTilt(h0, sa, rwF(i, fa), dc), kt = stairTilt(h0, sb, rwF(i, fb), dc), kr = q === n - 1 && !stNext ? 0 : stairTilt(h1, sb, rwF(i, fb), dc);
+          const wa = rwF(i, fa) * sa, wb = rwF(i, fb) * sb, W4 = wb * 1.04;   // 立面比踏面寬 4%：傾斜也一起乘 1.04（kr4、kt4），立面上下緣才跟踏面的邊在同一條線上（以前兩條線斜率不同，彎道上兩端露出細縫）
+          // 每條邊右端往下（左端往上）幾像素。接平路的那一頭，傾斜照這條邊在這段的位置 f 慢慢收到 0（平路的邊是水平的，斜了會露縫）：
+          // 同一條邊不管從哪一階算都一樣。以前只把接平路的那一條邊設成 0、旁邊那條邊照樣很斜，急彎時那一階的立面扭成交叉的帶子
+          const rmp = f => Math.min(1, stPrev ? 1 : 2 * f, stNext ? 1 : 2 * (1 - f));
+          const ka = stairTilt(h0, sa, rwF(i, fa), dcAt(j, fa)) * rmp(fa), kt = stairTilt(h0, sb, rwF(i, fb), dcAt(j, fb)) * rmp(fb), kr = stairTilt(h1, sb, rwF(i, fb), dcAt(j, fb)) * rmp(fb);
+          const kr4 = kr * 1.04, kt4 = kt * 1.04;
           if (seA > 0.01) { const o = q * SEQ_N; SEQ[o] = xa; SEQ[o + 1] = ya; SEQ[o + 2] = wa; SEQ[o + 3] = sa; SEQ[o + 4] = xb; SEQ[o + 5] = yt; SEQ[o + 6] = yr; SEQ[o + 7] = wb; SEQ[o + 8] = sb; SEQ[o + 9] = ka; SEQ[o + 10] = kt; SEQ[o + 11] = kr; }
-          // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊
-          ctx.fillStyle = LUT[16 * FOGN + fi]; quadE(xb, yr, W4, kr, xb, yt + 0.7, W4, kt);
+          // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊。往下走的階梯立面背對鏡頭（上緣反而比下緣低），看不到就不畫
+          const rv = Math.min((yt - kt4) - (yr - kr4), (yt + kt4) - (yr + kr4)), riser = rv > 0;
+          if (riser) {
+          ctx.fillStyle = LUT[16 * FOGN + fi]; quadE(xb, yr, W4, kr4, xb, yt + 0.7, W4, kt4);
           const rA = ra * mid * clamp((yt - yr - 1.5) / 2, 0, 1);   // 立面矮到兩三像素時慢慢淡掉
-          if (rA > 0.03) { riserFill(RS, xb - W4, yr, sb, i * 8 + (q + 1) % n, rA); quadE(xb, yr, W4, kr, xb, yt + 0.7, W4, kt); ctx.globalAlpha = fade; }   // 立面貼圖（石塊或橫木），下面照舊壓暗、加唇下陰影
+          if (rA > 0.03) { riserFill(RS, xb - W4, yr, sb, i * 8 + (q + 1) % n, rA); quadE(xb, yr, W4, kr4, xb, yt + 0.7, W4, kt4); ctx.globalAlpha = fade; }   // 立面貼圖（石塊或橫木），下面照舊壓暗、加唇下陰影
           if (sd > 0) {
-            const yh = yt - (yt - yr) * 0.35, kh = lerp(kt, kr, 0.35);
-            ctx.globalAlpha = fade * sd; ctx.fillStyle = 'rgba(30,22,30,0.22)'; quadE(xb, yh, W4, kh, xb, yt + 0.7, W4, kt);
-            ctx.globalAlpha = fade; woodTint(i * 8 + (q + 1) % n, 0, xb - W4, yr - kr, xb + W4, yr + kr, xb + W4, yt + kt, xb - W4, yt - kt, sd);
+            const yh = yt - (yt - yr) * 0.35, kh = lerp(kt4, kr4, 0.35);
+            ctx.globalAlpha = fade * sd; ctx.fillStyle = 'rgba(30,22,30,0.22)'; quadE(xb, yh, W4, kh, xb, yt + 0.7, W4, kt4);
+            ctx.globalAlpha = fade; woodTint(i * 8 + (q + 1) % n, 0, xb - W4, yr - kr4, xb + W4, yr + kr4, xb + W4, yt + kt4, xb - W4, yt - kt4, sd);
             // 上一階踏面的前緣（唇）下面一條深色陰影：光從上面來，唇擋住立面最上面那一截
             const lh = Math.max(0.8, (yt - yr) * 0.24);
-            ctx.globalAlpha = fade * sd * mid; ctx.fillStyle = 'rgba(24,16,20,0.5)'; quadE(xb, yr, W4, kr, xb, yr + lh, W4, kr);
+            ctx.globalAlpha = fade * sd * mid; ctx.fillStyle = 'rgba(24,16,20,0.5)'; quadE(xb, yr, W4, kr4, xb, yr + lh, W4, kr4);
           }   // 每根橫木深淺不一（最上面那根不管分幾階都是同一個顏色）
-          ctx.globalAlpha = fade * RISER_DK * stk; ctx.fillStyle = '#2a1e22'; quadE(xb, yr, W4, kr, xb, yt + 0.7, W4, kt);   // 立面整面比踏面暗（面對鏡頭、背著光）
+          ctx.globalAlpha = fade * RISER_DK * stk; ctx.fillStyle = '#2a1e22'; quadE(xb, yr, W4, kr4, xb, yt + 0.7, W4, kt4);   // 立面整面比踏面暗（面對鏡頭、背著光）
+          }
           // 兩側土切面：階梯是挖進坡裡的，每一階兩端露出一小塊三角形的土（上一階的高度往下到這一階的踏面），從背後看得出一階一階的厚度
           // 再往外伸出一小截立面的端頭（橫木、石塊埋進土坎裡），石階另外畫石頭側面（stoneEdges）
-          if (cka > 0.01 && yt - yr > 1) for (let side = -1; side <= 1; side += 2) {
-            const xe = xb + side * W4, yB = yt + side * kt + 0.7, yC = yr + side * kr, xo = xe + side * CHEEK.out * sb;
+          if (riser && cka > 0.01 && yt - yr > 1) for (let side = -1; side <= 1; side += 2) {
+            const xe = xb + side * W4, yB = yt + side * kt4 + 0.7, yC = yr + side * kr4, xo = xe + side * CHEEK.out * sb;
             ctx.globalAlpha = cka; ctx.fillStyle = LUT[(21 + (side < 0 ? 2 : 0)) * FOGN + fi]; quad(xa + side * wa, ya + side * ka, xe, yB, xe, yC, xe, yC);
             if (seA > 0.01) continue;
             ctx.fillStyle = LUT[16 * FOGN + fi]; quad(xe, yC, xo, lerp(yC, yB, 0.3), xo - side * CHEEK.out * 0.3 * sb, yB, xe, yB);
             ctx.globalAlpha = cka * RISER_DK; ctx.fillStyle = '#2a1e22'; quad(xe, yC, xo, lerp(yC, yB, 0.3), xo - side * CHEEK.out * 0.3 * sb, yB, xe, yB);
           }
           ctx.globalAlpha = fade;
-          // 踏面
-          ctx.fillStyle = curbC; quadE(xa, ya, wa * cw + 0.6, ka, xb, yt, wb * cw + 0.6, kt);
-          ctx.fillStyle = LUT[7 * FOGN + fi]; quadE(xa, ya, wa, ka, xb, yt, wb, kt);
-          const TT = TEX.moss && ST === TEX.road && Hh(i * 8 + q, 190) < 0.45 ? TEX.moss : ST;   // 森林石階：有的階踏面換成苔蘚石塊
-          if (TT && ta > 0.03) { texRun(TT, ROAD_UC, xa, q === 0 ? y1 : ya, sa, xb, yt, sb, zA + (F / sa - F / s1), ta, roadPath(xa, q === 0 ? y1 : ya, sa, xb, yt, sb, rwF(i, fa), rwF(i, fb), ka, kt)); ctx.globalAlpha = fade; }   // 踏面貼圖（跟路面一樣連續對齊）
-          if (sd > 0) {
-            if (q) woodTint(i * 8, 1, xa - wa, ya - ka, xa + wa, ya + ka, xb + wb, yt + kt, xb - wb, yt - kt, (1 - tm) * sd);   // 每階踏面深淺不一：剛分出來的那幾階先跟第一階同色，再慢慢換成自己的顏色
-            woodTint(i * 8 + q, 1, xa - wa, ya - ka, xa + wa, ya + ka, xb + wb, yt + kt, xb - wb, yt - kt, (q ? tm : 1) * sd);
-            // 上一階的影子落在這一階踏面靠裡面那一截（光從前上方來，立面擋住），橫木也才像嵌在地上而不是浮在上面
-            const ye = yt + (ya - yt) * STEP_SH.len, ke = lerp(kt, ka, STEP_SH.len), xe = lerp(xb, xa, STEP_SH.len), we = lerp(wb, wa, STEP_SH.len);
-            ctx.globalAlpha = fade * mid * sd * stk; ctx.fillStyle = STEP_SH.col; quadE(xb, yt, wb, kt, xe, ye, we, ke);
-          }
-          if (RSH) { rshAff(rwF(i, (fa + fb) * 0.5), xa, ya, sa, xb, yt, sb, 0, 1, fade); quadE(xa, ya, wa, ka, xb, yt, wb, kt); }   // 踏面橫向明暗（右邊土坎的影子），跟路面同一條柔和漸層
+          // 踏面：比眼睛高的階梯從下面看過去，踏面朝著另一邊（近的那條邊反而比遠的那條邊高），看不到就不畫
+          // （不然一片倒過來的踏面蓋在立面上，扭成一條帶子）
+          const tv = Math.min((ya - ka) - (yt - kt), (ya + ka) - (yt + kt));
+          if (tv > 0) {
+            ctx.fillStyle = curbC; quadE(xa, ya, wa * cw + 0.6, ka, xb, yt, wb * cw + 0.6, kt);
+            ctx.fillStyle = LUT[7 * FOGN + fi]; quadE(xa, ya, wa, ka, xb, yt, wb, kt);
+            if (AUD.geo && fade > 0.5) AUD.geo.push({ t:1, i, q, xa, ya, wa, ka, xb, yt, wb, kt, yr, kr4, kt4, W4, riser });   // 測試用：這一階的踏面、立面（tools/turnaudit.js 檢查階梯有沒有扭轉、倒過來）
+            const TT = TEX.moss && ST === TEX.road && Hh(i * 8 + q, 190) < 0.45 ? TEX.moss : ST;   // 森林石階：有的階踏面換成苔蘚石塊
+            if (TT && ta > 0.03) { texRun(TT, ROAD_UC, xa, q === 0 ? y1 : ya, sa, xb, yt, sb, zA + (F / sa - F / s1), ta, roadPath(xa, q === 0 ? y1 : ya, sa, xb, yt, sb, rwF(i, fa), rwF(i, fb), ka, kt)); ctx.globalAlpha = fade; }   // 踏面貼圖（跟路面一樣連續對齊）
+            if (sd > 0) {
+              if (q) woodTint(i * 8, 1, xa - wa, ya - ka, xa + wa, ya + ka, xb + wb, yt + kt, xb - wb, yt - kt, (1 - tm) * sd);   // 每階踏面深淺不一：剛分出來的那幾階先跟第一階同色，再慢慢換成自己的顏色
+              woodTint(i * 8 + q, 1, xa - wa, ya - ka, xa + wa, ya + ka, xb + wb, yt + kt, xb - wb, yt - kt, (q ? tm : 1) * sd);
+              // 上一階的影子落在這一階踏面靠裡面那一截（光從前上方來，立面擋住），橫木也才像嵌在地上而不是浮在上面
+              const ye = yt + (ya - yt) * STEP_SH.len, ke = lerp(kt, ka, STEP_SH.len), xe = lerp(xb, xa, STEP_SH.len), we = lerp(wb, wa, STEP_SH.len);
+              ctx.globalAlpha = fade * mid * sd * stk; ctx.fillStyle = STEP_SH.col; quadE(xb, yt, wb, kt, xe, ye, we, ke);
+            }
+            if (RSH) { rshAff(rwF(i, (fa + fb) * 0.5), xa, ya, sa, xb, yt, sb, 0, 1, fade); quadE(xa, ya, wa, ka, xb, yt, wb, kt); }   // 踏面橫向明暗（右邊土坎的影子），跟路面同一條柔和漸層
+          } else if (AUD.geo && fade > 0.5) AUD.geo.push({ t:2, i, q, xb, yt, yr, kr4, kt4, W4, riser });   // 測試用：看不到踏面的那一階（只留立面）
           const a = farA(j, 52, 52);
           if (a > 0) {
             const nh = Math.max(1, sa * NOSE.h);
             ctx.globalAlpha = fade * a * NOSE.a * (q ? tm : 1); ctx.fillStyle = NOSE.col; quadE(xa, ya - nh, wa, ka, xa, ya, wa, ka);   // 踏面前緣受光（一條亮的邊，階梯才讀得出一階一階）
             ctx.globalAlpha = fade * a * mid; ctx.strokeStyle = INK; ctx.lineWidth = clamp(sb * 0.02, 0.5, 2.2);
-            ctx.beginPath(); ctx.moveTo(xb - W4, yr - kr); ctx.lineTo(xb + W4, yr + kr); ctx.moveTo(xb - W4, yt - kt); ctx.lineTo(xb + W4, yt + kt); ctx.stroke(); ctx.globalAlpha = fade;
+            if (riser) { ctx.beginPath(); ctx.moveTo(xb - W4, yr - kr4); ctx.lineTo(xb + W4, yr + kr4); ctx.moveTo(xb - W4, yt - kt4); ctx.lineTo(xb + W4, yt + kt4); ctx.stroke(); } ctx.globalAlpha = fade;
           }
         }
         if (seA > 0.01) { SEG_G[0] = x1; SEG_G[1] = y1; SEG_G[2] = s1; SEG_G[3] = x2; SEG_G[4] = y2; SEG_G[5] = s2; SEG_G[6] = zA; stoneEdges(i, j, n, fi, seA, seA * farA(j, SE_ROCK_J, 4), SEG_G, ta * seA / fade, fq); }   // 每一階左右兩端嵌進土裡（土邊、接觸陰影、石頭側面），所有階一起畫
       } else {
-        ctx.fillStyle = curbC; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + 1, x2 - e2, y2 + 1);   // 遠端同樣往內縮 1 像素（不蓋到後面那段的路面貼圖）
-        ctx.fillStyle = LUT[7 * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2 + 1, x2 - w2, y2 + 1);
+        ctx.fillStyle = curbC; quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + SEAM_IN, x2 - e2, y2 + SEAM_IN);   // 遠端同樣往內縮 1 像素（不蓋到後面那段的路面貼圖）
+        ctx.fillStyle = LUT[7 * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2 + SEAM_IN, x2 - w2, y2 + SEAM_IN);
+        if (AUD.geo && fade > 0.5) AUD.geo.push({ t:0, i, x1, y1:yb, w1, x2, y2:y2 + 1, w2 });   // 測試用：這一段的路面（tools/turnaudit.js 檢查路面接縫、破洞）
         if (RT && ta > 0.03) { texRun(RT, ROAD_UC, x1, y1, s1, x2, y2, s2, zA, ta, roadPath(x1, y1, s1, x2, y2, s2, rw, rwAt(i + 1))); ctx.globalAlpha = fade; }
         const wA = isWood ? farA(j, 60, 10) : 0;
         if (wA > 0) for (k = 0; k < PLANKS; k++) {   // 木棧道：每片木板深淺不一，近處再加幾條木紋（遠處淡入）
@@ -3263,7 +3288,7 @@ function drawWorld(b, t, jHi, jLo, far){
       if (stp && stoneSE()) { stoneRocks(i, j, stairTm(j, stairN(j)) > 0 ? stairN(j) : 1, fq, fade * farA(j, SE_ROCK_J, 4) * (1 - snowAmt)); ctx.globalAlpha = fade; }
       const ek = endK(i);
       if (ek > 0) {   // 山頂過後：路慢慢長滿草，融進山頂的草地（蓋一層跟兩旁一樣的草地底色和貼圖），不會一路通到天邊
-        ctx.globalAlpha = fade * ek; ctx.fillStyle = grs(fi, 0); quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + 1, x2 - e2, y2 + 1);
+        ctx.globalAlpha = fade * ek; ctx.fillStyle = grs(fi, 0); quad(x1 - e1, yb, x1 + e1, yb, x2 + e2, y2 + SEAM_IN, x2 - e2, y2 + SEAM_IN);
         if (TEX.grass && ta > 0.03) texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * ek * GRASS_A * (1 - snowFall * snowAmt * 0.85), roadPath(x1, y1, s1, x2, y2, s2, rw, rwAt(i + 1)), SUB_GRASS);
         ctx.globalAlpha = fade;
       }
@@ -3483,6 +3508,9 @@ function farStep(t, dt){
     FAR.ok = true; FAR.cur = -1; FAR.age = 0;
   }
 }
+const AUD = { sky:null, geo:null };
+S.auditSky = function(col){ AUD.sky = col || null; };   // 測試掛鉤（tools/turnaudit.js 找地形破圖）：背景（天空、遠山、雲海）整片換成一個純色；null 恢復
+S.auditGeo = function(on){ const g = AUD.geo; AUD.geo = on ? [] : null; return g; };   // 測試掛鉤：開始記錄下一次畫的路面、每一階階梯的形狀（true），或收回記錄（false）
 S.far = function(on){ if (on != null) { FAR.on = !!on; farReset(); } return { on:FAR.on, ok:FAR.ok, jK:FAR.jK }; };   // 測試掛鉤：開關遠景快取（比對畫面、量效能）
 
 // ═════════ 氣氛：飛葉／花瓣／光點、神光、雨、霧、粒子 ═════════
@@ -3775,6 +3803,7 @@ S.render = function(s){
     pZ[j] = dz; pS[j] = sc; pX[j] = W / 2 + (pC[j] - camX) * sc; pY[j] = HOR - (pW[j] - camY) * sc;
   }
   drawBG(t, dist);
+  if (AUD.sky) { ctx.globalAlpha = 1; ctx.fillStyle = AUD.sky; ctx.fillRect(0, 0, W, H); }   // 測試用（tools/turnaudit.js）：背景換成一個純色，兩張比對就知道哪裡露出背景
   hitN = 0; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawWorld(b, t, s.dt > 0 ? farBlit() : DRAW - 1, 0, false);   // 拍照那一格（dt = 0，鏡頭焦距不一樣）整段現場畫
   drawFlyers(t, dt, sp);
