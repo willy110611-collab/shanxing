@@ -140,6 +140,23 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 @keyframes dgJump{0%{transform:translateY(0)}35%{transform:translateY(-6px) scale(1.18);color:#ffe27a}100%{transform:none}}
 .hudSub{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:6px;font-size:11px;margin-top:3px;color:#ffe9b8}
 .hudSub span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+/* 精簡狀態面板（平常的樣子；點面板展開，存在 SV.set.hudFull）：只留一排「小臉＋山名＋高度」，天空和遠山露出來；
+   體力偏低（黃、紅）時多一條小體力條（.hudDot），精簡時也不會漏看危險；小地圖縮小、半透明 */
+.hudP{cursor:pointer;transform-origin:0 0;-webkit-tap-highlight-color:transparent}
+.hud.mini .hudP{width:auto;min-width:0;align-items:center;padding:4px 10px 4px 5px}
+.hud.mini .hudFace{width:28px;height:28px;border-width:2px;box-shadow:none}
+.hud.mini .hudCol{display:flex;align-items:center;gap:5px}
+.hud.mini .hudBar,.hud.mini .hudSub{display:none}
+.hud.mini .hudName{flex:0 1 auto;min-width:0;font-size:13px;line-height:1.2}
+.hud.mini .hudAlt{flex:none;margin-top:0;font-size:15px;white-space:nowrap}
+.hud.mini .hudAlt .up,.hud.mini .hudAlt small{font-size:11px}
+.hudDot{display:none}
+.hud.mini .hudDot.mid,.hud.mini .hudDot.low{display:block;flex:none;width:26px;height:9px}
+.hud.mini .hudDot.low{border-color:#c0392b}
+.radarBox{transform-origin:100% 0}
+.hud.mini .radarBox{width:72px;height:72px;opacity:.82}
+/* 很窄的手機（不到 360 寬）：放不下小臉就不放，小體力條縮成一顆小圓點、小地圖再小一點，山名才不會被擠掉 */
+@media (max-width:359px){.hud.mini .hudFace{display:none}.hud.mini .hudDot.mid,.hud.mini .hudDot.low{width:12px}.hud.mini .hudAlt{font-size:14px}.hud.mini .radarBox{width:64px;height:64px}}
 .hudR{display:flex;align-items:center;gap:6px;pointer-events:auto}
 .hudWx{width:42px;height:42px;border-radius:50%;border:1.6px solid var(--ink);background:radial-gradient(circle at 40% 35%,#fff6df,#f1dfb6);box-shadow:0 0 0 2.5px #e9cfa0,0 0 0 3.6px rgba(58,42,32,.75),0 3px 6px rgba(40,25,10,.25);overflow:hidden;flex:none}   /* 細線手繪圓徽：一圈暖金細緣 */
 .hudWx canvas{display:block;width:100%;height:100%}
@@ -448,7 +465,7 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .frRow select{font:inherit;font-size:13px;max-width:84px;padding:4px;border-radius:8px;border:2px solid var(--ink);background:#fffdf4}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#bdb3a6;border:1.5px solid var(--ink)}
 .dot.on{background:#6fcf5a}
-.partyBox{position:absolute;left:10px;max-width:calc(100% - 20px);top:calc(env(safe-area-inset-top) + 150px);display:none;transition:opacity .3s;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
+.partyBox{position:absolute;left:10px;max-width:calc(100% - 20px);top:calc(var(--hudB) + 6px);display:none;transition:opacity .3s;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
 .partyBox.on{display:flex}
 .partyBox b{flex:none}
 .partyBox span{flex:1;min-width:0;color:var(--ink2)}
