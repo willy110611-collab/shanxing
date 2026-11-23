@@ -572,3 +572,24 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 |---|---|
 | `hiker_sleep` | **重畫**。The hiker (主角設定) seen from behind and slightly above, sleeping zipped up in a warm brown mummy sleeping bag laid on the orange sleeping mat, the safari hat tipped over the face, the backpack used as a pillow, trekking poles laid beside. Fully visible, small patch of ground under the mat. |
 | `hiker_rain_sleep` | **重畫**。Same as hiker_sleep but under a small low green tarp shelter strung between the two trekking poles, raindrops on the tarp, the hiker in the sleeping bag under it, backpack in its dark-green rain cover. |
+
+## 第 24 批：登山口廣場（大廳）各方向的動作（放進 `08.登山口廣場`，全部洋紅底、1:1，畫主角都要貼「主角設定」，但把 "seen from directly behind" 改成各張寫的方向）
+
+廣場上的人會往前（面向鏡頭）、往旁邊、往後走，停下來時面向鏡頭。現在揮手、鞠躬、歡呼只有背影，跳一下、坐下沒有圖。這批補齊三個方向。
+每張都**上傳參考圖**：正面的上傳 `hiker_front_walk8`，側面的上傳 `hiker_side_walk8`（人物大小、比例照它），動作再上傳同名的背影版（例如 `hiker_wave`）。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `hiker_front_wave` | 1:1 | 洋紅底。The hiker (主角設定) seen **from the front**, standing and smiling, waving one hand high, trekking poles held in the other hand. Same size and proportions as hiker_front_walk8. |
+| `hiker_front_bow` | 1:1 | 洋紅底。The hiker seen **from the front**, bowing politely from the waist, hat in one hand, poles in the other. |
+| `hiker_front_cheer` | 1:1 | 洋紅底。The hiker seen **from the front**, jumping a little with both arms up cheering, big smile, poles raised. |
+| `hiker_front_jump4` | 16:9 | 洋紅底。The hiker seen **from the front**, 4 frames in one row: crouch → small happy jump with both feet off the ground → landing → standing tall. Same size and ground line in every frame (the jump frame floats above it). |
+| `hiker_front_sit` | 1:1 | 洋紅底。The hiker seen **from the front**, sitting cross-legged on the ground relaxing, backpack set down beside, holding a steaming tin mug, smiling. |
+| `hiker_side_wave` | 1:1 | 洋紅底。The hiker seen **from the side facing right**, standing and waving one hand toward the right, poles in the other hand. Same size and proportions as hiker_side_walk8. |
+| `hiker_side_bow` | 1:1 | 洋紅底。The hiker seen **from the side facing right**, bowing politely from the waist. |
+| `hiker_side_cheer` | 1:1 | 洋紅底。The hiker seen **from the side facing right**, small jump with both arms up cheering. |
+| `hiker_side_jump4` | 16:9 | 洋紅底。The hiker seen **from the side facing right**, 4 frames in one row: crouch → small jump → landing → standing. Same size and ground line. |
+| `hiker_side_sit` | 1:1 | 洋紅底。The hiker seen **from the side facing right**, sitting on the ground with knees up, backpack beside, holding a steaming tin mug. |
+| `hiker_back_sit` | 1:1 | 洋紅底。The hiker seen **from directly behind**, sitting cross-legged on the ground, backpack set down beside, looking at the view, holding a tin mug. |
+
+背影的「跳一下」直接用現有的 `hiker_hop4`，不用另外畫。
