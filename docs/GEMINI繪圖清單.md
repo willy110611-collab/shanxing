@@ -521,3 +521,27 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `pet_leopardcat_rain_step8` | `05.寵物` | 16:9 | 洋紅底。Same poses as pet_leopardcat_step8, wearing the yellow raincoat. |
 | `pet_magpie_fly12` | `05.寵物` | 16:9 | 洋紅底。The Taiwan blue magpie seen from behind flying, 12-frame wing-flap loop in 2 rows of 6; wings never cross into the next cell. |
 | `pet_magpie_rain_fly12` | `05.寵物` | 16:9 | 洋紅底。Same poses as pet_magpie_fly12, wearing the tiny yellow rain cape. |
+
+## 第 22 批：下雨版動作、休息與長椅新姿勢（放進 `01.風格`，全部洋紅底，畫主角都要貼「主角設定」）
+
+每張都要**上傳同名的舊圖當參考**（構圖、大小、腳底位置照舊），雨衣版另外再上傳 `hiker_rain_step8` 當雨衣參考。
+**雨衣設定**（雨衣版都貼）：
+```
+Rain outfit, identical in every image: the same bright yellow hooded rain poncho as the reference hiker_rain_step8 (hood up under the tan safari hat, poncho reaching mid-thigh, sleeves to the wrists), a dark-green rain cover over the backpack with the orange sleeping mat still on top, khaki pants and brown boots below. Trekking poles are silver-grey (not purple).
+```
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `hiker_rest` | 1:1 | 洋紅底。**重畫**。The hiker (主角設定) seen from behind and slightly above, sitting on a low flat trailside rock, knees bent, backpack set down leaning against the rock on the right, holding a steaming tin mug in both hands, trekking poles leaning on the backpack, shoulders relaxed. The rock is small and fully visible. |
+| `hiker_rain_rest` | 1:1 | 洋紅底。Same pose and rock as hiker_rest, wearing the rain outfit (hood up), backpack in its dark-green rain cover. |
+| `hiker_bench` | 1:1 | 洋紅底。The hiker (主角設定) seen **directly from behind** sitting on a simple wooden park bench that also faces away from the viewer (we see the bench's backrest and the hiker's back above it), backpack set on the ground beside the bench on the right, trekking poles leaning on the bench end, hiker looking out at the view, one hand holding a tin mug. The whole bench is fully visible. |
+| `hiker_rain_bench` | 1:1 | 洋紅底。Same as hiker_bench, wearing the rain outfit (hood up), backpack in its dark-green rain cover. |
+| `bench_back` | 1:1 | 洋紅底。The same empty wooden bench as in hiker_bench, seen directly from behind (backrest toward the viewer), on short legs, slightly weathered wood. |
+| `hiker_rain_sleep` | 1:1 | 洋紅底。Same pose as hiker_sleep (napping while leaning on the backpack), wearing the rain outfit, hood up. |
+| `hiker_rain_summit` | 1:1 | 洋紅底。Same pose as hiker_summit (standing on a summit rock, both poles raised), wearing the rain outfit. |
+| `hiker_rain_helmet` | 1:1 | 洋紅底。Same pose as hiker_helmet, red climbing helmet worn over the poncho hood, rain outfit. |
+| `hiker_rain_look` | 1:1 | 洋紅底。Same pose as hiker_look (looking out to the side, one hand shading the eyes), rain outfit. |
+| `hiker_rain_breath` | 1:1 | 洋紅底。Same pose as hiker_breath (bent over on the poles catching breath), rain outfit. |
+| `hiker_rain_wipe` | 1:1 | 洋紅底。Same pose as hiker_wipe, wiping rain and sweat from the forehead, rain outfit. |
+| `hiker_rain_drink` | 1:1 | 洋紅底。Same pose as hiker_drink (drinking from a water bottle, head tilted back), rain outfit. |
+| `hiker_rain_hop4` | 16:9 | 洋紅底。Exactly the same 4 frames as hiker_hop4 (crouch → small jump → landing → standing), rain outfit, hood identical in all 4 frames. |

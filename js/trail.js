@@ -1632,7 +1632,10 @@ S.crestAt = function(){ const out = []; let last = -99; for (let i = 0; i < N; i
 // ───────── 步態：累了慢慢走、偶爾停下來喘氣／喝水／擦汗／看風景、開心時小跳、上階梯和轉彎換圖 ─────────
 function rnd(r){ return r[0] + Math.random() * (r[1] - r[0]); }
 function gaitReset(){ gait.act = null; gait.pace = 1; gait.tB = rnd(GAIT.breath[1]); gait.tH = rnd(GAIT.hop); gait.tI = rnd(GAIT.idle); gait.lookM = -1; gait.cur = ''; gait.prev = ''; gait.k = 1; gait.mode = 'walk'; gait.modeT = 9; gait.bendT = 0; gait.tired = false; }
-function gaitStart(id, dur, flip){ if (!ART.get(id)) return; gait.act = id; gait.at = 0; gait.dur = dur; gait.aflip = !!flip; }
+// 單張動作（看風景、喘氣、擦汗、喝水、開心跳、休息、睡覺、登頂、戴頭盔）的雨衣版：名字一律是 hiker_rain_＋原本的後半段，有圖就用
+// 下雨天沒有雨衣版的路上小動作先不做（不會走一走突然換回沒穿雨衣的樣子）
+const rainAct = id => isRain ? id.replace(/^hiker_/, 'hiker_rain_') : id;
+function gaitStart(id, dur, flip){ id = rainAct(id); if (!ART.get(id)) return; gait.act = id; gait.at = 0; gait.dur = dur; gait.aflip = !!flip; }
 // 前面幾公尺內有沒有觀景台或路線地標（登山口、終點不算）；每個只看一次
 function lookAhead(dist){
   for (let i = 0; i < AP.length; i++) { const o = AP[i]; if (o.m > dist + GAIT.look) break; if (o.type === 'view' && o.m > dist && o.m > gait.lookM) { gait.lookM = o.m; return o.side; } }
@@ -1697,8 +1700,8 @@ function gaitSheet(){
 function gaitDraw(c, id, flip, fl){
   const e = ART.get(id); if (!e) return false;
   let i = 0, h = SCALE.hero * 100 * (GAIT_H[id] || 1), dy = 0;
-  if (id === 'hiker_hop4') { i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3; h *= e.frames[i].h / e.frames[3].h; }   // 跳起來那格的外框含離地空隙：照站著那格的比例畫，人不會忽大忽小
-  else if (id === 'hiker_breath') h = SCALE.heroBreath * 100;
+  if (/_hop4$/.test(id)) { i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3; h *= e.frames[i].h / e.frames[3].h; }   // 跳起來那格的外框含離地空隙：照站著那格的比例畫，人不會忽大忽小
+  else if (/_breath$/.test(id)) h = SCALE.heroBreath * 100;
   else if (e.frames.length === 1) h = SCALE.heroPose * 100;
   else { i = walkFrame(e.frames.length); dy = -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv; }
   return artFrame(c, id, i, 0, dy, h, flip, fl);
@@ -2040,11 +2043,12 @@ function drawBird(x, y, u, s, t){
 function walkFrame(n){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * (n || 4)) : 0; }
 // 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
 // fl：換衣服色調的濾鏡（隊友、廣場上的山友），自己是 undefined
+const artRain = id => { const r = rainAct(id); return r !== id && ART.get(r) ? r : id; };   // 休息、睡覺這種一定要畫的：沒有雨衣版就先用原本的
 function heroArt(c, s, t, fl, me){
-  if (s.sleep) return artFrame(c, 'hiker_sleep', 0, 0, 0, SCALE.heroSleep * 100, false, fl);
-  if (s.rest) return artFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
-  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return artFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
-  if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return artFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
+  if (s.sleep) return artFrame(c, artRain('hiker_sleep'), 0, 0, 0, SCALE.heroSleep * 100, false, fl);
+  if (s.rest) return artFrame(c, artRain('hiker_rest'), 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
+  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return artFrame(c, artRain('hiker_summit'), 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
+  if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return artFrame(c, artRain('hiker_helmet'), 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
   const fw = s.face === 'front' ? 'hiker_front_walk8' : s.face === 'side' ? 'hiker_side_walk8' : null;   // 廣場：往鏡頭走用正面、往旁邊走用側面（plaza.js 決定方向、往左時整個人鏡射），停下來面向鏡頭
   if (fw && ART.get(fw)) return artFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
