@@ -1832,14 +1832,9 @@
     const S = SX.SOURCES;
     const a = (url, name) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${name}</a>`;
     const li = x => `<li>${x.url ? a(x.url, x.name) : x.name}<span>${x.org || ''}</span></li>`;
-    const mt = SX.MOUNTAINS.map(m => {
-      const c = S.mountain[m.id], none = c.url === SX.NOSRC;
-      return `<li>${none ? m.name : a(c.url, m.name)}<span>${none ? SX.NOSRC + '官方數據：' : ''}${c.note}</span></li>`;
-    }).join('');
     return `<div class="setRow srcRow"><h4>資料來源</h4>
         <p>山的距離、海拔和時間，盡量用官方公布的數字；官方沒寫的，沿用山友的紀錄。</p>
         <ul class="srcList">${S.main.map(li).join('')}</ul>
-        <details><summary>每座山的出處</summary><ul class="srcList">${mt}</ul></details>
         <ul class="srcList srcCr">${S.credit.map(li).join('')}</ul></div>`;
   }
   function renderSettings(){
