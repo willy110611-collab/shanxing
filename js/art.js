@@ -82,8 +82,9 @@ function despill(g, w, h){
     return (l && r) || (u && b);
   };
   // 圖裡面（不是邊緣）本來就有很多粉紅、紫色的（杜鵑、櫻花）：邊緣保守一點去，不然花瓣邊會被洗白
+  // 只算「紅明顯比藍多」的粉紅（花）：洋紅染到的是紅藍差不多，不能算（2026-11-23：草叢被洋紅染很多，反而被當成粉紅花的圖、沒洗乾淨）
   let pk = 0, inn = 0;
-  for (let p = 0; p < N; p++) if (dist[p] > EDGE) { inn++; const i = p * 4; if (Math.min(d[i], d[i + 2]) - d[i + 1] > 25 && d[i] - d[i + 1] > 40) pk++; }
+  for (let p = 0; p < N; p++) if (dist[p] > EDGE) { inn++; const i = p * 4; if (Math.min(d[i], d[i + 2]) - d[i + 1] > 25 && d[i] - d[i + 1] > 40 && d[i] - d[i + 2] > 25) pk++; }
   const pinkArt = inn > 0 && pk / inn > 0.02;
   // 邊緣帶去洋紅：洋紅底只會讓紅、藍變多，滲進來的量 a ＝ 紅、藍各自比綠多出來的部分 ÷ 洋紅底的（取小的那個），照比例扣掉
   // 扣掉的亮度平均還一點回去（灰色登山杖不會變黑）。粉紅花的圖改用保守算法：紅、藍差很多的（粉紅花、紅衣服）是真的顏色，扣得少或不扣
@@ -108,7 +109,8 @@ function despill(g, w, h){
     if (n) { d[i] += (r / n - d[i]) * 0.65; d[i + 1] += (g / n - d[i + 1]) * 0.65; d[i + 2] += (b / n - d[i + 2]) * 0.65; }
   }
   // 紅藍差不多、明顯高於綠的「洋紅混色」：不管在不在邊緣都清（粉紅杜鵑紅遠大於藍，不會被動到）
-  for (let i = 0; i < d.length; i += 4) if (d[i + 3] && Math.abs(d[i] - d[i + 2]) < 50) { const m = mg(i); if (m > 40) despix(i, m); }
+  // 半透明（邊緣那圈）的洋紅混色直接變透明：顏色已經洗不回來，留著就是一圈淡淡的粉紅點
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] && Math.abs(d[i] - d[i + 2]) < 50) { const m = mg(i); if (m > 30 && d[i + 3] < 160) d[i + 3] = 0; else if (m > 40) despix(i, m); }
   g.putImageData(im, 0, 0);
   return d;
 }
