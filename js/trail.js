@@ -68,7 +68,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, up:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -1471,6 +1471,7 @@ let PON_L = '#f6d968', PON_S = '#cba740', DOG_L = '#e9a55c', DOG_S = '#b9743f', 
 const LEAFC = ['#8fbf5a', '#d9a441', '#c9703f', '#6fa85a'];
 
 function updHero(s, t, dt, dist, sp){
+  if (sp > 0.05 && !s.rest && !s.sleep) hero.walkV += (sp - hero.walkV) * Math.min(1, dt * 0.5);   // 自己平常走路的速度（隊友剛出現時拿來當他的步調）
   const mv = (sp > 0.05 && !s.rest && !s.sleep) ? 1 : 0;
   hero.mv += (mv - hero.mv) * Math.min(1, dt * 8);
   // 步伐：平路一個循環（兩步）走 STRIDE 公尺；階梯上一步踩一階，身體往前傾一點
@@ -1746,7 +1747,8 @@ function drawDog(x, y, u, s, t){
 // 隊友的進度大約 10 秒才來一次：用前後兩次算出他的步調 v，中間照這個步調往前走（腳步跟著動），
 // 再慢慢修正到「最新回報＋這段時間該走的路」，不會一下衝過去、再站著等下一次
 const MATE_VMAX = 8;      // 估出來的步調最多幾公尺／秒（切到背景回來時間差很大，估太快就壓住）
-const MATE_FIX = 0.25;    // 每秒修正落差的比例（約 4 秒追平）
+const MATE_CATCH = 8;     // 落差幾秒路程內慢慢追：走快一點或慢一點（最慢 MATE_SLOW 倍、最快 MATE_FAST 倍），不會站著等、也不會衝過去
+const MATE_SLOW = 0.4, MATE_FAST = 2.5;
 const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去
 let mates = [];
 S.setMates = function(list){
@@ -1755,6 +1757,7 @@ S.setMates = function(list){
     const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0), rest = !!m.rest;
     const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, v: old ? old.v : 0, at: old ? old.at : now };
     if (old && tg !== old.target) { mt.v = clamp((tg - old.target) / Math.max(1, now - old.at), 0, MATE_VMAX); mt.at = now; }
+    if (!old || !mt.v) mt.v = hero.walkV;   // 還算不出他的步調（剛出現）：先照自己走路的速度走，不會站在原地等下一筆進度
     if (rest) mt.v = 0;
     return mt;
   });
@@ -1764,7 +1767,8 @@ function stepMates(dt){
   for (const mt of mates) {
     const aim = mt.target + mt.v * Math.min(now - mt.at, 15), gap = aim - mt.d;   // 估計他現在走到哪（最多往前估 15 秒，斷線時不會一直走下去）
     if (Math.abs(gap) > MATE_SNAP) { mt.d = aim; continue; }
-    mt.d += Math.max(0, mt.v + gap * MATE_FIX) * dt;   // 只往前走：估過頭就站著等（不會倒退走）
+    if (!mt.v) { mt.d += Math.max(0, gap) * Math.min(1, dt / 2); continue; }   // 在休息：慢慢走到他停下的地方就站著
+    mt.d += mt.v * clamp(1 + gap / (mt.v * MATE_CATCH), MATE_SLOW, MATE_FAST) * dt;   // 一直照他的步調走，只調快慢來追上（估過頭就走慢一點，不會停住再順移）
   }
 }
 function drawMate(mt, j, f, t, fade){
