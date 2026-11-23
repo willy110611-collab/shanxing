@@ -65,6 +65,13 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 /* 操作提示放在地圖最下面（海面上，不會蓋到山的木牌）；第一次摸地圖之後就收起來 */
 .mapHint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:4;font-size:13px;color:#fff7e4;text-shadow:var(--txo);pointer-events:none;white-space:nowrap;transition:opacity .4s}
 .mapHint.off{opacity:0}
+/* 找山：地圖右下角一顆木頭小鈕（跟上排按鈕同材質）；卡片用山群卡片同一套木框與清單 */
+.findBtn{position:absolute;right:14px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:4px;padding:6px 12px;font-size:14px;white-space:nowrap}
+.findBtn svg{width:18px;height:18px;flex:none}
+.findQ{margin:6px 0 8px}
+.findTabs{display:flex;gap:6px;flex-wrap:nowrap;margin-bottom:4px}
+.findTabs .chip{flex:1;padding:4px 0;font-size:13px;white-space:nowrap;opacity:.7}
+.findTabs .chip.on{opacity:1;background:#fff3c8}
 #mapWrap{position:absolute;inset:0;z-index:2;min-height:0;overflow:hidden}
 #mapWrap canvas,#mapWrap svg{width:100%;height:100%;display:block}
 #mapWrap canvas{touch-action:none}
@@ -457,6 +464,9 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .plzEmoMenu .cbtn{white-space:nowrap;display:flex;align-items:center;gap:6px;justify-content:flex-start}
 .plzEmoMenu .cbtn span{font-size:18px}
 .plzEmoMenu .cbtn span .artImg{width:24px;height:24px}
+.greetBtns .cbtn{white-space:nowrap;display:flex;align-items:center;gap:5px}   /* 同山遇見山友的小卡：打招呼三顆鈕，圖示跟廣場一樣大 */
+.greetBtns .cbtn span{font-size:18px}
+.greetBtns .cbtn span .artImg{width:24px;height:24px}
 .frRow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:14px;color:var(--ink)}
 .frRow:first-of-type{border-top:0}
 .frRow>span:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0}
@@ -492,6 +502,19 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .partyBox.on{display:flex}
 .partyBox b{flex:none}
 .partyBox span{flex:1;min-width:0;color:var(--ink2)}
+/* 爬山聊天泡泡：右下「收起畫面資訊」鈕上面一顆小聊天鈕，點開才是輸入框（紀錄、輸入框跟廣場同一套 .plzLog／.chatIn） */
+.tcBtn{position:absolute;right:12px;bottom:calc(132px + env(safe-area-inset-bottom));z-index:5;width:38px;height:38px;padding:0;border-radius:50%;background:rgba(255,247,228,.92);border:2px solid var(--ink);font-size:18px;line-height:1;box-shadow:0 2px 4px rgba(40,25,10,.3);display:none}
+.tcBtn.on{display:block}
+.tcPanel{position:absolute;left:10px;right:60px;bottom:calc(132px + env(safe-area-inset-bottom));z-index:5;max-width:320px;display:none}
+.tcPanel.on{display:block}
+.tcPanel .plzLog{cursor:default;background:rgba(255,250,236,.9)}
+#scrClimb.clean .tcBtn,#scrClimb.clean .tcPanel{opacity:0;pointer-events:none}
+/* 說話的隊友不在畫面裡：畫面上緣（在你前面）或下緣（在你後面）一行提示 */
+.tcHint{position:absolute;left:50%;transform:translateX(-50%);z-index:4;max-width:calc(100% - 120px);padding:4px 12px;border-radius:999px;background:rgba(255,253,244,.95);border:2px solid var(--ink);font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;opacity:0;transition:opacity .3s}
+.tcHint.on{opacity:1}
+.tcHint.up{top:calc(var(--hudB) + 64px)}
+.tcHint.down{bottom:calc(178px + env(safe-area-inset-bottom))}
+.tcPanel.on~.tcHint.down{display:none}   /* 聊天打開時紀錄裡就看得到，下緣提示不疊在輸入框上 */
 .repBtn{font:inherit;font-size:11px;margin-left:4px;padding:1px 6px;border-radius:8px;border:1.5px solid var(--ink);background:#fff;color:var(--ink)}
 .revRow{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:8px 0;border-top:1.5px dashed rgba(58,42,32,.25);font-size:13px}
 .revRow img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:2px solid var(--ink);flex:none}
@@ -502,11 +525,15 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .streakBox{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;margin:6px 0 12px;border-radius:14px;background:#fff7e4;border:2.5px solid var(--ink)}
 .streakBox b{font-size:17px;color:var(--ink)}
 .streakBox small{font-size:12px;color:var(--ink2)}
-.streakDots{display:flex;gap:7px}
-.streakDots i{width:14px;height:14px;border-radius:50%;background:#e6dccb;border:2px solid var(--ink)}
-.streakDots i.on{background:#f2c94c}
-.streakDots i.big{width:20px;height:20px;margin-top:-3px;background:#e9d7ff}
-.streakDots i.big.on{background:#b98ad9}
+.streakDots{display:flex;gap:6px;align-items:center}
+.streakDots i{position:relative;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;border:1.5px dashed rgba(58,42,32,.38);background:rgba(255,248,230,.55)}
+.streakDots i span{font-style:normal;font-size:11px;color:var(--ink2)}
+.streakDots i svg{width:17px;height:17px}
+.streakDots i.on{border:2px solid var(--ink);background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.8) 0 14%,rgba(255,255,255,0) 30%),radial-gradient(circle at 50% 60%,#f2c94c 55%,#c9962a 100%);box-shadow:0 2px 0 var(--ink)}
+.streakDots i.big{width:32px;height:32px;border-color:rgba(122,80,160,.55);background:rgba(233,215,255,.6)}
+.streakDots i.big svg{width:20px;height:20px;opacity:.55}
+.streakDots i.big.on{border:2px solid var(--ink);background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.8) 0 14%,rgba(255,255,255,0) 30%),radial-gradient(circle at 50% 60%,#c9a2ea 55%,#8f62b5 100%);box-shadow:0 2px 0 var(--ink)}
+.streakDots i.big.on svg{opacity:1}
 #dyAll{white-space:nowrap}
 .dyTask{display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1.5px dashed rgba(58,42,32,.25);text-align:left}
 .dyTask>div{flex:1;min-width:0}
@@ -600,8 +627,10 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .bdgTxt em{margin-left:6px;padding:0 7px;border:1.5px solid var(--ink);border-radius:999px;font-style:normal;font-size:12px;vertical-align:2px}
 .bdgTxt small{font-size:11.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bdgTxt .dyBar{display:block}
-.bdgDots{flex:none;display:flex;flex-direction:column;gap:4px}
-.bdgDots i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);background:rgba(58,42,32,.15)}
+.bdgTop{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.bdgPips{flex:none;display:flex;gap:3px}
+.bdgPips i{width:13px;height:13px;border-radius:50%;border:1.5px dashed rgba(58,42,32,.32)}
+.bdgPips i.on{border:1.5px solid var(--ink);background:radial-gradient(circle at 34% 30%,rgba(255,255,255,.85) 0 16%,rgba(255,255,255,0) 30%),radial-gradient(circle at 50% 60%,var(--c) 55%,color-mix(in srgb,var(--c) 70%,#3a2a20) 100%);box-shadow:0 1px 0 rgba(58,42,32,.45)}
 .bdgBig{display:flex;justify-content:center;margin:2px 0 8px}
 .bdgBig .medal{width:110px;height:110px}
 .bdgBig .medal i{width:40px;height:40px;font-size:24px}

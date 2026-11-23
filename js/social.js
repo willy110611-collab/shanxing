@@ -133,7 +133,7 @@
     const R = { send: d => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(d)); }, close: () => { alive = false; clearInterval(ping); if (ws) try { ws.close(); } catch(e){} }, get open(){ return !!ws && ws.readyState === 1; } };
     const connect = () => {
       if (!alive || !acct) return;
-      const pet = name === 'lobby' && SX.game && SX.game.pet ? `&pet=${encodeURIComponent(SX.game.pet() || '')}` : '';   // 廣場上帶著現在的寵物
+      const pet = (name === 'lobby' || name.startsWith('mt:')) && SX.game && SX.game.pet ? `&pet=${encodeURIComponent(SX.game.pet() || '')}` : '';   // 廣場、同山遇見山友：帶著現在的寵物
       ws = new WebSocket(`${WS}?room=${encodeURIComponent(name)}&t=${encodeURIComponent(acct.token)}${pet}`);
       ws.onopen = () => { tries = 0; clearInterval(ping); ping = setInterval(() => { if (ws && ws.readyState === 1) ws.send(PING); }, PING_MS); on({ type: 'open' }); };
       ws.onmessage = e => { if (e.data === PONG) return; let d; try { d = JSON.parse(e.data); } catch(_){ return; } on(d); };
@@ -326,10 +326,12 @@
         <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcInv">邀請跟隨</button></div>`
       : `<p class="summitBig">你們是好友。只有隊長可以邀請跟隨。</p><div class="mBtns"><button class="cbtn go" id="pcX">好</button></div>`}`;
     $('#pcX').onclick = () => $('#modal').classList.remove('on');
-    if ($('#pcAdd')) $('#pcAdd').onclick = async () => {
-      try { await api('/friends', { json: { id: p.id } }); toast(`和 ${p.name} 成為好友了！`); if (A().sparkle) A().sparkle(); await refresh(); personCard(p); } catch(e){ toast(e.message, 3000); }
-    };
+    if ($('#pcAdd')) $('#pcAdd').onclick = () => addFriend(p, () => personCard(p));
     if ($('#pcInv')) $('#pcInv').onclick = () => { $('#modal').classList.remove('on'); teamInvite(p.id); };
+  }
+  // 用 id 加好友（廣場點人、登山畫面點同山的山友都走這裡）；after：加好之後重畫小卡
+  async function addFriend(p, after){
+    try { await api('/friends', { json: { id: p.id } }); toast(`和 ${p.name} 成為好友了！`); if (A().sparkle) A().sparkle(); await refresh(); after(); } catch(e){ toast(e.message, 3000); }
   }
   // 好友多久以前在線（ago＝伺服器回的毫秒數，再加上拿到之後過了多久）
   const ONLINE_AGO = 5 * 60e3;
@@ -574,7 +576,7 @@
   function partyBox(){
     let el = $('#partyBox');
     const M = G().M, on = party && M && M.id === party.mountain && $('#scrClimb.on');
-    if (!on) { if (el) el.classList.remove('on'); if (SX.scene && SX.scene.setMates) SX.scene.setMates([]); return; }
+    if (!on) { if (el) el.classList.remove('on'); teamDraw = []; drawMates(); chatUi(false); return; }
     if (!el) {
       el = document.createElement('div'); el.id = 'partyBox'; el.className = 'partyBox'; $('#scrClimb').appendChild(el);
       el.innerHTML = '<b id="pbName"></b><span id="pbInfo"></span><button class="cbtn sm" id="cheerBtn">幫他加油</button>';
@@ -596,9 +598,117 @@
       : mate.off ? `${lead.name} 離線中・${p >= M.dist ? '已到山頂' : d == null ? km(p) : Math.abs(d) < MATE_NEAR ? '大約就在你附近' : `大約在你${d > 0 ? '前面' : '後面'} ${(Math.abs(d) / 1000).toFixed(1)} km`}${mate.rest ? '・休息中' : ''}`
       : `${many ? lead.name + ' ' : ''}${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}`;
     // 離線的隊友：畫半透明、名牌加「・離線」；v＝估計他一秒走多少（休息中、到山頂就是 0），登山畫面照這個步調走
-    if (SX.scene && SX.scene.setMates) SX.scene.setMates(me ? on2.map(x => { const s = mates[x.id];
+    teamDraw = me ? on2.map(x => { const s = mates[x.id];
       const af = affOf(x.id);
-      return { dist: pos[x.id], name: x.name, rest: !!s.rest, off: !!s.off, v: s.off ? SX.mateGuess(M, s, T + 1000) - pos[x.id] : undefined, pet: af && SX.affHas(af.lv, 'pet') ? af.pet : null }; }) : []);
+      return { id: x.id, dist: pos[x.id], name: x.name, rest: !!s.rest, off: !!s.off, v: s.off ? SX.mateGuess(M, s, T + 1000) - pos[x.id] : undefined, pet: af && SX.affHas(af.lv, 'pet') ? af.pet : null }; }) : [];
+    drawMates(); chatUi(true);
+  }
+  // 登山畫面上畫的人：隊友（teamDraw，partyBox 算）＋同山遇見的山友（strangerDraw 算），一起交給 trail.js（每秒一次）
+  let teamDraw = [];
+  function drawMates(){ if (SX.scene && SX.scene.setMates) SX.scene.setMates(teamDraw.concat(strangerDraw())); }
+
+  // ───────── 爬山聊天泡泡（隊伍聊天）─────────
+  // 走隊伍房間（party:隊伍代號）的 chat，規則跟廣場同一套：字數上限是伺服器 hello 給的 sayMax（SAY_MAX）、每秒一句、伺服器過濾；
+  // 頭上冒字、冒幾秒用 SX.plaza 的同一份（trail.js 的 drawTalk）。說話的隊友不在畫面裡 → 畫面上緣（在你前面）或下緣（在你後面）跳一行提示
+  const TALK_LOG = 20;   // 手機裡留最近幾句（收起來時只露最後 3 句，跟廣場一樣）
+  let tLog = [], tOpen = false, tUnread = 0;
+  function chatUi(on){
+    let b = $('#tcBtn');
+    if (!on) { if (b) { b.classList.remove('on'); $('#tcPanel').classList.remove('on'); } return; }
+    if (!b) {
+      const sc = $('#scrClimb');
+      b = document.createElement('button'); b.id = 'tcBtn'; b.className = 'tcBtn'; b.type = 'button'; b.setAttribute('aria-label', '隊伍聊天'); b.textContent = '💬'; sc.appendChild(b);
+      const pn = document.createElement('div'); pn.id = 'tcPanel'; pn.className = 'tcPanel';
+      pn.innerHTML = `<div class="plzLog" id="tcLog"></div><form class="chatIn" id="tcForm"><input id="tcTxt" maxlength="${sayMax}" placeholder="跟隊友說…" autocomplete="off" enterkeyhint="send"><button class="cbtn go sm">送出</button></form>`;
+      sc.appendChild(pn);
+      b.onclick = () => { if (A().pop) A().pop(); tOpen = !tOpen; pn.classList.toggle('on', tOpen); if (tOpen) { tUnread = 0; tcLog(); $('#tcTxt').focus(); } chatUi(true); };
+      $('#tcForm').onsubmit = e => {
+        e.preventDefault(); const v = $('#tcTxt').value.trim(); if (!v) return;
+        if (!pRoom || !pRoom.open) { toast('還在連線，等一下'); return; }
+        pRoom.send({ type: 'chat', text: v }); $('#tcTxt').value = '';
+      };
+    }
+    b.classList.add('on'); b.dataset.badge = tUnread && !tOpen ? String(Math.min(9, tUnread)) : '';
+    $('#tcTxt').maxLength = sayMax;
+  }
+  function tcLog(){
+    const L = $('#tcLog'); if (!L) return;
+    L.innerHTML = tLog.length ? tLog.slice(-3).map(m => `<div class="lg${m.who.id === acct.id ? ' me' : ''}"><b>${esc(m.who.name)}</b>${esc(m.text)}</div>`).join('') : '<div class="lg tip">說的話會冒在你頭上，隊友都看得到</div>';
+    L.scrollTop = L.scrollHeight;
+  }
+  function onTalk(d){
+    tLog.push(d); if (tLog.length > TALK_LOG) tLog.shift(); tcLog();
+    const mine = d.who.id === acct.id;
+    if (SX.scene && SX.scene.say) SX.scene.say(mine ? 'me' : d.who.id, d.text);
+    if (mine) return;
+    if (!tOpen) { tUnread++; chatUi(true); }
+    if (A().pop) A().pop();
+    if (SX.scene && SX.scene.mateSeen && !SX.scene.mateSeen(d.who.id)) edgeHint(d);
+  }
+  // 說話的隊友不在畫面裡：在他那一邊的畫面邊緣跳「小明：加油！」，跟頭上冒字一樣久
+  function edgeHint(d){
+    const M = G().M, me = G().st, s = mates[d.who.id], p = s && M ? mateAt(s, M, Date.now() + skew) : null;
+    const up = p == null || !me || p >= me.dist, sc = $('#scrClimb');
+    let el = $('#tcHint' + (up ? 'U' : 'D'));
+    if (!el) { el = document.createElement('div'); el.id = 'tcHint' + (up ? 'U' : 'D'); el.className = 'tcHint ' + (up ? 'up' : 'down'); sc.appendChild(el); }
+    el.textContent = `${up ? '▲' : '▼'} ${d.who.name}：${d.text}`;
+    el.classList.add('on'); el._until = Date.now() + SX.plaza.SAY_MS;   // 收起來由 tick（每秒）看時間
+  }
+  const hintTick = () => $$('.tcHint.on').forEach(el => { if (Date.now() >= el._until || !$('#scrClimb.on')) el.classList.remove('on'); });
+
+  // ───────── 同山遇見山友 ─────────
+  // 同一座山一個房間（mt:山 id），在登山畫面時才連、離開或切到背景就斷。每 PARTY_STATE_MS 送一次自己走到哪（距離、休息中）；
+  // 伺服器只轉來前後 near 公尺（伺服器的 MT_NEAR，hello 給）內的人。這裡挑最近的 STRANGER_MAX 位畫出來（隊友不重複），太久沒更新的不畫
+  const STRANGER_MAX = 3;            // 登山畫面上同時最多畫幾位同山的山友
+  const STRANGER_STALE_MS = 120000;  // 多久沒收到他的位置就不畫（離線、斷線）
+  let mRoom = null, mRoomMt = null, mNear = 0, mStateT = 0, strangers = {};   // strangers：id → { name, pet, dist, rest, at（手機收到的時間）}
+  function strangerDraw(){
+    const M = G().M, me = G().st; if (!mRoom || !M || !me || !mNear) return [];
+    const T = Date.now(), skip = new Set(team ? team.members.map(x => x.id) : []);
+    return Object.keys(strangers).map(id => Object.assign({ id }, strangers[id]))
+      .filter(x => x.id !== acct.id && !skip.has(x.id) && T - x.at < STRANGER_STALE_MS && Math.abs(x.dist - me.dist) <= mNear)
+      .sort((a, b) => Math.abs(a.dist - me.dist) - Math.abs(b.dist - me.dist)).slice(0, STRANGER_MAX)
+      .map(x => ({ id: x.id, dist: x.dist, name: x.name, rest: x.rest, ghost: true, pet: x.pet }));
+  }
+  function mtClose(){ if (mRoom) { mRoom.close(); mRoom = null; } mRoomMt = null; strangers = {}; mNear = 0; }
+  function mtSend(M, st){ mStateT = Date.now(); if (mRoom) mRoom.send({ type: 'state', dist: Math.round(st.dist * 10) / 10, rest: !!(st.rest || st.sleep) }); }
+  function mtTick(M, st, climbing){
+    if (!climbing || !acct || FAKE || document.hidden) { if (mRoom) { mtClose(); drawMates(); } return; }
+    if (mRoom && mRoomMt !== M.id) mtClose();
+    if (!mRoom) {
+      mRoomMt = M.id;
+      mRoom = room('mt:' + M.id, d => {
+        const st2 = G().st, M2 = G().M;
+        if (d.type === 'open' && st2 && M2) mtSend(M2, st2);   // 連上（含重連）馬上送一次位置，伺服器回附近的人
+        else if (d.type === 'hello') mNear = d.near || 0;
+        else if (d.type === 'near') { strangers = {}; (d.people || []).forEach(x => { strangers[x.who.id] = { name: x.who.name, pet: x.who.pet, dist: x.state.dist, rest: x.state.rest, at: Date.now() }; }); drawMates(); }
+        else if (d.type === 'state') { strangers[d.who.id] = { name: d.who.name, pet: d.who.pet, dist: d.state.dist, rest: d.state.rest, at: Date.now() }; }
+        else if (d.type === 'leave') { delete strangers[d.who.id]; drawMates(); }
+        else if (d.type === 'emote') {
+          const e = SX.plaza.EMO.find(x => x.k === d.k); if (!e) return;
+          if (SX.scene && SX.scene.emote) SX.scene.emote(d.who.id, d.k);
+          toast(`${d.who.name} 跟你${e.label}`); if (A().chime) A().chime();
+        }
+      });
+    }
+    if (Date.now() - mStateT >= PARTY_STATE_MS) mtSend(M, st);
+  }
+  // 點了同山的山友：打招呼（廣場那套揮手、鞠躬、歡呼）、加好友
+  const GREET = ['wave', 'bow', 'cheer'];
+  function strangerCard(p){
+    if (!acct || !p || !p.id) return;
+    const fr = friends.find(f => f.id === p.id), mc = $('#mCard'); $('#modal').classList.add('on');
+    const EM = SX.plaza.EMO.filter(e => GREET.includes(e.k));
+    mc.innerHTML = `<h3>${esc(p.name)}</h3><p class="summitBig">${fr ? '你們是好友，也在這座山上。' : '也在這座山上的山友。'}</p>
+      <div class="mBtns greetBtns">${EM.map(e => `<button class="cbtn sm" data-greet="${e.k}"><span>${SX.art ? SX.art.img(SX.plaza.emoArt(e.k), e.icon) : e.icon}</span>${e.label}</button>`).join('')}</div>
+      <div class="mBtns">${fr ? '<button class="cbtn" id="pcX">好</button>' : '<button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcAdd">加好友</button>'}</div>`;
+    $('#pcX').onclick = () => $('#modal').classList.remove('on');
+    $$('[data-greet]').forEach(b => b.onclick = () => {
+      const e = EM.find(x => x.k === b.dataset.greet); $('#modal').classList.remove('on');
+      if (mRoom) mRoom.send({ type: 'emote', k: e.k, to: p.id });
+      toast(`跟 ${p.name} ${e.label}了`); if (A().sparkle) A().sparkle();
+    });
+    if ($('#pcAdd')) $('#pcAdd').onclick = () => addFriend(p, () => strangerCard(p));
   }
   // ───────── 好友好感度 ─────────
   // 規則（等級門檻、一起走幾公尺算一次、每天上限）只在伺服器，從好友清單的 aff 拿；獎勵表在 data.js 的 SX.AFF_REWARDS
@@ -649,6 +759,7 @@
   }
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
+    mtClose();   // 同山遇見山友：切到背景就離開房間（回來時 tick 再連）
     affFlush(false, true);
     // 關掉遊戲：告訴伺服器這一趟我走到哪、預估幾點登頂（關著遊戲也照這個時間算登頂）
     const b = acct && !FAKE && teamProgress();
@@ -685,8 +796,10 @@
     if (party && climbing && M.id === party.mountain) {
       if (!pRoom) seedMates();   // 還沒連上房間：離線的隊友先照伺服器的這一趟進度放上去
       if (!pRoom) pRoom = room('party:' + party.id, d => {
+        if (d.type === 'chat') { onTalk(d); return; }   // 爬山聊天泡泡
         if (d.type === 'hello') {
           if (d.now) skew = d.now - Date.now();
+          sayMax = d.sayMax || sayMax;
           // 存起來的離線隊友最後進度（比伺服器那一趟的進度舊、或是別座山的就不用）
           (d.away || []).forEach(x => { const c = mates[x.id]; if (x.id !== acct.id && x.state && (!c || !c.seed || (x.state.mountain === party.mountain && x.state.t >= c.t))) mates[x.id] = Object.assign({}, x.state, { off: true }); });
           (d.people || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = x.state; });
@@ -699,8 +812,9 @@
       });
       if (Date.now() - stateT >= PARTY_STATE_MS) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep), pace: SX.game.awayPace(M) }); }
       affWalk(M, st);
-    } else if (pRoom && !climbing) { affFlush(false); pRoom.close(); pRoom = null; mates = {}; affLastD = null; }
-    partyBox();
+    } else if (pRoom && !climbing) { affFlush(false); pRoom.close(); pRoom = null; mates = {}; affLastD = null; tLog = []; tOpen = false; tUnread = 0; }
+    mtTick(M, st, climbing);   // 同山遇見山友
+    partyBox(); hintTick();
   }
   setInterval(tick, 1000);
   // 每分鐘回報一次：在爬哪座山、累積距離、登頂次數（好友列表與週排行用）
@@ -885,6 +999,7 @@
 
   SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite,
     teamBlock, teamTop,   // 好友跟隨：在隊伍裡不能自己出發別座山的原因、登頂了告訴伺服器
+    strangerCard,         // 同山遇見山友：登山畫面點了他
    
     affMates, affTop, affLike, affNear,   // 好友好感度：同隊好友的等級、登頂回報、按照片愛心、休息時旁邊的好友
     quotaLoad, quotaInfo, quotaClaim, register };   // register：還沒有帳號的人要爬有名額的山，取個暱稱就好（跟大廳一樣的帳號）
