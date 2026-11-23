@@ -1782,24 +1782,33 @@ function drawDog(x, y, u, s, t){
 const MATE_VMAX = 8;      // 估出來的步調最多幾公尺／秒（切到背景回來時間差很大，估太快就壓住）
 const MATE_CATCH = 8;     // 落差幾秒路程內慢慢追：走快一點或慢一點（最慢 MATE_SLOW 倍、最快 MATE_FAST 倍），不會站著等、也不會衝過去
 const MATE_SLOW = 0.4, MATE_FAST = 2.5;
-const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去
+const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去；但只要他或要去的地方在畫面裡就不跳，用最快步調走過去
+const MATE_OFF_A = 0.5;   // 離線隊友畫多透明（位置是估的）
 let mates = [];
+// list：[{ dist, name, rest, off, v }]；off＝離線（dist 是遊戲端估的位置、v 是估計的步調，每秒更新一次）
 S.setMates = function(list){
   const now = performance.now() / 1000;
   mates = (list || []).map(m => {
-    const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0), rest = !!m.rest;
-    const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, v: old ? old.v : 0, at: old ? old.at : now };
-    if (old && tg !== old.target) { mt.v = clamp((tg - old.target) / Math.max(1, now - old.at), 0, MATE_VMAX); mt.at = now; }
-    if (!old || !mt.v) mt.v = hero.walkV;   // 還算不出他的步調（剛出現）：先照自己走路的速度走，不會站在原地等下一筆進度
+    const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0), rest = !!m.rest, off = !!m.off;
+    const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now };
+    if (off) { mt.v = Math.max(0, +m.v || 0); mt.at = now; }   // 離線：步調由遊戲端估好（休息中、到山頂是 0）
+    else if (old && old.off) { mt.v = old.v || hero.walkV; mt.at = now; }   // 剛上線：先照離線時的步調走，等下一筆回報再算他真正的步調，不會一上線就衝過去
+    else {
+      if (old && tg !== old.target) { mt.v = clamp((tg - old.target) / Math.max(1, now - old.at), 0, MATE_VMAX); mt.at = now; }
+      if (!old || !mt.v) mt.v = hero.walkV;   // 還算不出他的步調（剛出現）：先照自己走路的速度走，不會站在原地等下一筆進度
+    }
     if (rest) mt.v = 0;
     return mt;
   });
 };
 function stepMates(dt){
-  const now = performance.now() / 1000;
+  const now = performance.now() / 1000, d0 = curS ? curS.dist || 0 : 0, seen = x => x > d0 - 5 && x < d0 + DRAW * SEG;   // seen：這個位置在畫面裡
   for (const mt of mates) {
     const aim = mt.target + mt.v * Math.min(now - mt.at, 15), gap = aim - mt.d;   // 估計他現在走到哪（最多往前估 15 秒，斷線時不會一直走下去）
-    if (Math.abs(gap) > MATE_SNAP) { mt.d = aim; continue; }
+    if (Math.abs(gap) > MATE_SNAP) {
+      if (!seen(mt.d) && !seen(aim)) { mt.d = aim; continue; }   // 兩邊都在畫面外：直接站過去，看不到跳
+      mt.d += gap > 0 ? MATE_FAST * (mt.v || hero.walkV || 0.5) * dt : 0; continue;   // 看得到：用最快步調走過去（他其實在後面就先站著等他追上）
+    }
     if (!mt.v) { mt.d += Math.max(0, gap) * Math.min(1, dt / 2); continue; }   // 在休息：慢慢走到他停下的地方就站著
     mt.d += mt.v * clamp(1 + gap / (mt.v * MATE_CATCH), MATE_SLOW, MATE_FAST) * dt;   // 一直照他的步調走，只調快慢來追上（估過頭就走慢一點，不會停住再順移）
   }
@@ -1810,7 +1819,7 @@ function drawMate(mt, j, f, t, fade){
   const ms = Math.floor(mt.d / SEG), mf = mt.d / SEG - ms, rw = rwF(ms, mf), onSt = sAt(ms) === 1;   // 隊友腳下這段的路半寬、是不是階梯
   const X = gx + (near ? 0.5 : -0.25) * rw * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
   if (Y - 200 * u > H || na <= 0) return;   // 整個人（含名牌）都在畫面下緣以外才不畫
-  fade *= na;
+  fade *= na * (mt.off ? MATE_OFF_A : 1);   // 離線的隊友半透明（名牌也是）
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
   const cols = [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S];
   JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
@@ -1830,10 +1839,10 @@ function drawMate(mt, j, f, t, fade){
   // 名牌
   const ty = Y - (mt.rest ? 118 : 182) * u - 6, fs = clamp(22 * u, 9, 14);
   ctx.font = `${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const w = ctx.measureText(mt.name).width + 12;
+  const tag = mt.off ? mt.name + '・離線' : mt.name, w = ctx.measureText(tag).width + 12;
   ctx.fillStyle = 'rgba(255,248,230,.92)'; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
   ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(X - w / 2, ty - fs * 0.8, w, fs * 1.6, fs * 0.8); else ctx.rect(X - w / 2, ty - fs * 0.8, w, fs * 1.6); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = INK; ctx.fillText(mt.name, X, ty + 0.5);
+  ctx.fillStyle = INK; ctx.fillText(tag, X, ty + 0.5);
   ctx.globalAlpha = 1;
 }
 // ───────── 寵物：柴犬原樣；黑熊、石虎先用換色的四腳獸，藍鵲畫一隻跳著走的小鳥（之後換成 Gemini 美術） ─────────

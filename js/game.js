@@ -15,7 +15,7 @@
   const today = () => new Date().toLocaleDateString('zh-TW');
   const altAt = (m, f) => m.startAlt + (m.alt - m.startAlt) * clamp(f, 0, 1);
   const fmtMin = n => n >= 60 ? `${Math.floor(n / 60)} 小時${n % 60 ? ` ${n % 60} 分` : ''}` : `${n} 分`;
-  const baseSpeed = m => m.dist / (m.recMin * 60);   // 山友實際紀錄的步調（公尺／秒）
+  const baseSpeed = SX.baseSpeed;   // 山友實際紀錄的步調（公尺／秒），寫在 data.js
 
   // ───────── 存檔 ─────────
   // 資料形狀先照之後接後端的樣子放：userPhotos、cairns、bag、quests 都是可以直接同步的清單／對照表
@@ -1890,6 +1890,7 @@
   // 測試用掛鉤
   // 給連線模組用：雲端存檔、每日任務
   SX.game = { daily, updateDailyBadge, getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
+    awayPace:m => baseSpeed(m) * devX(),   // 一起爬：遊戲關著時自己走的速度（隊友那邊拿來估離線時走到哪）
     applySave:txt => { resetting = true; localStorage.setItem(KEY, txt); location.reload(); } };
   setTimeout(() => { dailyState(); updateDailyBadge(); }, 300);
   purgeBlackPhotos();

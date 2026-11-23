@@ -264,6 +264,15 @@ SX.MOUNTAINS.forEach(function(m){
   if (!m.route) m.route = [[0.3,0.9],[0.5,0.5],[0.6,0.1]];
   if (!m.waypoints) m.waypoints = [{m:0,name:'登山口'},{m:m.dist,name:m.end}];
 });
+SX.baseSpeed = m => m.dist / (m.recMin * 60);   // 山友實際紀錄的步調（公尺／秒）：遊戲關著時登山客就照這個速度自己走
+// 一起爬：離線隊友大概走到哪。最後一次回報的距離＋步調×離開多久；離開時在休息或打瞌睡就停在原地；最多到山頂
+// s：{ dist, rest, t（伺服器時間，毫秒）, pace（他的遊戲關著時走的速度，舊版沒有就用 baseSpeed）}；now：伺服器時間
+SX.mateGuess = function(m, s, now){
+  const d0 = Math.min(m.dist, Math.max(0, +s.dist || 0));
+  if (s.rest) return d0;
+  const v = +s.pace > 0 ? +s.pace : SX.baseSpeed(m), sec = Math.max(0, (now - (+s.t || now)) / 1000);
+  return Math.min(m.dist, d0 + v * sec);
+};
 // 地圖旗子：不在山群裡的山一座一根；山群只有一根（位置、難度看 lead，海拔用山群裡最高的）
 SX.PINS = [];
 SX.MOUNTAINS.forEach(m => {

@@ -327,7 +327,10 @@
   const likedOf = k => { const S = window.SXG && SXG.SV; return S && S.likes && S.likes[k] ? ' liked' : ''; };
 
   // ───────── 一起爬：登山畫面上的隊友面板 ─────────
-  let pRoom = null, mates = {}, stateT = 0;   // mates：隊友 id → 最新進度
+  let pRoom = null, mates = {}, stateT = 0, skew = 0;   // mates：隊友 id → 最新進度（off：已離線）；skew：伺服器時間 − 手機時間
+  const MATE_NEAR = 50;   // 離線隊友估計在你前後幾公尺內，就說「大約就在你附近」
+  // 隊友現在在哪：在線就是最新回報；離線用 SX.mateGuess 估（照他遊戲關著時走的速度，休息中不動、最多到山頂）；不在這座山回 null
+  const mateAt = (s, M, T) => !s.off ? s.dist : s.mountain && s.mountain !== M.id ? null : SX.mateGuess(M, s, T);
   function partyBox(){
     let el = $('#partyBox');
     const M = G().M, on = party && M && M.id === party.mountain && $('#scrClimb.on');
@@ -342,25 +345,37 @@
     }
     el.classList.add('on');
     // 隊友有好幾位時，面板顯示走最前面的那位；登山畫面上每位隊友都畫出來
-    const me = G().st, many = party.mates.length > 1, on2 = party.mates.filter(x => mates[x.id]);
-    const lead = on2.slice().sort((a, b) => mates[b.id].dist - mates[a.id].dist)[0], mate = lead && mates[lead.id], d = mate && me ? mate.dist - me.dist : null;
+    // 面板先講在線的隊友；大家都離線才講離線的（「阿山 離線中・大約在你前面 0.3 km」）
+    const me = G().st, many = party.mates.length > 1, T = Date.now() + skew, pos = {};
+    party.mates.forEach(x => { const s = mates[x.id], p = s ? mateAt(s, M, T) : null; if (p != null) pos[x.id] = p; });
+    const on2 = party.mates.filter(x => x.id in pos), live = on2.filter(x => !mates[x.id].off);
+    const lead = (live.length ? live : on2).slice().sort((a, b) => pos[b.id] - pos[a.id])[0], mate = lead && mates[lead.id], p = lead && pos[lead.id], d = mate && me ? p - me.dist : null;
     $('#pbName').textContent = `和 ${party.mates.map(x => x.name).join('、')} 一起爬`;
     $('#cheerBtn').textContent = many ? '幫大家加油' : '幫他加油';
-    $('#pbInfo').textContent = !pRoom || !pRoom.open ? '連線中…' : mate ? `${many ? lead.name + ' ' : ''}${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}` : '等隊友上線…';
-    if (SX.scene && SX.scene.setMates) SX.scene.setMates(me ? on2.map(x => ({ dist: mates[x.id].dist, name: x.name, rest: !!mates[x.id].rest })) : []);
+    $('#pbInfo').textContent = !pRoom || !pRoom.open ? '連線中…' : !mate ? '等隊友上線…'
+      : mate.off ? `${lead.name} 離線中・${p >= M.dist ? '已經走到山頂了' : d == null ? km(p) : Math.abs(d) < MATE_NEAR ? '大約就在你附近' : `大約在你${d > 0 ? '前面' : '後面'} ${(Math.abs(d) / 1000).toFixed(1)} km`}${mate.rest ? '・休息中' : ''}`
+      : `${many ? lead.name + ' ' : ''}${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}`;
+    // 離線的隊友：畫半透明、名牌加「・離線」；v＝估計他一秒走多少（休息中、到山頂就是 0），登山畫面照這個步調走
+    if (SX.scene && SX.scene.setMates) SX.scene.setMates(me ? on2.map(x => { const s = mates[x.id];
+      return { dist: pos[x.id], name: x.name, rest: !!s.rest, off: !!s.off, v: s.off ? SX.mateGuess(M, s, T + 1000) - pos[x.id] : undefined }; }) : []);
   }
   function tick(){
     const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
     // 一起爬：連到隊伍房間，每 PARTY_STATE_MS 回報自己的進度
     if (party && climbing && M.id === party.mountain) {
       if (!pRoom) pRoom = room('party:' + party.id, d => {
-        if (d.type === 'hello') (d.people || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = x.state; });
+        if (d.type === 'hello') {
+          if (d.now) skew = d.now - Date.now();
+          (d.away || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = Object.assign({}, x.state, { off: true }); });   // 存起來的離線隊友最後進度
+          (d.people || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = x.state; });
+        }
         else if (d.type === 'state' && d.who.id !== acct.id) mates[d.who.id] = d.state;
         else if (d.type === 'cheer' && d.who.id !== acct.id) { toast(`${d.who.name} 幫你加油！體力 +5`, 2600); if (st) st.stam = Math.min(100, st.stam + 5); if (A().chime) A().chime(); }
-        else if (d.type === 'leave' && d.who.id !== acct.id && mates[d.who.id]) mates[d.who.id] = Object.assign({}, mates[d.who.id], { rest: true });
+        else if (d.type === 'leave' && d.who.id !== acct.id && d.off && d.state) { if (d.now) skew = d.now - Date.now(); mates[d.who.id] = Object.assign({}, d.state, { off: true }); }   // 隊友關掉遊戲：留著最後的進度，之後照估計走
+        else if (d.type === 'leave' && d.who.id !== acct.id && mates[d.who.id] && !d.off && !d.stay) mates[d.who.id] = Object.assign({}, mates[d.who.id], { rest: true });   // 舊版伺服器：只知道他走了
         partyBox();
       });
-      if (Date.now() - stateT >= PARTY_STATE_MS) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep) }); }
+      if (Date.now() - stateT >= PARTY_STATE_MS) { stateT = Date.now(); pRoom.send({ type: 'state', mountain: M.id, dist: st.dist, stam: st.stam, rest: !!(st.rest || st.sleep), pace: SX.game.awayPace(M) }); }
     } else if (pRoom && !climbing) { pRoom.close(); pRoom = null; mates = {}; }
     partyBox();
   }

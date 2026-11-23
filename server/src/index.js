@@ -8,6 +8,8 @@ const ONLINE_MS = 3 * 60 * 1000;   // 多久內有動靜算「在線」
 const PLAZA_CAP = 50;              // 一個登山口廣場最多幾人
 const PLAZA_MAX = 40;              // 最多開到第幾個廣場
 const SAY_MAX = 40;                // 廣場說話一次最多幾個字（頭上冒字用；hello 會告訴遊戲端，輸入框照這個限制）
+const PARTY_SAVE_MS = 60 * 1000;   // 一起爬：隊友最新進度多久最多存一次（存起來給離線時看；斷線時一定再存一次）
+const PACE_MAX = 30;               // 一起爬：遊戲端給的步調最多幾公尺／秒（開發者快速模式約 20 倍，再大就是怪資料）
 // 心跳：要跟 js/social.js 的 PING／PONG 一字不差。房間用 setWebSocketAutoResponse 直接回 PONG，不叫醒房間、不算錢
 const PING = JSON.stringify({ type: 'ping' }), PONG = JSON.stringify({ type: 'pong' });
 
@@ -336,9 +338,11 @@ export class Room extends DurableObject {
     this.ctx.acceptWebSocket(server);
     // 廣場上的起點：入口附近隨機一點（x 0～1 左右，y 0～1 遠到近）
     const pos = { x: 0.3 + Math.random() * 0.4, y: 0.72 + Math.random() * 0.2 };
-    server.serializeAttachment({ ...who, last: 0, lastMv: 0, lastEm: 0, state: null, pos });
-    const hist = (await this.ctx.storage.get('hist')) || [];
-    server.send(JSON.stringify({ type: 'hello', you: who.id, plaza, sayMax: SAY_MAX, history: hist, people: this.people() }));
+    server.serializeAttachment({ ...who, last: 0, lastMv: 0, lastEm: 0, state: null, pos, party: !plaza, saved: 0 });
+    const hist = plaza ? (await this.ctx.storage.get('hist')) || [] : [];
+    // 一起爬：away＝存起來、現在沒連著的隊友最後進度（遊戲端照這個估計離線隊友走到哪）；now 給遊戲端對時
+    const away = plaza ? undefined : await this.away();
+    server.send(JSON.stringify({ type: 'hello', you: who.id, plaza, sayMax: SAY_MAX, history: hist, people: this.people(), away, now: Date.now() }));
     this.broadcast({ type: 'join', who: { id: who.id, name: who.name, pet: who.pet, pos } }, server);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -346,6 +350,26 @@ export class Room extends DurableObject {
     const seen = {}, out = [];
     for (const ws of this.ctx.getWebSockets()) { const a = ws.deserializeAttachment() || {}; if (!a.id || seen[a.id]) continue; seen[a.id] = 1; out.push({ id: a.id, name: a.name, pet: a.pet, state: a.state, pos: a.pos }); }
     return out;
+  }
+  // 一起爬：存起來的隊友最後進度（一人一列 m:<玩家 id>），扣掉現在連著的人
+  async away(){
+    const on = new Set(this.people().map(p => p.id)), out = [];
+    for (const [, v] of await this.ctx.storage.list({ prefix: 'm:' })) if (v && v.id && !on.has(v.id)) out.push(v);
+    return out;
+  }
+  // 一起爬：把這個人的最新進度存起來（只寫他自己那一列；同一筆進度不重複寫）
+  async keep(ws, a){
+    if (!a.party || !a.id || !a.state || a.saved === a.state.t) return;
+    a.saved = a.state.t; try { ws.serializeAttachment(a); } catch (e) {}
+    await this.ctx.storage.put('m:' + a.id, { id: a.id, name: a.name, state: a.state });
+  }
+  // 斷線：一起爬先存最後進度，再告訴隊友他離線了（off＋state）；同一個人還開著別的分頁就只說 stay，不算離線
+  // 舊版遊戲只看 type:'leave'，多的欄位不影響
+  async gone(ws){
+    const a = ws.deserializeAttachment() || {}; try { ws.close(); } catch (e) {}
+    await this.keep(ws, a);
+    const still = this.ctx.getWebSockets().some(x => x !== ws && (x.deserializeAttachment() || {}).id === a.id);
+    this.broadcast({ type: 'leave', who: { id: a.id, name: a.name }, ...(still ? { stay: true } : a.party && a.state ? { off: true, state: a.state, now: Date.now() } : {}) }, ws);
   }
   broadcast(msg, except){ const s = JSON.stringify(msg); for (const ws of this.ctx.getWebSockets()) if (ws !== except) { try { ws.send(s); } catch (e) {} } }
   async webSocketMessage(ws, raw){
@@ -360,10 +384,15 @@ export class Room extends DurableObject {
       await this.ctx.storage.put('hist', hist);
       this.broadcast(msg);
     } else if (d.type === 'state') {
-      // 一起爬：回報自己的山、距離、體力、是否在休息
-      a.state = { mountain: String(d.mountain || '').slice(0, 24), dist: +d.dist || 0, stam: +d.stam || 0, rest: !!d.rest, t: Date.now() };
+      // 一起爬：回報自己的山、距離、體力、是否在休息、遊戲關著時走多快（pace）
+      const t = Date.now(), old = a.state, mountain = String(d.mountain || '').slice(0, 24), dist = Math.max(0, +d.dist || 0);
+      let pace = +d.pace;
+      if (!(pace >= 0 && pace <= PACE_MAX))   // 舊版遊戲沒送 pace：用前後兩筆的距離差÷時間（最多 8 m/s），跟上一次的平均
+        pace = old && old.mountain === mountain && t > old.t && t - old.t < 120000 ? Math.min(8, Math.max(0, (dist - old.dist) / ((t - old.t) / 1000))) * 0.5 + (old.pace || 0) * 0.5 : (old && old.pace) || 0;
+      a.state = { mountain, dist, stam: +d.stam || 0, rest: !!d.rest, t, pace: Math.round(pace * 1000) / 1000 };
       ws.serializeAttachment(a);
       this.broadcast({ type: 'state', who: { id: a.id, name: a.name }, state: a.state }, ws);
+      if (a.party && t - (a.saved || 0) >= PARTY_SAVE_MS) await this.keep(ws, a);   // 存起來最多每分鐘一次，中間的進度只轉給隊友、不寫儲存
     } else if (d.type === 'move') {
       // 廣場：點地面要走去的位置（只在點的那一下傳，不是每格畫面都傳）
       const t = Date.now(); if (t - (a.lastMv || 0) < 150) return;
@@ -379,6 +408,6 @@ export class Room extends DurableObject {
       this.broadcast({ type: 'cheer', who: { id: a.id, name: a.name }, to: String(d.to || '').slice(0, 20) }, ws);
     } else if (d.type === 'ping') ws.send(PONG);   // 字串跟 PING 不完全一樣的舊版遊戲（例如多了空白）還是照樣回
   }
-  async webSocketClose(ws){ const a = ws.deserializeAttachment() || {}; try { ws.close(); } catch (e) {} this.broadcast({ type: 'leave', who: { id: a.id, name: a.name } }); }
-  async webSocketError(ws){ try { ws.close(); } catch (e) {} }
+  async webSocketClose(ws){ await this.gone(ws); }
+  async webSocketError(ws){ await this.gone(ws); }
 }
