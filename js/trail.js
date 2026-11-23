@@ -753,15 +753,15 @@ function drawTurf(i, j, y1, y2, s1, fq, fade, DS, dW, gw){   // dW：這段路�
     const sn = aN < 0.01 ? 3 : 1;   // 只剩遠景草帶時，只走每三個位置（位置還是同一組）
     for (let side = -1; side <= 1; side += 2) {
       let k = 1, n = 0;
-      for (let d0 = rwAt(i) + BANKW + spN.core * 0.5 - 0.12; d0 < gw - 0.4; d0 += step * sn, n += sn) {
+      for (let d0 = rwAt(i) + bankWd(i, side) + spN.core * 0.5 - 0.12; d0 < gw - 0.4; d0 += step * sn, n += sn) {
         // 野地的草不整齊：一片密一片疏（patch 每幾段、每兩叢換一次）、有的位置空著露出地面，大小也不一樣；第一叢貼著路邊不跳
         const patch = Hh((i >> 2) * 13 + side, (n >> 1) + 70);
-        if (n && Hh(i * 11 + q, n * 3 + side + 90) > 0.4 + 0.5 * patch) continue;
+        if (n && Hh(i * 11 + q, n * 3 + side + 90) > 0.12 + 0.8 * patch * patch) continue;   // 一片密一片疏更明顯（成叢、中間空地），不會排成整齊的格子
         // 大小混著：多數 0.5～1.2 倍，偶爾一叢特別大（1.7 倍），山坡上的草才不會一樣高一樣大
         const sc = (0.5 + 0.7 * Hh(i * 13 + q, n + side * 30)) * (Hh(i * 13 + q, n + side * 30 + 7) < 0.14 ? 1.7 : 1), far = aF > 0.01 && n % 3 === 0;
         if (aN < 0.01 && !far) continue;
-        proj(j, (q + 0.1 + 0.8 * Hh(i * 3 + q, n + side * 50)) / TURF_R, false);
-        const d = d0 + (n ? (Hh(i * 5 + q, n + side * 40) - 0.5) * step : 0), x = gx + side * d * gs, dwN = spN.w * gs * sc, dwF = far ? spF.w * gs * sc : 0;
+        proj(j, clamp((q - 0.35 + 1.7 * Hh(i * 3 + q, n + side * 50)) / TURF_R, 0, 1), false);   // 前後排互相交錯（以前每排固定在一條線上，平台上看得出一排一排的格子）
+        const d = d0 + (n ? (Hh(i * 5 + q, n + side * 40) - 0.5) * step * 1.8 : 0), x = gx + side * d * gs, dwN = spN.w * gs * sc, dwF = far ? spF.w * gs * sc : 0;
         const tm = cullPad(Math.max(dwN, dwF), Math.max(spN.hm, spF.hm) * gs * sc);   // 往外整排都出了畫面（含安全邊）才停
         if (side < 0 ? x + Math.max(dwN * 0.5, dwF * 0.5 - step * gs) + tm < 0 : x - Math.max(dwN * 0.5, dwF * 0.5 + step * gs) - tm > W) break;
         while (k < nS - 2 && d >= DS[k + 1] + dW) k++;
@@ -2403,15 +2403,17 @@ function bankH(i, side){ return i >= 0 && i <= N + 1 ? bankA[i * 2 + (side > 0 ?
 // 換山時 buildShelf 算一次：shelfU＝高的那一邊土坎多切多高（加進 bankA，木棧道沒有土坎＝0），shelfS＝離開路緣以後地面再慢慢升高（正）或往下（負）多少。
 // terrH、bankH 只查這兩張表，路旁的草、芒草、蕨類、灌木、石頭、道具都種在 terrH 上，跟著高低走
 const SHELF = { cut:0.85, rise:0.4, drop:0.8, alpine:0.6, run:2.8, fq:0.021, dead:0.08, full:0.55, slope:0.6, noise:1.7, vary:0.8, wob:0.3 };   // dead～full：k 從 0 慢慢變到全高（兩邊一樣高的地方很短，一下就過去）
-const WALL_CAP = [1.1, 0.55, 2.5];   // 路緣外的地面最多比土坎頂高多少（公尺）：WALL_CAP[0]，離路 WALL_CAP[2] 公尺以外每公尺再多 WALL_CAP[1]
-const SHELF_LIP = [0.05, 0.14], SHELF_SOIL = 0.08, SHELF_TONGUE = 0.22;   // 高土坎：苔草從上緣垂下多長、路邊的土邊蓋到土坎多高（公尺）
-let shelfU = new Float32Array(2), shelfS = new Float32Array(2);
+const WALL_CAP = [1.1, 0.55, 2.5, 0.25, 0.2];   // 路緣外的地面最多比土坎頂高多少（公尺）：高的那一邊 WALL_CAP[0]，離路 WALL_CAP[2] 公尺以外每公尺再多 WALL_CAP[1]；
+// 不是高的那一邊（低的、或兩邊差不多）最多只高 WALL_CAP[3]、往外每公尺多 WALL_CAP[4]：兩邊不會同時高起來，步道不會像走在一條溝裡（2026-11-24 玩家意見）
+const BANK_RUN = [0.5, 0.4];   // 高土坎的切面往外斜出去多寬：土坎高度 × BANK_RUN[0]，最多 BANK_RUN[1] 公尺（不能超過第 2 條帶子 RW + 0.6）
+const SHELF_LIP = [0.04, 0.2], SHELF_SOIL = 0.08, SHELF_TONGUE = 0.2, SHELF_BUMP = 0.08;   // SHELF_BUMP：土坎上緣苔蘚凸起最多多高（公尺）   // 高土坎：苔草從上緣垂下多長、路邊的土邊蓋到土坎多高（公尺）
+let shelfU = new Float32Array(2), shelfS = new Float32Array(2), shelfV = new Float32Array(2), bankR = new Float32Array(2);   // shelfV：這一邊多像「高的那一邊」（0～1）；bankR：土坎切面往外斜出去多寬（公尺，高土坎不是垂直的牆，是一道斜的土堤）
 function shelfK0(i){
   const q = clamp(i, 0, N), t = clamp(xSlope[q] / 0.25, -1, 1) * SHELF.slope + (vn(i * SHELF.fq, 63) * 2 - 1) * SHELF.noise, a = Math.abs(t);
   return (t < 0 ? -1 : 1) * ease01((a - SHELF.dead) / (SHELF.full - SHELF.dead));
 }
 function buildShelf(){
-  shelfU = new Float32Array((N + 2) * 2); shelfS = new Float32Array((N + 2) * 2);
+  shelfU = new Float32Array((N + 2) * 2); shelfS = new Float32Array((N + 2) * 2); shelfV = new Float32Array((N + 2) * 2); bankR = new Float32Array((N + 2) * 2);
   const wood = TH.trail === 'wood';
   for (let i = 0; i <= N + 1; i++) {
     const k = shelfK0(i), e = (1 - endK(i)) * (TH.alpine ? SHELF.alpine : 1);   // 山頂過後沒有路，兩邊回到一樣高；高山稜線（不是靠著山腰走）台階矮一點
@@ -2419,25 +2421,29 @@ function buildShelf(){
       const side = s ? 1 : -1, v = k * side, amp = lerp(1 - SHELF.vary, 1, ease01((vn(i * 0.08 + s * 19.3, 64) - 0.25) / 0.5)), wob = 1 + SHELF.wob * (vn(i * 0.55 + s * 7.1, 65) * 2 - 1);   // 同一邊的高度沿路再起伏（高土坎 → 矮土坎）；wob：土坎上緣每兩三公尺高低不一，不是一條直線
       shelfU[i * 2 + s] = wood ? 0 : SHELF.cut * Math.max(0, v) * amp * wob * e;
       shelfS[i * 2 + s] = (v > 0 ? SHELF.rise * v * (wood ? 1.6 : 1) : SHELF.drop * v) * amp * e;
+      shelfV[i * 2 + s] = clamp(v / 0.5, 0, 1) * e;
+      bankR[i * 2 + s] = Math.min(BANK_RUN[1], BANK_RUN[0] * shelfU[i * 2 + s]) * (0.7 + 0.3 * vn(i * 0.3 + s * 4.4, 66));
     }
   }
 }
 function shelfAt(i, side){ return i >= 0 && i <= N + 1 ? shelfS[i * 2 + (side > 0 ? 1 : 0)] : 0; }
 function shelfCut(i, sd){ return i >= 0 && i <= N + 1 ? shelfU[i * 2 + sd] : 0; }   // sd：0 左、1 右
+function bankWd(i, side){ return BANKW + (i >= 0 && i <= N + 1 ? bankR[i * 2 + (side > 0 ? 1 : 0)] : 0); }   // 土坎切面的寬（公尺）：高土坎是往外斜的土堤
+function shelfHi(i, side){ return i >= 0 && i <= N + 1 ? shelfV[i * 2 + (side > 0 ? 1 : 0)] : 0; }
 const WEARK = new Float32Array([1, 1]);   // 這段兩邊路緣磨損草色帶的濃度（高土坎那邊淡掉）
 function terrH(i, side, d){
   const rw = rwAt(i);   // 這一段的路半寬（每段不一樣，地形從路緣量起）
   if (d <= rw) return 0;
-  const bh = bankH(i, side);
-  if (d < rw + BANKW) return bh * (d - rw) / BANKW;
-  const u = clamp((d - rw - BANKW) / 9, 0, 1), sm = u * u * (3 - 2 * u), q = i < 0 ? 0 : i > N ? N : i, dd = Math.min(d - rw - BANKW, 14);
+  const bh = bankH(i, side), bw = bankWd(i, side);
+  if (d < rw + bw) return bh * (d - rw) / bw;
+  const u = clamp((d - rw - bw) / 9, 0, 1), sm = u * u * (3 - 2 * u), q = i < 0 ? 0 : i > N ? N : i, dd = Math.min(d - rw - bw, 14);
   // 橫坡：一邊往上是山壁、一邊往下是山谷；貼著稜線邊緣那幾段，掉下去的那一側離路一公尺外就陡降
   const cr = side * xSlope[q] * dd * Math.min(1, dd / 1.5), dr = side === dropS[q] ? -edgeK[q] * Math.max(0, dd - 0.8) * 1.1 : 0;
-  const r = shelfAt(i, side) * ease01((d - rw - BANKW) / SHELF.run) + terrAmp(i, side) * sm + cr + dr + (vn(i * 0.09 + d * 0.21, side > 0 ? 43 : 47) - 0.5) * 0.9 * Math.min(1, (d - rw) / 2);
+  const r = shelfAt(i, side) * ease01((d - rw - bw) / SHELF.run) + terrAmp(i, side) * sm + cr + dr + (vn(i * 0.09 + d * 0.21, side > 0 ? 43 : 47) - 0.5) * 0.9 * Math.min(1, (d - rw) / 2);
   if (r <= 0) return bh + r;
   // 路邊幾公尺內的山坡不高過眼睛（2026-11-24 玩家意見：山坡上一塊塊邊是直線的貼片）：近處的坡一高過登山客的視線，就會把後面那段坡上的灌木下半截蓋掉，
   // 蓋住的那條邊是每段地面的直邊。往上的部分用平滑的上限壓住（tanh，不會出現折角），離路越遠上限越高，森林步道兩旁的山壁照樣在遠一點的地方長高
-  const cap = WALL_CAP[0] + WALL_CAP[1] * Math.max(0, d - rw - WALL_CAP[2]);
+  const hv = shelfHi(i, side), cap = lerp(WALL_CAP[3], WALL_CAP[0], hv) + lerp(WALL_CAP[4], WALL_CAP[1], hv) * Math.max(0, d - rw - WALL_CAP[2]);   // 低的那一邊（或兩邊差不多高）壓得很低：兩邊不會同時高起來
   return bh + cap * Math.tanh(r / cap);
 }
 // 每段的橫坡（正的＝右邊往上）、稜線邊緣程度（0～1）、往下掉的是哪一邊：每座山算一次存起來，畫的時候直接查
@@ -2511,7 +2517,7 @@ const tD1 = new Float32Array(8), tH1 = new Float32Array(8), tD2 = new Float32Arr
 // 一端（第 i 段近端）兩側山坡帶子的位置：D 離路中心、Ht 地形高度、X/Y 畫面位置。mo：換成遠處切法前壓平到哪裡（0～1）
 function bandEnd(i, side, DS, nS, dW, gw, mo, x, y, s, X, Y, D, Ht){
   let k;
-  for (k = 0; k < nS; k++) { D[k] = k === nS - 1 ? gw : (mo > 0 && TDM[k] > 0 ? lerp(DS[k], TDM[k], mo) : DS[k]) + dW; Ht[k] = terrH(i, side, D[k]); }
+  for (k = 0; k < nS; k++) { D[k] = k === nS - 1 ? gw : (mo > 0 && TDM[k] > 0 ? lerp(DS[k], TDM[k], mo) : DS[k]) + dW + (k === 1 ? bankWd(i, side) - BANKW : 0); Ht[k] = terrH(i, side, D[k]); }   // 第 1 條（土坎頂）跟著斜土堤的寬往外
   if (mo > 0) for (k = 1; k < nS - 1; k++) if (TDM[k] < 0) Ht[k] = lerp(Ht[k], lerp(Ht[k - 1], Ht[k + 1], (D[k] - D[k - 1]) / (D[k + 1] - D[k - 1])), mo);
   for (k = 0; k < nS; k++) { X[k] = x + side * D[k] * s; Y[k] = y - Ht[k] * s; }
 }
@@ -2628,10 +2634,10 @@ function footShadow(X, Y, u, sw, shh, ht, dark, j){
 // 接觸陰影的大小位置（每種東西算一次）
 function sprContact(sp){ if (!sp.ct) { const cw = Math.min(sp.w * 0.78, 1.3), ch = Math.min(cw * 0.3, sp.hm * 0.3); sp.ct = { x:-cw * 0.55, y:-ch * 0.62, w:cw, h:ch }; } return sp.ct; }
 function sprShadow(sp){
-  const dw = sp.w, dh = sp.hm, sw = dw * 1.05, shh = Math.min(sw * 0.36, dh * 0.5), ct = sprContact(sp);
+  const dw = sp.w, dh = sp.hm, sw = dw * 0.8, shh = Math.min(sw * 0.24, dh * 0.3, 0.6), ct = sprContact(sp);
   const x0 = Math.min(-sw * 0.5, ct.x), y0 = Math.min(-shh * 0.55, ct.y), x1 = Math.max(sw * 0.5, ct.x + ct.w), y1 = Math.max(shh * 0.45, ct.y + ct.h);
   const c = mk((x1 - x0) * SHD_PPM, (y1 - y0) * SHD_PPM), g = c.getContext('2d'), kx = c.width / (x1 - x0), ky = c.height / (y1 - y0);
-  g.drawImage(SHADOW, (-sw * 0.5 - x0) * kx, (-shh * 0.55 - y0) * ky, sw * kx, shh * ky);
+  g.globalAlpha = 0.7; g.drawImage(SHADOW, (-sw * 0.5 - x0) * kx, (-shh * 0.55 - y0) * ky, sw * kx, shh * ky);
   g.globalAlpha = 0.85; g.drawImage(CONTACT, (ct.x - x0) * kx, (ct.y - y0) * ky, ct.w * kx, ct.h * ky);
   return (sp.sd = { c:c, x:x0, y:y0, w:x1 - x0, h:y1 - y0, sw:sw, shh:shh });
 }
@@ -2640,11 +2646,12 @@ function intrA(rw, xo, w){ const k = clamp((rw + 0.3 - (xo - w * 0.5)) / 0.4, 0,
 // 路旁的植物、石頭、道具種在哪裡（proj 之後叫）：那一邊離路中心 xo 公尺的真正地面高度（terrH：山腰台階、橫坡、土坎都算進去）。
 // 山腰台階切出高土坎的那一邊，根部不能懸在土坎外面（圖的底邊會在半空中露出一條直線）：往平台裡面挪，最多讓半寬的 1 - SEAT_IN 垂到土坎上。
 // hw：這張圖畫出來的半寬（公尺）。結果放在 SEAT（x、y 畫面位置，xo 挪過以後離路中心幾公尺）
-const SEAT_IN = 0.55, SEAT_UP = 0.6, SEAT = { x:0, y:0, xo:0 };
+const SEAT_IN = 0.85, SEAT_UP = 0.6, SEAT = { x:0, y:0, xo:0 };
 function seatAt(i, side, xo, hw){
   const sd = side > 0 ? 1 : 0, k = clamp((Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)) - 0.04) / 0.16, 0, 1), rw = rwAt(i);
-  if (k > 0) { const lo = rw + BANKW + hw * SEAT_IN; if (xo < lo) xo = lerp(xo, lo, k); }
-  const hc = terrH(i, side, Math.max(xo, rw + BANKW)), ho = terrH(i, side, Math.max(xo + hw * SEAT_UP, rw + BANKW));   // ho：往外半個身寬那裡的地面（山坡往外升高時，大叢的植物外側那半邊不會埋進坡裡、被近一段的坡面切成一條直線）
+  const bw = bankWd(i, side);
+  if (k > 0) { const lo = rw + bw + hw * SEAT_IN; if (xo < lo) xo = lerp(xo, lo, k); }
+  const hc = terrH(i, side, Math.max(xo, rw + bw)), ho = terrH(i, side, Math.max(xo + hw * SEAT_UP, rw + bw));   // ho：往外半個身寬那裡的地面（山坡往外升高時，大叢的植物外側那半邊不會埋進坡裡、被近一段的坡面切成一條直線）
   SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = gy - Math.max(hc, ho) * gs;
   return SEAT;
 }
@@ -2754,7 +2761,7 @@ const SOFT_SPILL = 0.3;                // 草唇蓋進路面最多多少（公�
 const SOFT_PEB_J = 20, SOFT_PEB_N = 3, SOFT_PEB_P = 0.45;   // 路邊小石子：幾段以內、每邊每段最多幾顆、每顆出現的機率
 const SOFT_TUFT_J = 24, SOFT_TUFT_P = 0.4;                  // 長進路面的小草叢：幾段以內、每邊每段出現的機率
 function softOn(){ return TH.trail !== 'wood'; }
-const SOFT_V = 10;                     // 每個節點每邊存幾個數（見 buildSoft）
+const SOFT_V = 11;                     // 每個節點每邊存幾個數（見 buildSoft）
 const SOFT_FQ = 0.3;                   // 路緣寬窄起伏多快：每個節點（0.4 公尺）走雜訊的幾格（0.3 ≈ 每 1.3 公尺起伏一次）
 const SOFT_JOG = 0.02;                 // 草唇下緣每一截中間那一點最多再往路面多伸幾公尺（以前 0.1：每 0.4 公尺鼓出一個尖角，近處放大成一排一排的鋸齒，看起來像一階一階的方塊）
 const SOFT_U_MIN = 1.05, SOFT_U_RND = 0.35;   // 草唇每個節點至少垂多低（再加 0～SOFT_U_RND 平滑起伏）：一定垂過土坎、蓋進路面一點。以前最少 0.9（有的節點沒垂到底、露出土坎），近處土坎切面有幾十像素高，草唇下緣在土坎上上下下，路緣看起來是一階一階的方塊缺口
@@ -2792,11 +2799,13 @@ function buildSoft(){
     // 山腰台階切出來的高土坎：草唇（苔草）只從上緣垂下一小段（公尺，長短不一），下面露出土層、樹根；土邊照樣蓋住土坎下緣
     const i = Math.min(N + 1, (g / SOFT_K) | 0), f = g / SOFT_K - i, i2 = Math.min(N + 1, i + 1), cut = lerp(shelfU[i * 2 + s], shelfU[i2 * 2 + s], f);
     if (cut > 0.04) {
-      const bh = lerp(bankA[i * 2 + s], bankA[i2 * 2 + s], f), lipM = lerp(SHELF_LIP[0], SHELF_LIP[1], vn(g * SOFT_FQ * 0.7 + s * 13.1, 827)) + SHELF_TONGUE * clamp((vn(g * 0.9 + s * 3.7, 829) - 0.55) / 0.35, 0, 1);   // 偶爾一條苔蘚垂得特別長（舌頭形），土坎上緣不是一條直線
+      const bh = lerp(bankA[i * 2 + s], bankA[i2 * 2 + s], f), lipM = lerp(SHELF_LIP[0], SHELF_LIP[1], ease01(((0.55 * vn(g * SOFT_FQ * 0.7 + s * 13.1, 827) + 0.45 * vn(g * 0.65 + s * 2.9, 828)) - 0.3) / 0.4)) + SHELF_TONGUE * clamp((vn(g * 0.9 + s * 3.7, 829) - 0.55) / 0.35, 0, 1);   // 偶爾一條苔蘚垂得特別長（舌頭形），土坎上緣不是一條直線
       const kc = kcN[g * 2 + s] = clamp((cut - 0.04) / 0.16, 0, 1), soil = SHELF_SOIL * (0.5 + 1.5 * vn(g * 0.6 + s * 5.9, 831)) / bh;   // 土坎下緣的碎土堆高高低低
       softE[o + 1] = lerp(softE[o + 1], Math.min(softE[o + 1], lipM / bh), kc);
       softE[o + 5] = lerp(softE[o + 5], Math.min(softE[o + 5], soil), kc); softE[o + 7] = lerp(softE[o + 7], Math.min(softE[o + 7], soil), kc);
       softE[o + 3] += kc * 0.1 * vn(g * 0.8 + s * 2.3, 833);   // 苔草往外翻出去多寬也不一樣（上緣那條線凹凸）
+      softE[o + 10] = kc * SHELF_BUMP * clamp(vn(g * 0.45 + s * 3.1, 835) * 1.6 - 0.45, 0, 1) * (0.6 + 0.4 * vn(g * 1.3 + s * 8.7, 837));   // 土坎上緣一團一團凸起的苔蘚（每 1～2 公尺高低不一，平滑的雜訊不會抖）
+      softE[o] += kc * 0.07 * vn(g * 0.5 + s * 6.6, 839); softE[o + 6] += kc * 0.07 * vn((g + 0.5) * 0.5 + s * 6.6, 839);   // 坎腳的土往路面散出來多寬也不一樣（坎腳不是一條直線）
     }
   }
   for (let g = 0; g < n - 1; g++) for (let s = 0; s < 2; s++) {
@@ -2857,10 +2866,10 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
     const x = lerp(x1, x2, ak), y = lerp(yb, y2, ak), hw = lerp(w1, w2, ak), g = i * SOFT_K + k;
     for (let sd = 0; sd < 2; sd++) {
       const side = sd ? 1 : -1, o = (k * 2 + sd) * SOFT_PN, e = (g * 2 + sd) * SOFT_V, sk = lerp(stairB[clamp(i, 0, N + 1)], stairB[clamp(i + 1, 0, N + 1)], f), u = lerp(softE[e + 1], Math.min(softE[e + 1], STAIR_LIP), sk), out = softE[e + 3];   // 階梯段：草唇只垂到土坎一半，露出土切面
-      const bh = lerp(bankH(i, side), bankH(i + 1, side), f), ex = x + side * hw, tx = ex + side * BANKW * s, ty = y - bh * s;
+      const bh = lerp(bankH(i, side), bankH(i + 1, side), f), ex = x + side * hw, tx = ex + side * lerp(bankWd(i, side), bankWd(i + 1, side), f) * s, ty = y - bh * s;
       P[o] = ex; P[o + 1] = y; P[o + 2] = s; P[o + 3] = ex - side * softE[e] * s; P[o + 4] = tx; P[o + 5] = ty;
       if (u <= 1) { P[o + 6] = lerp(tx, ex, u); P[o + 7] = lerp(ty, y, u); } else { P[o + 6] = ex - side * (u - 1) * SOFT_SPILL * s; P[o + 7] = y; }
-      P[o + 8] = tx + side * out * s; P[o + 9] = ty - out * 0.3 * s;   // 草唇上緣往外多蓋一點（寬窄不一），蓋掉土坎上緣那條直線
+      P[o + 8] = tx + side * out * s; P[o + 9] = ty - (out * 0.3 + softE[e + 10]) * s;   // 草唇上緣往外多蓋一點（寬窄不一），蓋掉土坎上緣那條直線
       const b = sd * 9; P[o + 10] = lerp(SBAND[b + 4], SBAND[b + 6], ak); P[o + 11] = lerp(SBAND[b + 5], SBAND[b + 7], ak);
     }
   }
