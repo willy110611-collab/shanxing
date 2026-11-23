@@ -57,6 +57,13 @@
     if (p === '/register') return Object.assign({}, FAKE_ACCT, { name: b.name });
     if (p === '/login') { if (String(b.password).length < 6) throw new Error('名字或密碼不對'); return Object.assign({}, FAKE_ACCT, { login: b.name }); }   // 假伺服器：密碼少於 6 個字就當作打錯
     if (p === '/password') return { ok: true, login: String(b.login).toLowerCase() };
+    // 入園名額：假的名額表（數字故意跟伺服器不同，只看畫面用）。玉山 5／12 還有位子；嘉明湖 8／8 滿了；加 &fakequota=open 兩座都有位子
+    if (p === '/quota') { fakeQ = fakeQ || [{ id: 'yushan', name: '玉山主峰', cap: 12, used: 5, peaks: ['yushan'] }, { id: 'jiaming', name: '嘉明湖', cap: 8, used: /[?&]fakequota=open/.test(location.search) ? 3 : 8, peaks: ['jiaming', 'sancha'] }];
+      return { day: '', quotas: fakeQ.map(q => Object.assign({}, q)), mine: fakeMine.slice() }; }
+    if (p === '/quota/claim') { const q = (fakeQ || []).find(x => x.peaks.includes(b.mountain)); if (!q) return { ok: true, open: true };
+      if (fakeMine.includes(q.id)) return { ok: true, used: q.used, cap: q.cap, again: true };
+      if (q.used >= q.cap) return { ok: false, full: true, used: q.used, cap: q.cap };
+      q.used++; fakeMine.push(q.id); return { ok: true, used: q.used, cap: q.cap }; }
     if (p === '/photos' && !opt.body) fakeN++;   // 照片也是：每拿一次，海拔、審核狀態變一點
     if (p === '/photos' && q.get('mine')) return { photos: [{ id: 'd1', mountain: 'xiangshan', alt: 183, status: 'ok' }, { id: 'd2', mountain: 'qixing', alt: 1020, status: fakeN % 2 ? 'ok' : 'pending' }] };
     if (p === '/photos' && !opt.body) return { photos: [{ id: 'd3', by: '阿山', alt: 160 + fakeN, status: 'ok', owner: 'f1' }, { id: 'd4', by: '雲雀', alt: 230, status: 'ok', owner: 'f3' }].slice(0, 1 + (fakeN % 2)) };
@@ -607,6 +614,54 @@
   // 下拉更新：好友分頁（好友、邀請）、帳號分頁（我上傳的照片）、拍照視窗裡的山友照片牆，都是跟伺服器拿的
   { const lb = $('#lobbyBody'); if (lb) MO.pull(lb, () => !!acct && (tab === 'friends' || tab === 'me'), () => tab === 'me' ? myPhotos() : refresh()); }
   { const mc = $('#mCard'); if (mc) MO.pull(mc, () => !!acct && !!mc.querySelector('.svWall') && $('#modal').classList.contains('on'), () => { const w = mc.querySelector('.svWall'); return w && fillWall(w.dataset.mt, +w.dataset.mark, mc); }); }
-  SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite };
+  // ───────── 熱門山每日入園名額 ─────────
+  // 哪幾座山有名額、每天幾個，只寫在伺服器（server/src/index.js 的 QUOTA）；這裡跟 GET /quota 拿，快取 QUOTA_MS
+  // 出發時登記一個名額（POST /quota/claim）：同一天同一座山再出發不多算。連不上伺服器就照樣出發，之後再補送（只補今天的）
+  const QUOTA_MS = 60000, QUOTA_WAIT = 4000, KEY_QLATE = 'shanxing-quota-late-v1';
+  let quota = null, quotaAt = 0, quotaP = null;   // quota：{ day, quotas:[{ id, name, cap, used, peaks }], mine:[名額代號] }
+  const twDay = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);   // 台灣日期（只用來丟掉不是今天的補送）
+  const withWait = p => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('連不上伺服器')), QUOTA_WAIT))]);
+  function quotaLoad(fresh){
+    if (quota && !fresh && Date.now() - quotaAt < QUOTA_MS) return Promise.resolve(quota);
+    if (!quotaP) quotaP = withWait(api('/quota')).then(d => { quota = d; quotaAt = Date.now(); quotaLate(); return d; }).catch(() => quota).finally(() => { quotaP = null; });
+    return quotaP;
+  }
+  const quotaOf = id => quota && (quota.quotas || []).find(q => q.peaks.includes(id)) || null;
+  // 卡片用：這座山有名額的話回 { name, cap, used, mine, full }；沒有名額（或還沒拿到名額表）回 null
+  function quotaInfo(id){
+    const q = quotaOf(id); if (!q) return null;
+    const mine = (quota.mine || []).includes(q.id);
+    return { name: q.name, cap: q.cap, used: q.used, mine, full: !mine && q.used >= q.cap };
+  }
+  // 出發前登記：{ ok }（可以出發，包含連不上時先放行）／{ full }（今天滿了）／{ needAcct }（還沒有暱稱帳號）
+  async function quotaClaim(id){
+    if (!quotaOf(id)) { await quotaLoad(); if (!quotaOf(id)) return { ok: true }; }   // 不是有名額的山（或拿不到名額表）：直接出發
+    const q = quotaOf(id);
+    if ((quota.mine || []).includes(q.id)) return { ok: true };
+    if (!acct) return { needAcct: true };
+    try {
+      const d = await withWait(api('/quota/claim', { json: { mountain: id } }));
+      q.used = Math.max(q.used, d.used || 0);
+      if (d.full) return { full: true };
+      if (!quota.mine) quota.mine = [];
+      if (!quota.mine.includes(q.id)) quota.mine.push(q.id);
+      return { ok: true };
+    } catch(e){
+      // 連不上：先出發，記下來之後補送（best effort）
+      const late = load(KEY_QLATE, []).filter(x => x.day === twDay()); late.push({ m: id, day: twDay() }); store(KEY_QLATE, late);
+      return { ok: true, offline: true };
+    }
+  }
+  // 補送離線時出發的登記：拿到名額表（表示連得上）時送；昨天以前的直接丟掉
+  function quotaLate(){
+    const late = load(KEY_QLATE, []); if (!late.length || !acct) return;
+    store(KEY_QLATE, null);
+    late.filter(x => x.day === twDay()).forEach(x => api('/quota/claim', { json: { mountain: x.m, day: x.day } }).catch(() => {}));
+  }
+  // 還沒有帳號的人要爬有名額的山：取個暱稱就好（跟大廳一樣的帳號）
+  async function quickRegister(name){ return register(name); }
+
+  SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite,
+    quotaLoad, quotaInfo, quotaClaim, register };   // register：還沒有帳號的人要爬有名額的山，取個暱稱就好（跟大廳一樣的帳號）
   if (acct) { refresh(); report(); }
 })();

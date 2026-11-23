@@ -22,7 +22,9 @@ const QUOTA = {
   yushan: { name: '玉山主峰', cap: 196, peaks: ['yushan'] },
   // 嘉明湖（走到嘉明湖、三叉山的路線）：每天 176。來源：台東林管處較早的總量管制報導 thenewslens.com/article/58242（可能已經過時，要再查新的公告）
   jiaming: { name: '嘉明湖', cap: 176, peaks: ['jiaming', 'sancha'] },
-  // TODO 雪山主峰：還沒查到官方每日總量，先不限人數；等拿到官方數字再加進來
+  // 雪山主峰：先用單攻（當天來回）每天 60 人。來源：雪霸國家公園 生態承載量（單攻 60 人）
+  // TODO 過夜的人數（七卡山莊、三六九山莊、營地加起來）查證後再加進來（要對 hike.taiwan.gov.tw 的山屋床位）
+  xueshan: { name: '雪山主峰', cap: 60, peaks: ['xueshan'] },
 };
 const QUOTA_OF = {};   // 山 id → 名額代號（由上面的表算出來，不另外寫）
 for (const [k, q] of Object.entries(QUOTA)) for (const id of q.peaks) QUOTA_OF[id] = k;
