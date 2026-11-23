@@ -137,7 +137,7 @@
   function pumpNotice(){
     const L = $('#loading');
     const diary = screen === 'climb' && st && st.away;   // 「你不在的時候」日記等一下就會打開：等它看完
-    if (!noticeQ.length || (L && !L.classList.contains('done')) || diary || $('#modal').classList.contains('on') || $('#toast').classList.contains('on')) return;
+    if (!noticeQ.length || (L && !L.classList.contains('done')) || diary || $('#modal').classList.contains('on') || $('#badgePop') || $('#toast').classList.contains('on')) return;
     const n = noticeQ.shift(); toast(n[0], n[1]); bgNote = n;
   }
   function holdNotice(){ if (!bgNote || !$('#toast').classList.contains('on')) return; noticeQ.unshift(bgNote); bgNote = null; MO.toastOff(); }
@@ -1771,13 +1771,14 @@
   }
   // 拿到徽章：畫面上方跳出一張小卡（不用對話框，才不會蓋掉登頂卡片），點一下或幾秒後自己收起來
   function badgePop(got){
-    const old = $('#badgePop'); if (old) old.remove();
+    holdNotice(); const old = $('#badgePop'); if (old) old.remove();   // 徽章卡在畫面上時，背景通知先收起來排隊，卡片收掉再跳
     const el = document.createElement('div'); el.id = 'badgePop'; el.className = 'badgePop';
     const top = got.slice().sort((a, b) => b[1] - a[1]), more = top.length - 3;
     el.innerHTML = `<div class="bpHead">得到新徽章！</div>` + top.slice(0, 3).map(([b, i]) => `<div class="bpRow">${medalHtml(b, i)}<span><b>${b.name}・${badgeLevels(b)[i].name}</b><small>${b.desc}</small></span></div>`).join('')
       + (more > 0 ? `<small class="bpMore">還有 ${more} 枚，到相簿的「徽章」看看</small>` : '');
-    el.onclick = () => el.remove();
-    el.addEventListener('animationend', ev => { if (/^bpOut/.test(ev.animationName)) el.remove(); });
+    const off = () => { el.remove(); queueMicrotask(pumpNotice); };
+    el.onclick = off;
+    el.addEventListener('animationend', ev => { if (/^bpOut/.test(ev.animationName)) off(); });
     $('#app').appendChild(el);
     // 徽章 0 → 1.3 → 1 彈出來，第一枚爆出一小圈木頭色的葉子
     el.querySelectorAll('.medal').forEach((md, i) => MO.pop(md, 180 + i * 90));
