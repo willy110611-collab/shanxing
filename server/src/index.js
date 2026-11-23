@@ -1,5 +1,6 @@
 // 山行小日子 後端（Cloudflare Workers + D1 + Durable Objects）
 // 帳號：訪客暱稱＋裝置上的登入碼（token）。token 同時是換手機用的復原碼，伺服器只存它的雜湊。
+// 換手機也可以用「登入名＋密碼」（可選）：伺服器只存密碼的 PBKDF2 雜湊，登入後這支手機拿到自己的 token（sessions 表）。
 import { DurableObject } from 'cloudflare:workers';
 
 const MAX_PHOTO = 450 * 1024;      // 單張照片上限（遊戲端已縮到 720px）
@@ -22,6 +23,55 @@ const friendCode = () => [...crypto.getRandomValues(new Uint8Array(6))].map(b =>
 const cleanName = s => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 12);
 const cleanText = s => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 200);
 
+// ───────── 換手機用的密碼（登入名＋密碼）─────────
+// 伺服器只存 PBKDF2-SHA256 算出來的雜湊：每人一組隨機鹽、反覆算 PW_ITER 次。密碼本身不存、不寫進紀錄。
+// PW_ITER = 100000：Workers 的 WebCrypto 最多只准 10 萬次；實測一次約 14 ms CPU，只有登入、設密碼時算一次，
+// 又有下面的猜密碼限制（每個登入名 15 分鐘內錯 5 次就鎖），偷到資料庫也要每組密碼各算 10 萬次才猜得到。
+const PW_ITER = 100000, PW_MIN = 6, PW_MAX = 64;
+const LOGIN_WINDOW = 15 * 60 * 1000;   // 猜密碼限制：這段時間內
+const FAIL_NAME = 5;                   // 同一個登入名錯 5 次就鎖到時間到
+const FAIL_IP = 20;                    // 同一個網路位址錯 20 次就鎖（手機網路常常很多人共用一個位址，所以放寬一點）
+const LOGIN_BAD = '名字或密碼不對';     // 不管是沒有這個名字還是密碼錯，都回同一句話
+const LOGIN_LOCK = '試太多次了，請 15 分鐘後再試';
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const unhex = s => new Uint8Array((s.match(/../g) || []).map(h => parseInt(h, 16)));
+// 登入名：全形半形統一、英文不分大小寫、拿掉空白（「Ａ山」和「a 山」算同一個）
+const loginKey = s => cleanName(String(s || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ''));
+async function pbkdf2(pw, salt, iter){
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, k, 256));
+}
+// 比對雜湊：每個位元組都比完才回答（不會因為前面就不一樣而比較快回）
+function sameBytes(a, b){
+  let d = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a[i] | 0) ^ (b[i] | 0);
+  return d === 0;
+}
+async function hashPw(pw){
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return { pw_hash: hex(await pbkdf2(pw, salt, PW_ITER)), pw_salt: hex(salt), pw_iter: PW_ITER };
+}
+const DUMMY_SALT = new Uint8Array(16);
+async function checkPw(p, pw){
+  // 沒有這個人或還沒設密碼：照樣算一次，回答時間跟密碼錯一樣，猜不出名字存不存在
+  if (!p || !p.pw_hash) { await pbkdf2(pw, DUMMY_SALT, PW_ITER); return false; }
+  return sameBytes(await pbkdf2(pw, unhex(p.pw_salt), p.pw_iter || PW_ITER), unhex(p.pw_hash));
+}
+// 猜密碼限制：login_fails 每個 key（n:登入名、ip:位址）記錯幾次、從什麼時候開始算
+async function loginLocked(env, keys){
+  for (const [k, max] of keys) {
+    const r = await env.DB.prepare('SELECT n, first FROM login_fails WHERE k = ?').bind(k).first();
+    if (r && now() - r.first < LOGIN_WINDOW && r.n >= max) return true;
+  }
+  return false;
+}
+async function loginFailed(env, keys){
+  const t = now();
+  await env.DB.batch(keys.map(([k]) => env.DB.prepare(
+    'INSERT INTO login_fails (k, n, first) VALUES (?, 1, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ? - first >= ? THEN 1 ELSE n + 1 END, first = CASE WHEN ? - first >= ? THEN ? ELSE first END'
+  ).bind(k, t, t, LOGIN_WINDOW, t, LOGIN_WINDOW, t)));
+}
+
 function cors(env, req){
   const o = req.headers.get('Origin') || '';
   const ok = (env.ALLOW_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -34,8 +84,12 @@ const E = (env, req, msg, status = 400) => J(env, req, { error: msg }, status);
 async function auth(env, req, token){
   const t = token || (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!t || t.length < 20) return null;
-  const p = await env.DB.prepare('SELECT * FROM players WHERE token_hash = ?').bind(await sha(t)).first();
+  const h = await sha(t);
+  // 先找帳號本來的登入碼（＝復原碼）；找不到再找「用名字＋密碼登入」的手機各自拿到的登入碼（sessions）
+  const p = await env.DB.prepare('SELECT * FROM players WHERE token_hash = ?').bind(h).first()
+    || await env.DB.prepare('SELECT p.* FROM sessions s JOIN players p ON p.id = s.player WHERE s.token_hash = ?').bind(h).first();
   if (!p || p.banned) return null;
+  p.tokenHash = h;
   return p;
 }
 const isAdmin = (env, req) => env.ADMIN_KEY && (req.headers.get('X-Admin-Key') === env.ADMIN_KEY || new URL(req.url).searchParams.get('k') === env.ADMIN_KEY);
@@ -83,6 +137,7 @@ export default {
       await notify(env, e.player, `快到${e.name}山頂了！`, '只差最後幾步了，回來一起見證登頂吧。', 'summit');
     }
     await env.DB.prepare('DELETE FROM push_queue WHERE created < ?').bind(now() - 3 * 864e5).run();
+    await env.DB.prepare('DELETE FROM login_fails WHERE first < ?').bind(now() - LOGIN_WINDOW).run();   // 猜密碼紀錄過了時間就清掉
   },
   async fetch(req, env){
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors(env, req) });
@@ -99,6 +154,26 @@ export default {
         for (let i = 0; i < 5; i++) { if (!await env.DB.prepare('SELECT 1 FROM players WHERE code = ?').bind(code).first()) break; code = friendCode(); }
         await env.DB.prepare('INSERT INTO players (id, token_hash, name, code, created, seen) VALUES (?, ?, ?, ?, ?, ?)').bind(id, await sha(token), name, code, now(), now()).run();
         return J(env, req, { id, token, name, code });
+      }
+
+      // 換手機：用登入名＋密碼登入，回傳這支手機自己的登入碼（跟用復原碼登入一樣是 token）
+      if (path === '/api/login' && M === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        const login = loginKey(b.name), pw = String(b.password || '');
+        const keys = [['ip:' + (req.headers.get('CF-Connecting-IP') || 'local'), FAIL_IP]];
+        if (login) keys.unshift(['n:' + login, FAIL_NAME]);
+        if (await loginLocked(env, keys)) return E(env, req, LOGIN_LOCK, 429);
+        const p = login && pw.length <= PW_MAX ? await env.DB.prepare('SELECT * FROM players WHERE login = ?').bind(login).first() : null;
+        const ok = await checkPw(p, pw.slice(0, PW_MAX));
+        if (!ok || p.banned) { await loginFailed(env, keys); return E(env, req, LOGIN_BAD, 400); }
+        await env.DB.prepare('DELETE FROM login_fails WHERE k = ?').bind('n:' + login).run();
+        const token = rid(24);
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO sessions (token_hash, player, created) VALUES (?, ?, ?)').bind(await sha(token), p.id, now()),
+          // 每個帳號最多留 10 支用密碼登入的手機，太舊的自動登出
+          env.DB.prepare('DELETE FROM sessions WHERE player = ? AND token_hash NOT IN (SELECT token_hash FROM sessions WHERE player = ? ORDER BY created DESC LIMIT 10)').bind(p.id, p.id),
+        ]);
+        return J(env, req, { id: p.id, token, name: p.name, code: p.code, login: p.login });
       }
 
       // 公開：照片圖檔（通過審核的；審核中的要管理金鑰或擁有者 token）
@@ -177,7 +252,25 @@ export default {
 
       if (path === '/api/me' && M === 'GET') {
         await env.DB.prepare('UPDATE players SET seen = ? WHERE id = ?').bind(now(), me.id).run();
-        return J(env, req, pub(me));
+        return J(env, req, { ...pub(me), login: me.pw_hash ? me.login : null });   // login 只回給自己：有設密碼才有
+      }
+      // 設定／更改換手機用的密碼：登入名不能跟別人重複（登入時才找得到唯一的帳號）
+      if (path === '/api/password' && M === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        const login = loginKey(b.login), pw = String(b.password || '');
+        if (login.length < 2) return E(env, req, '登入名至少 2 個字');
+        if (pw.length < PW_MIN) return E(env, req, `密碼至少 ${PW_MIN} 個字`);
+        if (pw.length > PW_MAX) return E(env, req, `密碼最多 ${PW_MAX} 個字`);
+        if (await env.DB.prepare('SELECT 1 FROM players WHERE login = ? AND id != ?').bind(login, me.id).first()) return E(env, req, '這個登入名已經有人用了，換一個（例如加上數字）', 409);
+        const h = await hashPw(pw);
+        try {
+          await env.DB.batch([
+            env.DB.prepare('UPDATE players SET login = ?, pw_hash = ?, pw_salt = ?, pw_iter = ? WHERE id = ?').bind(login, h.pw_hash, h.pw_salt, h.pw_iter, me.id),
+            // 改密碼後，其他用密碼登入的手機要重新登入（這支手機和復原碼不受影響）
+            env.DB.prepare('DELETE FROM sessions WHERE player = ? AND token_hash != ?').bind(me.id, me.tokenHash),
+          ]);
+        } catch (e) { if (!/UNIQUE/i.test(String(e && e.message))) throw e; return E(env, req, '這個登入名已經有人用了，換一個（例如加上數字）', 409); }   // 兩個人同時搶同一個名字：資料庫的唯一索引擋下來
+        return J(env, req, { ok: true, login });
       }
       if (path === '/api/me' && M === 'POST') {
         const b = await req.json().catch(() => ({}));

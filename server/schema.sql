@@ -10,7 +10,19 @@ CREATE TABLE IF NOT EXISTS players (
   pet TEXT,
   walked REAL DEFAULT 0, summits INTEGER DEFAULT 0,  -- 累積走了幾公尺、登頂幾次
   wk INTEGER DEFAULT 0, wk_base REAL DEFAULT 0,        -- 本週起點（週排行 = walked - wk_base）
-  banned INTEGER DEFAULT 0
+  banned INTEGER DEFAULT 0,
+  login TEXT,                          -- 換手機用的登入名（設密碼時才有；不分大小寫、不重複）
+  pw_hash TEXT, pw_salt TEXT, pw_iter INTEGER  -- 密碼的 PBKDF2-SHA256 雜湊、隨機鹽、次數（不存密碼本身）
+);
+CREATE UNIQUE INDEX IF NOT EXISTS players_login ON players (login);
+-- 用登入名＋密碼登入的手機：每支手機自己的登入碼雜湊
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY, player TEXT NOT NULL, created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_player ON sessions (player, created);
+-- 猜密碼限制：每個登入名（n:）、每個網路位址（ip:）錯了幾次、從什麼時候開始算
+CREATE TABLE IF NOT EXISTS login_fails (
+  k TEXT PRIMARY KEY, n INTEGER NOT NULL, first INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS friends (
   a TEXT NOT NULL, b TEXT NOT NULL, created INTEGER NOT NULL,
