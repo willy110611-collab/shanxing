@@ -2378,8 +2378,9 @@ const SOFT_PEB_J = 20, SOFT_PEB_N = 3, SOFT_PEB_P = 0.45;   // 路邊小石子�
 const SOFT_TUFT_J = 24, SOFT_TUFT_P = 0.4;                  // 長進路面的小草叢：幾段以內、每邊每段出現的機率
 function softOn(){ return TH.trail !== 'wood'; }
 const SOFT_V = 10;                     // 每個節點每邊存幾個數（見 buildSoft）
-const SOFT_JOG = 0.1;                  // 草唇下緣每一截中間那一點最多再往路面多伸幾公尺
-const SOFT_U_MIN = 0.9, SOFT_U_RND = 0.35;   // 草唇每個節點至少垂多低（再加 0～SOFT_U_RND 隨機）
+const SOFT_FQ = 0.3;                   // 路緣寬窄起伏多快：每個節點（0.4 公尺）走雜訊的幾格（0.3 ≈ 每 1.3 公尺起伏一次）
+const SOFT_JOG = 0.02;                 // 草唇下緣每一截中間那一點最多再往路面多伸幾公尺（以前 0.1：每 0.4 公尺鼓出一個尖角，近處放大成一排一排的鋸齒，看起來像一階一階的方塊）
+const SOFT_U_MIN = 1.05, SOFT_U_RND = 0.35;   // 草唇每個節點至少垂多低（再加 0～SOFT_U_RND 平滑起伏）：一定垂過土坎、蓋進路面一點。以前最少 0.9（有的節點沒垂到底、露出土坎），近處土坎切面有幾十像素高，草唇下緣在土坎上上下下，路緣看起來是一階一階的方塊缺口
 const SOFT_COVER = 0.08;               // 草唇下緣至少比土邊上緣再低多少（土坎高度的比例）：兩層一定疊到，土坎那一面不會露出一段直直的切面
 let softE = new Float32Array(SOFT_V * 2);
 // 每個節點（段 × SOFT_K + 第幾截，跟前後段共用）每邊：土邊吃進路面多少（公尺）、草唇垂多低（0 沒垂、1 垂到路面、超過 1 蓋進路面）、
@@ -2393,20 +2394,20 @@ function buildSoft(){
   const n = (N + 2) * SOFT_K + 1, V = SOFT_V; softE = new Float32Array(n * 2 * V);
   for (let g = 0; g < n; g++) for (let s = 0; s < 2; s++) {
     const o = (g * 2 + s) * V, hc = Hh(g, 813 + s);
-    softE[o] = lerp(SOFT_IN[0], SOFT_IN[1], clamp(0.4 * vn(g * 0.45 + s * 17.3, 801) + 0.6 * Hh(g, 803 + s), 0, 1));
-    softE[o + 1] = clamp(0.5 + vn(g * 0.17 + s * 29.1, 805) * 1.5 + (Hh(g, 807 + s) - 0.5) * 0.6, 0, 2.2);   // 多半垂到土坎下半截、有時蓋進路面（一兩公尺一次慢慢起伏：路緣整條跟著蜿蜒，不是平行路面的直線）
+    softE[o] = lerp(SOFT_IN[0], SOFT_IN[1], vn(g * SOFT_FQ + s * 17.3, 801));   // 這些寬窄、高低都用平滑的雜訊（相鄰節點接著變），不用每個節點各自亂數：近處一個節點間隔放大成幾十像素，各自亂跳就是一格一格的鋸齒
+    softE[o + 1] = clamp(0.5 + vn(g * 0.17 + s * 29.1, 805) * 1.5 + (vn(g * SOFT_FQ + s * 7.7, 807) - 0.5) * 0.4, 0, 2.2);   // 多半垂到土坎下半截、有時蓋進路面（一兩公尺一次慢慢起伏：路緣整條跟著蜿蜒，不是平行路面的直線）
     softE[o + 2] = 0.08 + 0.12 * Hh(g, 809 + s);
     softE[o + 3] = 0.02 + 0.1 * Hh(g, 811 + s);
     softE[o + 4] = hc < 0.22 ? 0 : hc < 0.72 ? 1 : 2;   // 草尖一叢一叢的，中間有空隙（不是一整排流蘇）
-    softE[o + 5] = 0.1 + 0.45 * Hh(g, 815 + s);
-    softE[o + 6] = lerp(SOFT_IN[0], SOFT_IN[1], Hh(g, 817 + s)) * (Hh(g, 819 + s) < 0.2 ? 1.8 : 1);   // 偶爾吃得特別深一口
-    softE[o + 7] = 0.1 + 0.45 * Hh(g, 821 + s);
+    softE[o + 5] = 0.1 + 0.45 * vn(g * SOFT_FQ + s * 11.1, 815);
+    softE[o + 6] = lerp(SOFT_IN[0], SOFT_IN[1], vn((g + 0.5) * SOFT_FQ + s * 17.3, 801));   // 中間那一點跟兩端在同一條平滑曲線上
+    softE[o + 7] = 0.1 + 0.45 * vn((g + 0.5) * SOFT_FQ + s * 11.1, 815);
     softE[o + 8] = 0;
-    softE[o + 9] = SOFT_JOG * Hh(g, 823 + s);
+    softE[o + 9] = SOFT_JOG * vn((g + 0.5) * SOFT_FQ + s * 3.3, 823);
   }
   for (let g = 0; g < n; g++) for (let s = 0; s < 2; s++) {   // 草唇蓋過土邊：節點上看這一點，中間那一點看前後兩端的平均
     const o = (g * 2 + s) * V;
-    softE[o + 1] = Math.max(softE[o + 1], 1 - softE[o + 5] + SOFT_COVER, SOFT_U_MIN + SOFT_U_RND * Hh(g, 825 + s));   // 每個節點都至少垂到路緣附近、長短不一：沒有蓋進路面的那一段，草唇下緣也不會貼著土坎排成一直線
+    softE[o + 1] = Math.max(softE[o + 1], 1 - softE[o + 5] + SOFT_COVER, SOFT_U_MIN + SOFT_U_RND * vn(g * SOFT_FQ + s * 5.5, 825));   // 每個節點都至少垂到路緣附近、長短不一：沒有蓋進路面的那一段，草唇下緣也不會貼著土坎排成一直線
   }
   for (let g = 0; g < n - 1; g++) for (let s = 0; s < 2; s++) {
     const o = (g * 2 + s) * V, q = o + V * 2, m = (Math.min(1, softE[o + 1]) + Math.min(1, softE[q + 1])) * 0.5;
@@ -2460,8 +2461,8 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
       const b = sd * 9; P[o + 10] = lerp(SBAND[b + 4], SBAND[b + 6], ak); P[o + 11] = lerp(SBAND[b + 5], SBAND[b + 7], ak);
     }
   }
-  // 路面靠邊那一圈漸漸變成土色：往內 SOFT_WEAR[0] 公尺（每個節點寬窄不一）SOFT_WEAR_N 層疊起來，越靠邊越濃（像顏料暈開，不是一條硬邊）
-  if (!stp) softWear(i, 0, LUT[43 * FOGN + fi], a);
+  // 路面靠邊那一圈漸漸變成土色：越靠邊越濃（一條平滑的漸層，像顏料暈開，不是一條硬邊）
+  if (!stp) wearRun(0, LUT[43 * FOGN + fi], a, s1, s2);
   // 土邊：路面邊緣往內吃進一點 → 土坎半截，內緣、外緣都凹凸不平。顏色跟那一邊的土坎一樣（左邊受光、右邊背光），土坎和土邊連成一片，
   // 路面和土坎之間那條直線換成凹凸的土邊內緣；土坎上緣那條直線由草唇蓋掉
   ctx.globalAlpha = a * SOFT_SOIL_A;   // 半透明：吃進路面那一截透出底下的路面花紋，土邊像顏料暈在路面上，不是一條平塗的土色直帶
@@ -2499,11 +2500,16 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
     for (let k = 0; k < SOFT_K; k++) softLip(i, k, sd, 0);
     bladePath(nB, sd, 1, 0);
     ctx.fillStyle = grs(fi, softG[sd]); ctx.fill();   // 跟旁邊草地同一個顏色（不壓暗：草唇不會變成一圈深色的邊）
-    if (TEX.grass && ta > 0.03) { texAff(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, zA + F / s2 - F / s1, ta * GRASS_A, 0); ctx.fill(); ctx.globalAlpha = a; }
-    if (softSH[sd]) { ctx.globalAlpha = a * (1 - 0.8 * fi / (FOGN - 1)); ctx.fillStyle = SHC[softSH[sd] + 40]; ctx.fill(); ctx.globalAlpha = a; }   // 陡坡：跟旁邊草地蓋同一層陰影／受光
   }
-  // 路緣外面被踩過的草：從草唇下緣往外 SOFT_WEAR[1] 公尺，草色往淺的土黃綠拉（SOFT_WEAR_N 層疊起來，越靠路越淺），草唇、土坎、草地連成一片
-  softWear(i, 1, LUT[40 * FOGN + fi], a);
+  // 草唇的草地貼圖：跟旁邊草地一樣用 texRun 切薄橫條各自對齊透視（兩邊一起一筆）。以前整段只用一個比例貼，近處一段跨好幾百像素，
+  // 草唇的花紋比旁邊草地大一截、每段交界跳一次，路邊看起來是一塊一塊貼上去的（2026-11-23 玩家回報草皮一塊一塊）
+  if (TEX.grass && ta > 0.03) { LIPY[0] = y1; LIPY[1] = y2; texRun(TEX.grass, 0, x1, y1, s1, x2, y2, s2, zA, ta * GRASS_A, lipPath, SUB_GRASS); ctx.globalAlpha = a; }
+  for (let sd = 0; sd < 2; sd++) if (softSH[sd]) {   // 陡坡：跟旁邊草地蓋同一層陰影／受光
+    ctx.beginPath(); for (let k = 0; k < SOFT_K; k++) softLip(i, k, sd, 0); bladePath(nB, sd, 1, 0);
+    ctx.globalAlpha = a * (1 - 0.8 * fi / (FOGN - 1)); ctx.fillStyle = SHC[softSH[sd] + 40]; ctx.fill(); ctx.globalAlpha = a;
+  }
+  // 路緣外面被踩過的草：從草唇下緣往外，草色往淺的土黃綠拉，越靠路越淺（一條平滑的漸層，外緣看不出邊）
+  wearRun(1, LUT[40 * FOGN + fi], a, s1, s2);
   ctx.globalAlpha = a;
   if (soft) for (let sd = 0; sd < 2; sd++) {   // 亮的那層在最前面，最後每根的尖端半透明一筆（三種深淺的草尖一起）
     const c = softG[sd];
@@ -2582,28 +2588,93 @@ function bladePath(n, sd, cls, part){
   }
 }
 function bladeFill(n, sd, cls, part, col){ ctx.beginPath(); bladePath(n, sd, cls, part); ctx.fillStyle = col; ctx.fill(); }
-const WEARK = new Float32Array((SOFT_K + 1) * 2);
-const SOFT_WEAR = [0.4, 0.55], SOFT_WEAR_A = 0.24, SOFT_WEAR_N = 2;   // 路面那側漸層土色、草地那側磨損草色各多寬（公尺，每個節點再乘 0.7～1.3）、每一層多濃、疊幾層（層數少一點省效能）
-// 路緣的漸層帶（what 0＝路面那側往內、1＝草地那側從草唇下緣往外）：一層比一層窄，疊起來越靠路緣越濃；兩邊同一層一筆畫
-function softWear(i, what, col, a){
-  const P = SOFT_P;
-  ctx.fillStyle = col; ctx.globalAlpha = a * SOFT_WEAR_A;
-  for (let k = 0; k <= SOFT_K; k++) for (let sd = 0; sd < 2; sd++) WEARK[k * 2 + sd] = SOFT_WEAR[what] * (0.7 + 0.6 * Hh(i * SOFT_K + k, 850 + what * 2 + sd)) / SOFT_WEAR_N;
-  for (let m = 1; m <= SOFT_WEAR_N; m++) {
-    ctx.beginPath();
-    for (let sd = 0; sd < 2; sd++) {
-      const side = sd ? 1 : -1, dd = Math.max(0.3, SBAND[sd * 9 + 8]);
-      for (let k = 0; k < SOFT_K; k++) {
-        const o = (k * 2 + sd) * SOFT_PN, q = o + SOFT_PN * 2;
-        const wa = WEARK[k * 2 + sd] * m, wb = WEARK[k * 2 + 2 + sd] * m;
-        if (what === 0) { ctx.moveTo(P[o], P[o + 1]); ctx.lineTo(P[q], P[q + 1]); ctx.lineTo(P[q] - side * wb * P[q + 2], P[q + 1]); ctx.lineTo(P[o] - side * wa * P[o + 2], P[o + 1]); ctx.closePath(); }
-        else {
-          const ua = Math.min(1, wa / dd), ub = Math.min(1, wb / dd);
-          ctx.moveTo(P[o + 6], P[o + 7]); ctx.lineTo(lerp(P[o + 4], P[o + 10], ua), lerp(P[o + 5], P[o + 11], ua)); ctx.lineTo(lerp(P[q + 4], P[q + 10], ub), lerp(P[q + 5], P[q + 11], ub)); ctx.lineTo(P[q + 6], P[q + 7]); ctx.closePath();
-        }
-      }
+// 路緣兩條漸層色帶（what 0＝路面那側往內漸漸變土色、1＝草地那側從草唇下緣往外漸漸變回草色）：
+// 2026-11-23 玩家回報步道兩側草皮一塊一塊。以前每條是兩層半透明的平塗色塊疊起來、每個節點寬窄亂跳，外緣是硬邊：
+// 近處一段跨好幾百像素，就是一塊一塊顏色不一樣的補丁。現在每條只畫一層，用一張很小的漸層貼圖（離路緣幾公尺 → 多濃），
+// 外緣濃度慢慢降到 0（看不出邊）。貼圖橫向對齊「離路緣的距離」：一段切成約 WEAR_SUB 像素高的薄橫條，每條用自己那裡的比例（跟草地貼圖一樣，近處不會走樣）
+// d：離路緣幾公尺（往草地那邊為正）；[貼圖從 d 幾公尺到幾公尺, 從哪裡開始變濃／變淡到哪裡, 色塊畫到哪裡]
+const WEAR_P = [{ lo:-0.7, hi:0.1, r0:-0.55, r1:-0.06, up:true, poly:-0.6 }, { lo:-0.6, hi:1, r0:0.1, r1:0.7, up:false, poly:0.85 }];
+const WEAR_A = 0.42, WEAR_TW = 64, WEAR_SUB = 48;   // 最濃多少（以前兩層 0.24 疊起來）、漸層貼圖多寬（像素）、每條橫條約幾像素高
+const WEARC = new Map();               // 漸層貼圖（依顏色：霧越濃顏色越淡，用到哪個才做哪個，最多留 48 張：一格最多用到十幾張，不會每格重做）
+function wearTex(what, col){
+  const key = what + col; let o = WEARC.get(key);
+  if (o) return o;
+  if (WEARC.size >= 48) { const k0 = WEARC.keys().next().value; free(WEARC.get(k0).c); WEARC.delete(k0); }
+  const p = WEAR_P[what], c = mk(WEAR_TW, 1), g = c.getContext('2d');
+  g.fillStyle = col;
+  for (let u = 0; u < WEAR_TW; u++) { const d = lerp(p.lo, p.hi, (u + 0.5) / WEAR_TW), e = ease01((d - p.r0) / (p.r1 - p.r0)); g.globalAlpha = WEAR_A * (p.up ? e : 1 - e); g.fillRect(u, 0, 1, 1); }
+  o = { c:c, w:WEAR_TW };
+  WEARC.set(key, o);
+  return o;
+}
+// 一邊的色帶形狀（畫面座標，放進 dst，回傳幾個點）：what 1 從草唇下緣（節點、每截中間那一點）往外到 WEAR_P.poly 公尺（土坎上緣那個高度）；
+// what 0 從路緣往路面裡 WEAR_P.poly 公尺
+function wearPoly(what, sd, dst){
+  const P = SOFT_P, side = sd ? 1 : -1, w = WEAR_P[what].poly; let n = 0;
+  if (what) {
+    for (let k = 0; k <= SOFT_K; k++) {
+      const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o + 6]; dst[n++] = P[o + 7];
+      if (k < SOFT_K) { const m = (k * 2 + sd) * 2; dst[n++] = LIPM[m]; dst[n++] = LIPM[m + 1]; }
     }
-    ctx.fill();
+    for (let k = SOFT_K; k >= 0; k--) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o] + side * w * P[o + 2]; dst[n++] = P[o + 5]; }
+  } else {
+    for (let k = 0; k <= SOFT_K; k++) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o]; dst[n++] = P[o + 1]; }
+    for (let k = SOFT_K; k >= 0; k--) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o] + side * w * P[o + 2]; dst[n++] = P[o + 1]; }
+  }
+  return n >> 1;
+}
+// 草唇的形狀（給草地貼圖用）：土坎上緣往外那條 → 草唇下緣（含每截中間那一點）倒回來
+function lipPoly(sd, dst){
+  const P = SOFT_P; let n = 0;
+  for (let k = 0; k <= SOFT_K; k++) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o + 8]; dst[n++] = P[o + 9]; }
+  for (let k = SOFT_K; k >= 0; k--) {
+    const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o + 6]; dst[n++] = P[o + 7];
+    if (k) { const m = ((k - 1) * 2 + sd) * 2; dst[n++] = LIPM[m]; dst[n++] = LIPM[m + 1]; }
+  }
+  return n >> 1;
+}
+// 多邊形只留 y 在 [yHi, yLo] 之間的部分（Sutherland–Hodgman，上下各切一刀），加進目前的路徑
+const CLA = new Float32Array(64), CLB = new Float32Array(64), CLC = new Float32Array(64);
+function clipY(src, n, dst, yc, below){
+  let m = 0;
+  for (let k = 0; k < n; k++) {
+    const ax = src[k * 2], ay = src[k * 2 + 1], q = (k + 1) % n, bx = src[q * 2], by = src[q * 2 + 1];
+    const ina = below ? ay <= yc : ay >= yc, inb = below ? by <= yc : by >= yc;
+    if (ina) { dst[m++] = ax; dst[m++] = ay; }
+    if (ina !== inb) { const t = (yc - ay) / (by - ay); dst[m++] = ax + (bx - ax) * t; dst[m++] = yc; }
+  }
+  return m >> 1;
+}
+function slabPath(src, n, yHi, yLo){
+  n = clipY(src, n, CLB, yLo, true); if (n < 3) return;
+  n = clipY(CLB, n, CLC, yHi, false); if (n < 3) return;
+  ctx.moveTo(CLC[0], CLC[1]); for (let k = 1; k < n; k++) ctx.lineTo(CLC[k * 2], CLC[k * 2 + 1]); ctx.closePath();
+}
+// texRun 切的第 a～b 條（中心線上的比例）：兩邊草唇在這條裡面的部分。第一條往下、最後一條往上不切（草唇比這段的頭尾多出一點點，不能被切成直線）
+const LIPY = new Float32Array(2);
+function lipPath(a, b){
+  const yLo = a <= 1e-4 ? 1e9 : lerp(LIPY[0], LIPY[1], a), yHi = b >= 1 - 1e-4 ? -1e9 : lerp(LIPY[0], LIPY[1], b);
+  for (let sd = 0; sd < 2; sd++) slabPath(CLA, lipPoly(sd, CLA), yHi, yLo);
+}
+// 畫 what 那條漸層色帶（兩邊）：sA、sB 這段近端、遠端每公尺幾像素
+function wearRun(what, col, a, sA, sB){
+  const P = SOFT_P, T = wearTex(what, col), p = patOf(T), pw = WEAR_P[what], span = pw.hi - pw.lo, m = TEX_MTX || new DOMMatrix();
+  const yA = P[1], yB = P[SOFT_K * 2 * SOFT_PN + 1], yS = Math.min(yA, H + 2);
+  if (yS <= yB) return;
+  const n = clamp(Math.ceil((yS - yB) / WEAR_SUB), 1, 16);
+  ctx.fillStyle = p; ctx.globalAlpha = a;
+  for (let sd = 0; sd < 2; sd++) {
+    const side = sd ? 1 : -1, o0 = sd * SOFT_PN, oK = (SOFT_K * 2 + sd) * SOFT_PN, dy = P[oK + 1] - P[o0 + 1], gx = Math.abs(dy) > 0.01 ? (P[oK] - P[o0]) / dy : 0;   // 路緣在這段是一條直線：每往上 1 像素往旁邊 gx 像素
+    const np = wearPoly(what, sd, CLA);
+    let ya = yS;
+    for (let q = 1; q <= n; q++) {
+      const yb = q === n ? yB : Math.round(lerp(yS, yB, q / n) * DPR) / DPR, ym = (ya + yb) * 0.5, s = lerp(sA, sB, clamp((yA - ym) / Math.max(0.01, yA - yB), 0, 1));
+      // 貼圖（U 橫向、V 往下）→ 畫面：X = 路緣在 Y 的位置 + 往外 d 公尺 × s，Y = ym + V
+      m.a = side * s * span / WEAR_TW; m.b = 0; m.c = gx; m.d = 1; m.e = P[o0] + gx * (ym - P[o0 + 1]) + side * s * pw.lo; m.f = ym;
+      p.setTransform(m);
+      ctx.beginPath(); slabPath(CLA, np, q === n ? -1e9 : yb, q === 1 ? 1e9 : ya); ctx.fill();
+      ya = yb;
+    }
   }
 }
 const PEB = new Float32Array(SOFT_PEB_N * 2 * 3);
