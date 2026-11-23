@@ -1432,7 +1432,7 @@
     if (lineT <= 0 && moving && !paused) { lineT = 18 + Math.random()*16;
       say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'snow' ? SX.LINES.snow : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
     wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
-    SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam, ft:ftNow, fps:fpsNow });   // ft、fps：給自動畫質量真正每格花多久
+    SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, vBase: baseSpeed(M) * devX(), boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam, ft:ftNow, fps:fpsNow });   // ft、fps：給自動畫質量真正每格花多久
     if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
     updTag();
     hudT -= dt; if (hudT <= 0) { hudT = 0.2; hudTick(); }
