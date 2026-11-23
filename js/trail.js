@@ -124,6 +124,7 @@ function warmBuild(){
   TURF.forEach(function(n){ n.forEach(function(v){ v.forEach(spr); }); });
   for (const k in TEX) { const T = TEX[k]; if (T && T.lv) { q.push(function(){ up(T.c, true); }); for (let nx = 0; nx <= 3; nx++) for (let ny = nx; ny <= 6; ny++) if (nx || ny) q.push(function(){ up(texLevel(T, nx, ny).c, true); }); } }
   props.forEach(function(o){ if (o.type === 'sign') q.push(function(){ getSign(o.text); }); });
+  LITE_WARM.forEach(function(id){ q.push(function(){ const L = liteOf(id); if (L) up(L.c); }); });   // 登山客的光線貼圖（逆光、輪廓光）
   warmQ = q.reverse();
 }
 function warmStep(){ if (!warmQ.length) return; const t0 = performance.now(); while (warmQ.length && performance.now() - t0 < WARM_MS) warmQ.pop()(); }
@@ -228,7 +229,7 @@ function sprite(wm, hm, ppm, fn, sink){
   return { c:c, h:h, w:wm, hm:hm * (1 - s), ax:0.5 };
 }
 // Gemini 美術圖做成同樣格式的貼圖；hm 是實際高度（公尺）。沒有這張圖就回 null
-const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, onLoad(){} };
+const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, drawOver(){ return false; }, mirrored(){ return false; }, onLoad(){} };
 // 跟哪座山無關的貼圖（美術圖裁好、底部壓暗的版本、路面貼圖）只做一次，換山時重複用
 // 以前每換一座山就重做一百多張大畫布（約 50 MB），手機要等回收才放掉，越玩越吃記憶體、越卡
 const KEEP = {};
@@ -1575,7 +1576,7 @@ function gaitDraw(c, id, flip, fl){
   else if (id === 'hiker_breath') h = SCALE.heroBreath * 100;
   else if (e.frames.length === 1) h = SCALE.heroPose * 100;
   else { i = walkFrame(e.frames.length); dy = -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv; }
-  return ART.drawFrame(c, id, i, 0, dy, h, flip, fl);
+  return artFrame(c, id, i, 0, dy, h, flip, fl);
 }
 function heroGait(c, s, t, fl){
   gaitSheet();
@@ -1760,9 +1761,11 @@ function drawMate(mt, j, f, t, fade){
   ctx.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
+    LIT.on = true;   // 隊友跟自己一樣上光（逆光、輪廓光）
     const drawn = heroArt(ctx, { rest:mt.rest, stair:onSt }, t);   // 隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
     if (!drawn) on2D(function(c){ if (mt.rest) heroRest(c, t); else heroWalk(c, t); });
   } finally {
+    LIT.on = false;
     ctx.restore();
     [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols; Object.assign(hero, sv);
   }
@@ -1789,8 +1792,8 @@ function petArt(s, x, y, u, t){
   const sit = !sitting ? null : ART.get('pet_' + id + '_sit') ? 'pet_' + id + '_sit' : (id === 'shiba' && ART.get('shiba_sit') ? 'shiba_sit' : null);   // 坐姿：pet_<id>_sit，柴犬也接受第一批的 shiba_sit
   ctx.drawImage(SHADOW, x - 27 * u, y - 10 * u, 50 * u, 20 * u);
   ctx.save(); ctx.translate(x, y); ctx.scale(u, u);
-  if (sit) ART.drawFrame(ctx, sit, 0, 0, 0, h * 0.95);
-  else ART.drawFrame(ctx, walk, sitting ? 0 : Math.floor(hero.ph / TAU * 8), 0, 0, h);   // 小跑步：一個步伐循環跑兩輪
+  if (sit) artFrame(ctx, sit, 0, 0, 0, h * 0.95);
+  else artFrame(ctx, walk, sitting ? 0 : Math.floor(hero.ph / TAU * 8), 0, 0, h);   // 小跑步：一個步伐循環跑兩輪
   ctx.restore();
   return true;
 }
@@ -1841,17 +1844,17 @@ function walkFrame(n){ return hero.mv > 0.3 ? Math.floor(hero.ph / TAU * (n || 4
 // 用 Gemini 畫的登山客（以公分為單位畫在 (0,0) 腳底）；沒有圖就回 false
 // fl：換衣服色調的濾鏡（隊友、廣場上的山友），自己是 undefined
 function heroArt(c, s, t, fl, me){
-  if (s.sleep) return ART.drawFrame(c, 'hiker_sleep', 0, 0, 0, SCALE.heroSleep * 100, false, fl);
-  if (s.rest) return ART.drawFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
-  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return ART.drawFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
-  if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return ART.drawFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
+  if (s.sleep) return artFrame(c, 'hiker_sleep', 0, 0, 0, SCALE.heroSleep * 100, false, fl);
+  if (s.rest) return artFrame(c, 'hiker_rest', 0, 0, Math.sin(t * 2) * 0.8, SCALE.heroSit * 100, false, fl);
+  if (s.frac >= 0.999 && hero.mv < 0.3 && ART.get('hiker_summit')) return artFrame(c, 'hiker_summit', 0, 0, 0, SCALE.heroSummit * 100, false, fl);   // 站上山頂：舉起登山杖歡呼
+  if (me && hero.mv < 0.3 && helmetFrom != null && s.dist >= helmetFrom && ART.get('hiker_helmet')) return artFrame(c, 'hiker_helmet', 0, 0, 0, SCALE.hero * 100, false, fl);   // 東峰岩溝停下來：戴頭盔站著
   if (me) return heroGait(c, s, t, fl);   // 自己：累了、上階梯、轉彎、停下來喝水看風景、開心小跳（隊友、廣場照舊用一般走路圖）
   const fw = s.face === 'front' ? 'hiker_front_walk8' : s.face === 'side' ? 'hiker_side_walk8' : null;   // 廣場：往鏡頭走用正面、往旁邊走用側面（plaza.js 決定方向、往左時整個人鏡射），停下來面向鏡頭
-  if (fw && ART.get(fw)) return ART.drawFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
+  if (fw && ART.get(fw)) return artFrame(c, fw, walkFrame(8), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
   const st16 = s.stair && ART.get('hiker_stairs16') ? rainy('hiker_stairs16') : null;   // 隊友走到階梯段：用爬階梯圖
   const walk = st16 || (isRain && ART.get(WALK_RAIN) ? WALK_RAIN : WALK_DRY);   // 下雨天穿黃色雨衣
   const e = ART.get(walk);
-  return ART.drawFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
+  return artFrame(c, walk, walkFrame(e && e.frames.length), 0, -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv, SCALE.hero * 100, false, fl);
 }
 const tintFilter = k => 'hue-rotate(' + (150 + k % 3 * 60) + 'deg)';   // 美術圖版本：隊友換個衣服色調，跟自己分得出來
 // 登山客站的地面高度：階梯上踩在踏面上（不是斜坡中間）；走路時快到下一階才慢慢抬上去，坐下時就坐在那一階
@@ -1876,6 +1879,7 @@ function drawHero(s, t, bx, by, bs){
   const X = onB ? bx : gx + tn * TURN_X * gs, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100;     // 角色座標單位：公分
   hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
   ctx.globalAlpha = 1;
+  LIT.on = true;   // 自己和寵物照登山畫面的陽光上光（artFrame）
   drawPet(s, X + 68 * u, (onB ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t);
   // 腳底影子：跨步時兩腳前後張開，影子前後拉長一點、左右縮一點；再疊一個貼著鞋底的小深影（坐在長椅上就只有椅面上一小片）
   const sd = sit ? 0 : Math.abs(Math.sin(hero.ph)) * hero.mv, sw = 86 * (1 - 0.06 * sd), sh = 34 * (1 + 0.3 * sd);
@@ -1885,6 +1889,7 @@ function drawHero(s, t, bx, by, bs){
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
   if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
   ctx.restore();
+  LIT.on = false;
 }
 
 // 給登山口廣場用：在別的畫布 c 的 (X, Y) 腳底畫一個登山客（u：每公分幾像素）
@@ -3036,6 +3041,61 @@ function grade2D(sat, con){
   else if (con < 0.996) { c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1 - con; c.fillStyle = '#808080'; c.fillRect(0, 0, W, H); }
   c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
 }
+// 登山客、寵物、隊友站在同一片陽光裡：太陽在前方天空，他們是逆光的 → 整個人壓暗一點偏冷一點（back），朝太陽那一側的邊緣一圈金色輪廓光（rim）。
+// 晚上、雨天沒有太陽：兩個都是 0（晚上人身上不准發光）。只在登山畫面畫人的時候開（LIT.on），廣場照舊
+const LIT = { on:false, back:0, rim:0, sunR:true, dap:0, du:0.5, dv:0.5 };
+function litUpd(){
+  const ok = LOOK.q.rim[qs.lvl] ? 1 : 0, sv = clamp(sunVis, 0, 1);
+  LIT.back = isNight ? 0 : lookT(LOOK.back) * sv * ok;
+  LIT.rim = isNight ? 0 : lookT(LOOK.rim) * sv * ok;   // 晚上輪廓光一定關（check 會檢查）
+  LIT.sunR = cSun[0] >= 0.5;
+}
+// 光線貼圖：每張美術圖第一次用到時做一次存在 LITE（每格只是多貼兩三張圖，不再算）。跟原圖同樣排法、縮成 LOOK.liteRes 倍，上下疊四組：
+// 0 剪影（逆光的顏色）、1 輪廓光朝右上、2 輪廓光朝左上（鏡射格畫出來就變朝右上）、3 剪影（光斑的暖色）
+// 輪廓光的做法跟前景框的 rimOf 一樣：圖形塗成金色，再挖掉「朝光那邊的鄰居也有東西」的像素，只剩朝光那一圈邊
+const LITE = {};
+function liteOf(id){
+  if (LITE[id] !== undefined) return LITE[id];
+  if (!ART.get(id)) return null;   // 美術圖還沒到：先不記，圖到了再做
+  return (LITE[id] = liteBuild(id));
+}
+function liteBuild(id){
+  const e = ART.get(id); if (!e.img || e.opaque) return null;
+  const k = LOOK.liteRes, rh = Math.ceil(e.img.height * k), c = mk(e.img.width * k, rh * 4), g = c.getContext('2d'), t = mk(4, 4), tg = t.getContext('2d');
+  const col = [css(LOOK.backCol), css(LOOK.rimCol), css(LOOK.rimCol), css(LOOK.dapple.col)], seen = {};
+  for (const f of e.frames) {
+    const key = f.x + ',' + f.y; if (seen[key]) continue; seen[key] = 1;   // 鏡射格跟原格是同一塊圖
+    const w = Math.max(1, Math.round(f.w * k)), h = Math.max(1, Math.round(f.h * k)), d = Math.max(1, LOOK.rimW * h);
+    t.width = w; t.height = h;
+    for (let r = 0; r < 4; r++) {
+      tg.globalCompositeOperation = 'source-over'; tg.clearRect(0, 0, w, h); tg.drawImage(e.img, f.x, f.y, f.w, f.h, 0, 0, w, h);
+      tg.globalCompositeOperation = 'source-in'; tg.fillStyle = col[r]; tg.fillRect(0, 0, w, h);
+      if (r === 1 || r === 2) {
+        const sx = r === 1 ? 1 : -1;
+        tg.globalCompositeOperation = 'destination-out'; tg.drawImage(e.img, f.x, f.y, f.w, f.h, -d * sx, d, w, h);   // 朝光那邊的鄰居有東西 → 不是邊
+        tg.globalCompositeOperation = 'destination-in'; tg.drawImage(e.img, f.x, f.y, f.w, f.h, d * sx, -d, w, h);    // 背光那邊的鄰居也是空的（登山杖、帽繩這種細的）→ 不上光，不然整根變金色
+      }
+      g.drawImage(t, f.x * k, rh * r + f.y * k, f.w * k, f.h * k);
+    }
+  }
+  free(t);
+  return { c:c, k:k, rh:rh };
+}
+// 換山後先做好的光線貼圖（自己的走路圖、雨衣、階梯、累了；其他動作第一次用到才做）
+const LITE_WARM = [WALK_DRY, WALK_RAIN, 'hiker_stairs16', 'hiker_rain_stairs16', 'hiker_tired_walk8', 'hiker_rain_tired_walk8'];
+// 畫一格美術圖（登山客、寵物、隊友都經過這裡）：照 LIT 疊上逆光、輪廓光、光斑（光線貼圖是存好的，這裡只貼圖）
+function artFrame(c, id, i, cx, by, h, flip, fl){
+  if (!ART.drawFrame(c, id, i, cx, by, h, flip, fl)) return false;
+  if (!LIT.on || !(LIT.back > 0.01 || LIT.rim > 0.01 || LIT.dap > 0.01)) return true;
+  const L = liteOf(id); if (!L) return true;
+  const a0 = c.globalAlpha, g0 = c.globalCompositeOperation;
+  if (LIT.back > 0.01) { c.globalAlpha = a0 * LIT.back; ART.drawOver(c, id, i, cx, by, h, flip, L.c, 0, L.k); }
+  if (LIT.rim > 0.01) { c.globalAlpha = a0 * LIT.rim; ART.drawOver(c, id, i, cx, by, h, flip, L.c, L.rh * (LIT.sunR !== ART.mirrored(id, i, flip) ? 1 : 2), L.k); }
+  if (LIT.dap > 0.01) heroDapple(c, id, i, cx, by, h, flip, L, a0);
+  c.globalAlpha = a0; c.globalCompositeOperation = g0;
+  return true;
+}
+function heroDapple(){}
 
 // ═════════ 主繪製 ═════════
 S.render = function(s){
@@ -3045,7 +3105,7 @@ S.render = function(s){
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
   if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
-  updPalette(wx, frac, dt); updHero(s, t, dt, dist, sp); stepMates(dt);
+  updPalette(wx, frac, dt); litUpd(); updHero(s, t, dt, dist, sp); stepMates(dt);
   if (ctx.gpu) ctx.begin();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心

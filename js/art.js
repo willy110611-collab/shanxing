@@ -166,15 +166,33 @@ function filtered(e, fl){
 // 給別的畫面用：某張圖套了濾鏡的版本（例如地圖上還不能爬的山路標褪色）；沒有這張圖回 null
 A.filtered = function(id, fl){ const e = lib[id]; return e && !e.lazy ? filtered(e, fl) : null; };
 // 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）；fl：要套的濾鏡（可省略）
+function frameOf(e, i){ return e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length]; }
+// 畫一格（drawFrame、drawOver 共用，位置、大小、鏡射只算在這裡）：來源圖 img 是「原圖的 k 倍大、往下偏 oy」的同樣排法；
+// u0～u1、v0～v1：只畫這一格的一小塊（0～1，以沒鏡射的這一格來算）
+function put(ctx, e, f, img, oy, k, cx, by, h, flip, u0, v0, u1, v1){
+  h *= e.hk || 1; const w = h * f.w / f.h;
+  const sx = (f.x + f.w * u0) * k, sy = oy + (f.y + f.h * v0) * k, sw = f.w * (u1 - u0) * k, sh = f.h * (v1 - v0) * k;
+  const dx = -w / 2 + w * u0, dy = by - h + h * v0, dw = w * (u1 - u0), dh = h * (v1 - v0);
+  if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh); ctx.restore(); }
+  else ctx.drawImage(img, sx, sy, sw, sh, cx + dx, dy, dw, dh);
+}
 A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
   const e = lib[id]; if (!e) return false;
-  const f = e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length], img = fl ? filtered(e, fl) : e.img;
-  h *= e.hk || 1; const w = h * f.w / f.h;
-  if (f.mx) flip = !flip;   // 這一格本身是鏡射格（SHEETS 的 order 用 ~i）
-  if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(img, f.x, f.y, f.w, f.h, -w / 2, by - h, w, h); ctx.restore(); }
-  else ctx.drawImage(img, f.x, f.y, f.w, f.h, cx - w / 2, by - h, w, h);
+  const f = frameOf(e, i), img = fl ? filtered(e, fl) : e.img;
+  put(ctx, e, f, img, 0, 1, cx, by, h, f.mx ? !flip : flip, 0, 0, 1, 1);   // f.mx：這一格本身是鏡射格（SHEETS 的 order 用 ~i）
   return true;
 };
+// 這一格畫出來是不是左右鏡射的（自己要鏡射、或這一格本身是鏡射格）：疊光線貼圖時挑「朝哪邊的輪廓光」用
+A.mirrored = function(id, i, flip){ const e = lib[id]; return !!(e && (frameOf(e, i).mx ? !flip : flip)); };
+// 在同一格的位置疊一張「跟原圖同樣排法」的圖（trail.js 的光線貼圖：剪影、輪廓光）：img 是原圖的 k 倍大、這一組從 oy 開始；
+// part：[u0, v0, u1, v1] 只疊這一格的一小塊（省略＝整格）
+A.drawOver = function(ctx, id, i, cx, by, h, flip, img, oy, k, part){
+  const e = lib[id]; if (!e || !img) return false;
+  const f = frameOf(e, i), p = part || FULL;
+  put(ctx, e, f, img, oy, k, cx, by, h, f.mx ? !flip : flip, p[0], p[1], p[2], p[3]);
+  return true;
+};
+const FULL = [0, 0, 1, 1];
 // 把第一格裁成單獨一張 canvas（給需要整張圖的地方）
 A.crop = function(id, i){
   const e = lib[id]; if (!e) return null;
