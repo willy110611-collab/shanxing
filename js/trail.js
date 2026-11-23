@@ -15,7 +15,7 @@ const HZ = 4.2;         // 登山客在鏡頭前方幾公尺（鏡頭拉近、�
 const RW = 1.3;         // 步道標準半寬（每段真正的路寬在 rwA：緩坡草地寬一點、貼著石頭窄一點，畫的時候一律用 rwAt／rwF）
 const ROAD_UC = RW;     // 路面貼圖的中心對齊位置（固定，不跟著路寬伸縮，路寬變的時候貼圖花紋不會被拉長）
 const GW = 30;          // 稜線地面半寬
-const FOGN = 24;        // 霧色階數
+const FOGN = 48;        // 霧色階數（以前 24 階：一大片遠處山坡每走幾公尺就整片跳一階顏色，看得出一塊一塊；色表只在換山、積雪變化時重做，多幾階不影響每格的效能）
 const STRIDE = 1.45;    // 一個完整步伐循環（兩步）的距離
 const NEAR_Z = 1.2;     // 地面最近畫到鏡頭前幾公尺（畫面最下緣大約是 2.7 公尺，1.2 公尺一定在畫面外）。最近那段的近端被推到這裡時，貼圖要用 zAt() 算真正的世界位置，不然會被擠壓、走路時畫面最下面一段一段跳
 const CREST = 0.00045; // 遠處地面往下彎（每公尺平方掉幾公尺，從登山客那裡開始算）：遠方的路像翻過一個坡頂，後面露出天空和遠山，不會一路往上蓋滿畫面
@@ -2068,7 +2068,21 @@ function buildSlopes(){
   }
 }
 const TDN = [RW, RW + BANKW, RW + 0.6, RW + 1.8, RW + 4.5, RW + 10, 0], TDF = [RW, RW + BANKW, RW + 3, RW + 10, 0];   // 第一格＝土坎切面；近處切細、遠處切粗（最後一格＝稜線邊緣）
+// TDF_J 段以外改用遠處切法。以前在第 60 段直接換：那一段兩側山坡的輪廓、明暗一下子變另一個形狀，走路時遠處一段一段跳。
+// 現在換之前 TD_MORPH 段開始，近處切法多出來的兩條帶子（TDM 是 -1 的）高度慢慢拉成兩旁的直線、第 3 條移到遠處切法的位置，
+// 到換的那一段時形狀已經跟遠處切法一模一樣（只是多兩個在直線上的點）
+const TDF_J = 60, TD_MORPH = 8, TDM = [0, 0, -1, RW + 3, -1, 0, 0];
+function tdMorph(z){ return clamp((z / SEG - (TDF_J - 1 - TD_MORPH)) / TD_MORPH, 0, 1); }
+const FAR_FADE = 30, FAR_FADE_A = 0.65, FAR_FADE_H = 0.35;   // 最遠幾段淡出；透明度在最遠的 65% 裡變、霧色在最遠 35% 以內已經全是霧
 const tX1 = new Float32Array(8), tY1 = new Float32Array(8), tX2 = new Float32Array(8), tY2 = new Float32Array(8), tSh = new Float32Array(8);
+const tD1 = new Float32Array(8), tH1 = new Float32Array(8), tD2 = new Float32Array(8), tH2 = new Float32Array(8);   // 帶子每一條離路中心幾公尺、地面多高
+// 一端（第 i 段近端）兩側山坡帶子的位置：D 離路中心、Ht 地形高度、X/Y 畫面位置。mo：換成遠處切法前壓平到哪裡（0～1）
+function bandEnd(i, side, DS, nS, dW, gw, mo, x, y, s, X, Y, D, Ht){
+  let k;
+  for (k = 0; k < nS; k++) { D[k] = k === nS - 1 ? gw : (mo > 0 && TDM[k] > 0 ? lerp(DS[k], TDM[k], mo) : DS[k]) + dW; Ht[k] = terrH(i, side, D[k]); }
+  if (mo > 0) for (k = 1; k < nS - 1; k++) if (TDM[k] < 0) Ht[k] = lerp(Ht[k], lerp(Ht[k - 1], Ht[k + 1], (D[k] - D[k - 1]) / (D[k + 1] - D[k - 1])), mo);
+  for (k = 0; k < nS; k++) { X[k] = x + side * D[k] * s; Y[k] = y - Ht[k] * s; }
+}
 const tLvS = new Int8Array(16);
 // 這一邊草地那幾條帶子在 a～b 這一截的形狀（給 texRun；重複用同一個函式，不每段每邊產生新的小函式，少一點記憶體回收的停頓）
 let gNS = 0;
@@ -2700,24 +2714,24 @@ function drawWorld(b, t, jHi, jLo, far){
     const y2 = pY[j + 1], below = y2 - 0.6 * pS[j + 1] > H + 80;   // 遠端往上 0.6 公尺（路邊的草叢、土坎）也在畫面下緣以外才算
     if (!heroDone && !benchO && j < jhG) { drawHero(s, t); heroDone = true; }
     const i = b + j, y1 = pY[j], s1 = pS[j], s2 = pS[j + 1], x1 = pX[j], x2 = pX[j + 1], z0 = i * SEG, zj = pZ[j] / SEG, rw = rwAt(i), dW1 = rw - RW, dW2 = rwAt(i + 1) - RW;   // zj：這段離鏡頭幾段（連續的，給淡入淡出用）
-    const fx = clamp((pZ[j] - fogD0) / (fogD - fogD0), 0, 1), fq = fx * (2 - fx), fi = (fq * (FOGN - 1)) | 0;   // 空氣透視：中景就開始變淡（先快後慢），山坡才會融進遠山
-    const fade = farA(j, DRAW - 1, 18);
+    // 最遠那 FAR_FADE 段（畫到哪裡為止的前面）：先變成霧的顏色、再慢慢變透明（平滑曲線）。以前只有透明度從 1 降到 0：
+    // 遠處的地面帶子、土坎、路面各自半透明疊在一起，看起來是一塊一塊半透明的板子，而且每走一段就多冒出一塊
+    const fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A);
+    const fx = clamp((pZ[j] - fogD0) / (fogD - fogD0), 0, 1), fq = 1 - (1 - fx * (2 - fx)) * ease01((fz - FAR_FADE_H) / (1 - FAR_FADE_H)), fi = (fq * (FOGN - 1)) | 0;   // 空氣透視：中景就開始變淡（先快後慢），山坡才會融進遠山
     if (fade < 0.005) { if (lod) { lodRestore(j); lodSkip = false; } continue; }
     ctx.globalAlpha = fade;
     if (!below && !skipG && y1 - y2 > 0.2) {
       const yb = y1 + 0.7 + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
       const g1 = gwAt(pZ[j]) * s1, g2 = gwAt(pZ[j + 1]) * s2, gl1 = x1 - g1, gl2 = x2 - g2, gr1 = x1 + g1, gr2 = x2 + g2;
       // 兩側山坡：沿著離路的距離切幾條帶子，每條依地形高度抬升或下降，依坡向（光從右上來）分亮暗
-      const ta = fade * (1 - fq) * TEX_A, DS = j < 60 ? TDN : TDF, nS = DS.length, gw1 = gwAt(pZ[j]), gw2 = gwAt(pZ[j + 1]);
+      const ta = fade * (1 - fq) * TEX_A, DS = j < TDF_J ? TDN : TDF, nS = DS.length, gw1 = gwAt(pZ[j]), gw2 = gwAt(pZ[j + 1]);
+      const mo1 = DS === TDN ? tdMorph(pZ[j]) : 0, mo2 = DS === TDN ? tdMorph(pZ[j + 1]) : 0;   // 快換成遠處切法的那幾段：多出來的帶子慢慢壓平（不會一段一段突然換形狀）
       for (let side = -1; side <= 1; side += 2) {
         const lvS = side < 0 ? lvL : lvR;
-        for (k = 0; k < nS; k++) {
-          const d1 = k === nS - 1 ? gw1 : DS[k] + dW1, d2 = k === nS - 1 ? gw2 : DS[k] + dW2;   // 路寬每段不一樣：帶子從這段的路緣量起
-          tX1[k] = x1 + side * d1 * s1; tY1[k] = yb - terrH(i, side, d1) * s1;
-          tX2[k] = x2 + side * d2 * s2; tY2[k] = y2 - terrH(i + 1, side, d2) * s2;
-        }
+        bandEnd(i, side, DS, nS, dW1, gw1, mo1, x1, yb, s1, tX1, tY1, tD1, tH1);   // 路寬每段不一樣：帶子從這段的路緣量起
+        bandEnd(i + 1, side, DS, nS, dW2, gw2, mo2, x2, y2, s2, tX2, tY2, tD2, tH2);
         for (k = 0; k < nS - 1; k++) {           // 坡向：往外升高的那一面朝向哪裡（tSh 連續，地面明暗不分階；tLvS 只給草叢挑顏色）
-          const g = (terrH(i, side, k === nS - 2 ? gw1 : DS[k + 1] + dW1) - terrH(i, side, DS[k] + dW1)) / Math.max(0.3, (k === nS - 2 ? gw1 : DS[k + 1] + dW1) - DS[k] - dW1);
+          const g = (tH1[k + 1] - tH1[k]) / Math.max(0.3, tD1[k + 1] - tD1[k]);
           tSh[k] = clamp(-side * g * 1.8 + lvS * 0.15 + (k === 0 ? -0.5 : 0), -1, 1);
           tLvS[(side + 1) * 4 + k] = clamp(Math.round(1 + lvS * 0.5 - side * g * 2.4), 0, 2);
         }
@@ -2725,7 +2739,8 @@ function drawWorld(b, t, jHi, jLo, far){
         { const b = ((side + 1) >> 1) * 9; SBAND[b] = tX1[1]; SBAND[b + 1] = tY1[1]; SBAND[b + 2] = tX2[1]; SBAND[b + 3] = tY2[1]; SBAND[b + 4] = tX1[2]; SBAND[b + 5] = tY1[2]; SBAND[b + 6] = tX2[2]; SBAND[b + 7] = tY2[2]; SBAND[b + 8] = DS[2] - DS[1]; }   // 路緣磨損草色帶貼在真正的地形上
         // 稜線外緣往下掉的暗坡
         const n1 = nS - 1;
-        if (side < 0 ? tX1[n1] > -10 : tX1[n1] < W + 10) { ctx.fillStyle = LUT[19 * FOGN + fi]; quad(tX1[n1], tY1[n1], tX1[n1] + side * 10 * s1, tY1[n1] + 16 * s1, tX2[n1] + side * 10 * s2, tY2[n1] + 16 * s2, tX2[n1], tY2[n1]); }
+        const dq = fade * fade, fb = ease01(farA(j + 1, DRAW - 1, FAR_FADE) / FAR_FADE_A), dq2 = fb * fb;   // 最遠那幾段：往下掉的暗坡跟著淡出縮回稜線邊（以前整片 10×16 公尺的半透明板子一片疊一片，遠方看起來一塊一塊）
+        if (dq > 0.01 && (side < 0 ? tX1[n1] > -10 : tX1[n1] < W + 10)) { ctx.fillStyle = LUT[19 * FOGN + fi]; quad(tX1[n1], tY1[n1], tX1[n1] + side * 10 * dq * s1, tY1[n1] + 16 * dq * s1, tX2[n1] + side * 10 * dq2 * s2, tY2[n1] + 16 * dq2 * s2, tX2[n1], tY2[n1]); }
         // 土坎切面（第 0 格）：土色；左邊那面朝右、迎著右上來的光，右邊那面背光
         ctx.fillStyle = LUT[(21 + (side < 0 ? 2 : 0)) * FOGN + fi]; quad(tX1[0], tY1[0], tX1[1], tY1[1], tX2[1], tY2[1], tX2[0], tY2[0]);
         const bA = TEX.bank ? ta * farA(j, BANK_J, 4) * (1 - snowAmt) * clamp((Math.abs(tX1[0] - tX1[1]) + tY1[0] - tY1[1] - 3) / 3, 0, 1) : 0, bh0 = bankH(i, side);   // 切面在畫面上不到幾像素時慢慢淡掉
