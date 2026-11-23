@@ -40,16 +40,21 @@
 
   // ───────── API ─────────
   // 假伺服器（只有 FAKE 時用）：每次拿好友清單，大家本週的公里數都會變一點，看得出下拉更新有重新拿
-  let fakeN = 0, fakeQ = null, fakeMine = [];
+  let fakeN = 0, fakeQ = null, fakeMine = []; const fakeGone = [];   // 假伺服器：被移除的好友、假的入園名額
   const FAKE_MS = +(location.search.match(/[?&]fakems=(\d+)/) || [])[1] || 800;   // 網址加 &fakems=8000：假伺服器要等 8 秒才回，慢慢看骨架畫面
   const FAKE_PICS = ['scene_descend', 'summit_alishan', 'summit_hehuan', 'summit_jiaming'];
   async function fakeApi(path, opt){
     await new Promise(r => setTimeout(r, FAKE_MS));   // 假裝網路要等一下（只有開發測試會走到這裡）
     const q = new URLSearchParams(path.split('?')[1] || ''), p = path.split('?')[0];
-    if (p === '/friends' && !opt.body) { fakeN++; return { friends: [
-      { id: 'f1', name: '阿山', online: true, mountain: 'xiangshan', dist: 820 + fakeN * 40, week: 5200 + fakeN * 130 },
-      { id: 'f2', name: '小溪', online: false, week: 1200 + fakeN * 20 },
-      { id: 'f3', name: '雲雀', online: true, week: 9800 + fakeN * 60 }] }; }
+    if (p === '/friends' && !opt.body) { fakeN++; const MIN = 60e3, H = 60 * MIN, D = 24 * H; return { max: 999, friends: [
+      { id: 'f1', name: '阿山', ago: 20e3, mountain: 'xiangshan', dist: 820 + fakeN * 40, week: 5200 + fakeN * 130 },
+      { id: 'f2', name: '小溪', ago: 12 * MIN, week: 1200 + fakeN * 20 },
+      { id: 'f3', name: '雲雀', ago: 2 * MIN, week: 9800 + fakeN * 60 },
+      { id: 'f4', name: '大雪', ago: 3 * H, week: 800 },
+      { id: 'f5', name: '阿水', ago: 30 * H, week: 400 },
+      { id: 'f6', name: '小石', ago: 5 * D, week: 300 },
+      { id: 'f7', name: '老楊', ago: 45 * D, week: 0 }].filter(x => !fakeGone.includes(x.id)) }; }
+    if (p.startsWith('/friends/') && opt.method === 'DELETE') { fakeGone.push(p.slice(9)); return { ok: true }; }
     if (p === '/friends') return { friend: { name: '新朋友' } };
     if (p === '/invites') return { invites: [] };
     if (p === '/me') return opt.body ? { week: 3400 + fakeN * 50, name: acct.name } : acct;
@@ -137,7 +142,7 @@
 
   // ───────── 大廳畫面 ─────────
   let netReady = false;   // 好友、邀請第一次從伺服器拿回來了沒（還沒就先放骨架畫面）
-  let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], invites = [], plazaNo = 0, sayMax = 40, logOpen = false, chatHid = false;   // chatHid：廣場聊天框收起來，只剩一顆「聊天」小牌
+  let tab = 'plaza', lobby = null, msgs = [], people = [], friends = [], friendMax = 0, friendsAt = 0, invites = [], plazaNo = 0, sayMax = 40, logOpen = false, chatHid = false;   // chatHid：廣場聊天框收起來，只剩一顆「聊天」小牌
   const PZ = () => SX.plaza;
   // 還沒有帳號：大廳裡面放一張「取暱稱」的木牌卡（不用蓋住整個畫面的彈出視窗，上面的「← 地圖」永遠按得到）
   // 不想取名字可以按「先不要」回地圖，之後想來再來。取好暱稱就直接進大廳開始玩（不跳復原碼卡，換手機的方法收在「我的帳號」）
@@ -252,7 +257,7 @@
     if (!acct) return;
     try {
       const [f, i] = await Promise.all([api('/friends'), api('/invites')]);   // 我的本週公里數（/me）由 report 每分鐘拿，這裡不重複拿
-      friends = f.friends || []; invites = i.invites || [];
+      friends = f.friends || []; friendMax = f.max || 0; friendsAt = Date.now(); invites = i.invites || [];
       checkParty();
       if (tab === 'friends') renderFriends();
       updateBadge();
@@ -321,6 +326,28 @@
       try { await api('/invites', { json: { friend: p.id, mountain: $('#pcMt').value } }); toast('邀請送出了，對方接受後就能一起爬'); $('#modal').classList.remove('on'); refresh(); } catch(e){ toast(e.message, 3000); }
     };
   }
+  // 好友多久以前在線（ago＝伺服器回的毫秒數，再加上拿到之後過了多久）
+  const ONLINE_AGO = 5 * 60e3;
+  const agoOf = f => (f.ago || 0) + (Date.now() - friendsAt);
+  function agoText(ms){
+    const m = Math.floor(ms / 60e3), h = Math.floor(ms / 36e5), d = Math.floor(ms / 864e5);
+    return ms < ONLINE_AGO ? '在線上' : m < 60 ? `${m} 分鐘前` : h < 24 ? `${h} 小時前` : d < 2 ? '昨天' : d <= 30 ? `${d} 天前` : '好久不見';
+  }
+  // 移除好友：先問一下；伺服器兩邊一起刪，兩人之間還沒回覆的邀請也取消，已經在一起爬的隊伍不受影響
+  function removeCard(f){
+    const mc = $('#mCard'); $('#modal').classList.add('on');
+    mc.innerHTML = `<h3>移除好友</h3><p class="summitBig">要把${esc(f.name)}從好友移除嗎？</p>
+      <div class="mBtns"><button class="cbtn" id="rmX">先不要</button><button class="cbtn red" id="rmOk">移除</button></div>`;
+    $('#rmX').onclick = () => $('#modal').classList.remove('on');
+    $('#rmOk').onclick = async () => {
+      $('#rmOk').disabled = true;
+      try {
+        await api('/friends/' + f.id, { method: 'DELETE' });
+        friends = friends.filter(x => x.id !== f.id); invites = invites.filter(v => !(v.status === 'pending' && (v.host === f.id || v.guest === f.id)));
+        $('#modal').classList.remove('on'); toast(`已把${f.name}從好友移除`); renderFriends(); updateBadge(); refresh();
+      } catch(e){ toast(e.message, 3000); $('#rmOk').disabled = false; }
+    };
+  }
   function renderFriends(){
     const body = $('#lobbyBody'); if (!body) return;
     if (!netReady) { body.innerHTML = `<div class="setRow">${MO.skeleton(1, 40)}</div><div class="setRow">${MO.skeleton(3, 34)}</div>`; return; }
@@ -337,15 +364,16 @@
       ${friends.length ? `<div class="setRow"><h4>本週誰走最多</h4>${[{ id: acct.id, name: acct.name + '（我）', week: myWeek }, ...friends].sort((a, b) => (b.week || 0) - (a.week || 0)).slice(0, 10)
         .map((p, i) => `<div class="rankRow${p.id === acct.id ? ' me' : ''}"><i>${i + 1}</i><b>${esc(p.name)}</b><span>${((p.week || 0) / 1000).toFixed(1)} km</span></div>`).join('')}
         <p class="tiny">每週一凌晨重新計算。</p></div>` : ''}
-      <div class="setRow"><h4>好友（${friends.length}）</h4>
-        ${friends.length ? friends.map(f => `<div class="frRow"><span><i class="dot${f.online ? ' on' : ''}"></i><b>${esc(f.name)}</b>
-          <small>${f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : (f.online ? '在線上' : '休息中')}</small></span>
-          <span><select data-sel="${f.id}">${opts}</select><button class="cbtn sm" data-inv="${f.id}">邀請</button></span></div>`).join('')
+      <div class="setRow"><h4>好友（${friends.length}${friendMax ? ` / ${friendMax}` : ''}）</h4>
+        ${friends.length ? [...friends].sort((a, b) => agoOf(a) - agoOf(b)).map(f => { const on = agoOf(f) < ONLINE_AGO; return `<div class="frRow"><span><i class="dot${on ? ' on' : ''}"></i><b>${esc(f.name)}</b>
+          <small>${on && f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : agoText(agoOf(f))}<button class="frDel" data-del="${f.id}">刪除</button></small></span>
+          <span><select data-sel="${f.id}">${opts}</select><button class="cbtn sm" data-inv="${f.id}">邀請</button></span></div>`; }).join('')
         : '<p>還沒有好友，先把好友碼傳給朋友吧。</p>'}</div>`;
     $('#addF').onsubmit = async e => { e.preventDefault(); const v = $('#fcIn').value.trim(); if (!v) return;
       try { const d = await api('/friends', { json: { code: v } }); toast(`和 ${d.friend.name} 成為好友了！`); if (A().sparkle) A().sparkle(); refresh(); } catch(err){ toast(err.message, 3000); } };
     $$('[data-inv]').forEach(b => b.onclick = async () => { const fid = b.dataset.inv, mt = $(`[data-sel="${fid}"]`).value;
       try { await api('/invites', { json: { friend: fid, mountain: mt } }); toast('邀請送出了，對方接受後就能一起爬'); refresh(); } catch(err){ toast(err.message, 3000); } });
+    $$('[data-del]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.del); if (f) removeCard(f); });
     $$('[data-acc]').forEach(b => b.onclick = () => answer(b.dataset.acc, true));
     $$('[data-dec]').forEach(b => b.onclick = () => answer(b.dataset.dec, false));
     if ($('#pGo')) $('#pGo').onclick = () => { if (G().startClimb) G().startClimb(party.mountain); };

@@ -60,7 +60,24 @@
       for (const k in SV.encSeen) if (!ENID.has(k)) delete SV.encSeen[k];
     }
   } catch(e){ SV = blank(); }
-  SX.fitDone = () => SV.done;   // 體能（data.js 的 SX.fitness）從這份存檔的登頂次數算，登山客的步速跟著變
+  SX.fitSave = () => SV;   // 體能（data.js 的 SX.fitness）從這份存檔算（登頂次數、算數的重複次數、狀態），登山客的步速跟著變
+  // 體能欄位：舊存檔沒有算數的重複次數，把以前重複登頂的次數照舊算進去（最多 20，不套每天一次）；狀態從 100% 開始
+  if (!SV.fitRep || typeof SV.fitRep !== 'object') { SV.fitRep = {}; for (const id in SV.done) if (SX.M[id] && SV.done[id] > 0) SV.fitRep[id] = Math.min(SX.FIT.REPEAT_MAX, SV.done[id] - 1); }
+  if (!SV.fitDay || typeof SV.fitDay !== 'object') SV.fitDay = {};
+  SV.cond = SX.fitCond(SV);
+  if (!SV.fitWalk || typeof SV.fitWalk !== 'object') SV.fitWalk = { day:'', m:0, rec:'' };   // 今天親自走了幾公尺、哪天已經恢復過
+  // 每天打開一次：離上次打開超過 7 整天就掉狀態。要在離線補走之前做，補走才用新的體能算
+  let fitDecayed = false;
+  function fitOpen(){
+    const t = SX.twDay();
+    if (SV.lastSeen === t) return;
+    if (SV.lastSeen) {
+      const away = Math.round((Date.parse(t) - Date.parse(SV.lastSeen)) / 864e5), c = SX.fitDecay(SX.fitCond(SV), away);
+      if (c < SX.fitCond(SV) - 1e-9) { SV.cond = c; fitDecayed = true; }
+    }
+    SV.lastSeen = t;
+  }
+  fitOpen();
   // 舊存檔沒有開始日：用存檔裡最早的日期（集印、寶物、奇遇、照片），都沒有就是今天
   if (!SV.born) { const ds = [...Object.values(SV.stamps), ...Object.values(SV.bagLog).map(x => x && x.first), ...Object.values(SV.encSeen).map(x => x && x.first), ...SV.photos.map(p => p.date)].filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d)); SV.born = ds.length ? new Date(Math.min(...ds)).toLocaleDateString('zh-TW') : today(); }
   let saveWarned = false;
@@ -121,6 +138,8 @@
     if (!noticeQ.length || (L && !L.classList.contains('done')) || diary || $('#modal').classList.contains('on') || $('#toast').classList.contains('on')) return;
     const [msg, ms] = noticeQ.shift(); toast(msg, ms);
   }
+  function fitNotice(){ if (!fitDecayed) return; fitDecayed = false; notice('好久沒運動，體能掉了一點，多爬幾趟就會回來', 3600); }
+  fitNotice();
   $('#toast').addEventListener('transitionend', e => { if (e.propertyName === 'opacity' && !e.target.classList.contains('on')) pumpNotice(); });
   // 動態效果（漣漪、星星、花瓣、交錯出場…）都在 js/motion.js；這裡只記最後點的位置，出發時的圓形展開從那裡開始
   let lastTap = { x: 0, y: 0 };
@@ -486,6 +505,13 @@
     return Math.max(0, altAt(m, f) - 500) / 3500 * 0.5 + (w.time === 'night' ? 0.35 : w.time === 'dawn' ? 0.15 : 0)
       + (w.kind === 'snow' ? 0.6 : w.kind === 'rain' ? 0.4 : w.kind === 'fog' ? 0.2 : 0) + (m.theme.alpine || m.theme.snow ? 0.2 : 0);
   }
+  // 親自看著走（不含離線補走）：今天累積走滿 500 公尺，狀態恢復一點（每天一次）
+  function fitWalk(d){
+    const t = SX.twDay(), w = SV.fitWalk;
+    if (w.day !== t) { w.day = t; w.m = 0; }
+    w.m += d;
+    if (w.m >= SX.FIT.RECOVER_M && w.rec !== t) { w.rec = t; SV.cond = SX.fitRecover(SX.fitCond(SV)); }
+  }
   // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）；dry：只是試算（不記里程、不算每日任務）
   function simulate(p, m, dt, boost, offline, dry, pace){   // pace：登山畫面的步態給的速度倍率（累了慢走、停下來喝水時 0），離線補走不用
     if (p.sleep) { p.stam = Math.min(100, p.stam + NAP * dt); p.temp = Math.min(100, p.temp + 2 * dt); if (p.stam >= 60 && p.temp >= 50) p.sleep = false; return 0; }
@@ -495,7 +521,8 @@
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
     if (p.stopAt != null && p.stopAt - 1 - p.dist <= d) { d = Math.max(0, p.stopAt - 1 - p.dist); stop = true; }
-    p.dist += d; if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) { daily('walk', d); SV.stats.walkSec = (SV.stats.walkSec || 0) + dt; } } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
+    p.dist += d; if (!dry && !offline) fitWalk(d);
+    if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) { daily('walk', d); SV.stats.walkSec = (SV.stats.walkSec || 0) + dt; } } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
     p.temp = clamp(p.temp + ((boost ? 0.15 : 0) - chill(m, p.dist / m.dist, wx) * 0.08) * dt, 0, 100);
     if (stop) { p.rest = true; p.stopAt = null; p.stam = Math.max(0, p.stam); return d; }
     if (p.stam <= 0 || p.temp <= 0) { p.stam = Math.max(0, p.stam); p.sleep = true; }
@@ -1351,7 +1378,7 @@
     const hm = sec >= 3600 ? `${Math.floor(sec / 3600)} 小時 ${Math.floor(sec % 3600 / 60)} 分` : `${Math.floor(sec / 60)} 分`;
     const bTot = SX.BADGES.reduce((a, b) => a + badgeLevels(b).length, 0), bGot = SX.BADGES.reduce((a, b) => a + badgeGot(b), 0);
     const row = (name, n, tot) => `<div class="pfRow"><span>${name}</span><div class="dyBar"><i style="width:${tot ? Math.min(100, n / tot * 100) : 0}%"></i></div><b>${n} / ${tot}</b></div>`;
-    const fit = SX.fitness(SV.done);
+    const fit = SX.fitness(SV), cond = SX.fitCond(SV), fitTxt = cond < 1 - 1e-9 ? `${fit.toFixed(3)}（狀態 ${Math.round(cond * 100)}%）` : fit.toFixed(3);
     const who = (SX.social && SX.social.acct && SX.social.acct.name) || '山友';
     modal(`<button class="cbtn sm mBack" id="pfX">← 返回</button><h3>我的山行紀錄</h3>
       <div class="pfHead">${petSvg(SV.pet)}<div><b>${who}</b>${SV.title ? `<small>${SV.title}</small>` : ''}<small>${SV.born} 開始登山・第 ${days} 天</small></div></div>
@@ -1363,7 +1390,7 @@
         <div class="paper"><small>連續上山</small><b>${(SV.daily && SV.daily.streak) || 0} 天</b></div>
         <div class="paper"><small>最長連續</small><b>${Math.max(S.bestStreak || 0, (SV.daily && SV.daily.streak) || 0)} 天</b></div>
       </div>
-      <div class="paper pfFit"><small>體能</small><b>${fit.toFixed(3)}</b><div class="dyBar"><i style="width:${(fit - 1) / (SX.FIT.MAX - 1) * 100}%"></i></div><p>每次登頂都會讓身體慢慢變強，越難的山第一次登頂加得越多</p></div>
+      <div class="paper pfFit"><small>體能</small><b>${fitTxt}</b><div class="dyBar"><i style="width:${(fit - 1) / (SX.FIT.MAX - 1) * 100}%"></i></div><p>每次登頂都會讓身體慢慢變強，越難的山第一次登頂加得越多；太久沒爬山，體能會慢慢掉一點，多爬幾趟就會回來</p></div>
       <div class="grp">成就</div>
       ${row('徽章', bGot, bTot)}
       ${row('寶物', SX.TREASURES.filter(x => SV.bag[x.id] > 0).length, SX.TREASURES.length)}
@@ -1378,9 +1405,10 @@
   function arrive(){
     arrived = true; st.dist = M.dist; st.fin = true; st.rest = false; st.stopAt = null;
     $('#restSheet').classList.remove('on');
-    const fit0 = SX.fitness(SV.done);
+    const fit0 = SX.fitness(SV), day = SX.twDay();
+    if (SV.done[M.id] > 0 && SX.fitCanCount(SV, M.id, day)) { SV.fitRep[M.id] = (SV.fitRep[M.id] || 0) + 1; SV.fitDay[M.id] = day; }
     SV.done[M.id] = (SV.done[M.id] || 0) + 1;
-    const fit1 = SX.fitness(SV.done), fitUp = fit1 - fit0 > 1e-9 ? `體能 +${(fit1 - fit0).toFixed(3)}（${fit1.toFixed(3)}）` : '';
+    const fit1 = SX.fitness(SV), fitUp = fit1 - fit0 > 1e-9 ? `體能 +${(fit1 - fit0).toFixed(3)}（${fit1.toFixed(3)}）` : '';
     SV.stamps[M.id] = SV.stamps[M.id] || today();
     const S = SV.stats; if (wx.time === 'night') S.night++; if (wx.kind === 'rain') S.rain++; if (!st.fast) S.nofast++;
     if (SX.social && SX.social.party && SX.social.party.mountain === M.id) S.withFriends = (S.withFriends || 0) + 1;
@@ -1490,7 +1518,7 @@
   setInterval(() => { if (st && !document.hidden) save(); }, 10000);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { ptrHold = false; keyHold = false; if (st && screen === 'climb' && !paused && !arrived) st.last = Date.now(); save(); A.setOn(false); }
-    else { catchUp(); A.setOn(SV.set.sound); checkNewVersion(); }
+    else { fitOpen(); fitNotice(); catchUp(); A.setOn(SV.set.sound); checkNewVersion(); }
   });
   // 有新版就自動換上：從主畫面打開的 App（iPhone）會一直留在背景，切回來只是接著跑舊的頁面、不會重新載入，
   // 所以回到前景時（和開著的時候每 10 分鐘）問一次網站現在是第幾版（sw.js 的 CACHE 名字，跟 index.html 的 ?v= 一起加一），
