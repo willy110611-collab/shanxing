@@ -15,11 +15,12 @@ const PLAZA_ART_TOP = 0.635;   // plaza_bg 美術圖：石板地上緣（山門�
 // 打招呼動作：k 是連線用的代號，ms 是動作長度（坐下會一直坐到下次走動）
 // 圖示美術圖是 'emo_' + k；pose 是做動作時換上的背影美術圖，poseCm 是那張圖整張要畫多高（公分，圖裡舉高的手也算進去，人才跟走路時一樣高）
 P.EMO = [
-  { k:'wave',  label:'揮手', icon:'👋', ms:2200, pose:'hiker_wave',  poseCm:181 },
-  { k:'bow',   label:'鞠躬', icon:'🙇', ms:1600, pose:'hiker_bow',   poseCm:176 },
-  { k:'jump',  label:'跳一下', icon:'✨', ms:1100 },
-  { k:'sit',   label:'坐下', icon:'☕', ms:0 },
-  { k:'cheer', label:'歡呼', icon:'🎉', ms:2200, pose:'hiker_cheer', poseCm:186 },
+// front、side：面向鏡頭、往旁邊時換的美術圖 [名字, 整張多高公分]；anim：這張是幾格的動作（照動作長度播完）
+  { k:'wave',  label:'揮手', icon:'👋', ms:2200, pose:'hiker_wave',  poseCm:181, front:['hiker_front_wave', 186], side:['hiker_side_wave', 186] },
+  { k:'bow',   label:'鞠躬', icon:'🙇', ms:1600, pose:'hiker_bow',   poseCm:176, front:['hiker_front_bow', 170], side:['hiker_side_bow', 160] },
+  { k:'jump',  label:'跳一下', icon:'✨', ms:1100, pose:'hiker_hop4', poseCm:182, anim:4, front:['hiker_front_jump4', 182], side:['hiker_side_jump4', 182] },
+  { k:'sit',   label:'坐下', icon:'☕', ms:0, pose:'hiker_back_sit', poseCm:120, front:['hiker_front_sit', 128], side:['hiker_side_sit', 120] },
+  { k:'cheer', label:'歡呼', icon:'🎉', ms:2200, pose:'hiker_cheer', poseCm:186, front:['hiker_front_cheer', 190], side:['hiker_side_cheer', 190] },
 ];
 const EMO = {}; P.EMO.forEach(e => EMO[e.k] = e);
 P.emoArt = k => 'emo_' + k;     // 動作圖示的美術圖名字（選單按鈕也用這個）
@@ -27,6 +28,12 @@ const ICON_PX = 24;             // 名牌旁動作圖示的大小
 const icons = {};               // 動作圖示：裁好的美術圖（第一次用到才裁）
 function emoIcon(k){ if (!icons[k] && SX.art) { const c = SX.art.crop(P.emoArt(k), 0); if (c) icons[k] = c; } return icons[k] || null; }
 
+// 動作要畫哪一張：面向鏡頭用 front、往旁邊用 side、背對用原本的 pose；anim 的照時間挑第幾格；沒有圖回 null（用程式動作）
+function poseOf(e, face, et){
+  const a = face === 'front' ? e.front : face === 'side' ? e.side : null, id = a ? a[0] : e.pose, cm = a ? a[1] : e.poseCm;
+  if (!id || !SX.art || !SX.art.get(id)) return null;
+  return { id, cm, i: e.anim ? Math.min(e.anim - 1, Math.floor((e.ms ? et / e.ms : 0) * e.anim)) : 0 };
+}
 let host = null, cv = null, ctx = null, W = 0, H = 0, DPR = 1, BG = null, raf = 0, last = 0, ro = null;
 let me = null, opt = {}, ppl = new Map(), taps = [];
 let gT = 0, gB = 0, bu = 1;   // 廣場地面上緣、下緣（螢幕 y），角色基本比例
@@ -209,7 +216,7 @@ function loop(now){
     let hop = 0, sq = 1, sway = 0;
     const e = p.emo, et = e ? now - p.emoT : 0;
     if (e && e.ms && et > e.ms) p.emo = null;
-    const pose = p.emo && p.emo.pose && SX.art && SX.art.get(p.emo.pose) ? p.emo : null;   // 有動作美術圖就換上，沒有才用程式動作
+    const pose = p.emo ? poseOf(p.emo, p.face || 'front', et) : null;   // 有動作美術圖（照面向挑正面、側面、背面）就換上，沒有才用程式動作
     if (p.emo && !pose) {
       const q = et / (e.ms || 1);
       if (e.k === 'jump') hop = Math.abs(Math.sin(q * Math.PI * 2)) * 26;
@@ -219,7 +226,7 @@ function loop(now){
     }
     // 打招呼的動作圖也交給 drawPerson 畫（寵物、影子、衣服色調都同一套）
     ctx.save(); ctx.translate(s.sx, s.sy); ctx.rotate(sway); ctx.scale(1, sq); ctx.translate(-s.sx, -s.sy - hop * s.u);
-    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:PLAZA_PETS ? p.pet : null, flip:p.flip, face:p.face || 'front', pose:pose ? { id:pose.pose, cm:pose.poseCm } : null }, t) : 182;
+    const headCm = SX.scene && SX.scene.drawPerson ? SX.scene.drawPerson(ctx, s.sx, s.sy, s.u, { ph:p.ph, mv:p.mv, sit:p.sit, tint:p.tint, pet:PLAZA_PETS ? p.pet : null, flip:p.flip, face:p.face || 'front', pose }, t) : 182;
     ctx.restore();
     labels.push({ p, x:s.sx, y:s.sy - (headCm * sq + hop) * s.u - 6 });
   }

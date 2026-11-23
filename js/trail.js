@@ -2138,7 +2138,7 @@ S.drawPerson = function(c, X, Y, u, p, t){
     c.save(); c.translate(X, Y); c.scale(p.flip ? -u : u, u);
     const fl = p.tint >= 0 ? tintFilter(p.tint) : undefined, s = { rest:!!p.sit, face:p.face };   // 美術圖版本：換衣服色調
     // p.pose：{ id, cm } 廣場打招呼的動作美術圖（揮手、鞠躬、歡呼），寵物和影子照樣畫
-    const posed = p.pose && ART.get(p.pose.id) ? ART.drawFrame(c, p.pose.id, 0, 0, 0, p.pose.cm, false, fl) : false;
+    const posed = p.pose && ART.get(p.pose.id) ? ART.drawFrame(c, p.pose.id, p.pose.i || 0, 0, 0, p.pose.cm, false, fl) : false;
     const drawn = posed || heroArt(c, s, t, fl);
     if (!drawn) { if (p.sit) heroRest(c, t); else heroWalk(c, t); }
     c.restore();
