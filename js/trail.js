@@ -1893,9 +1893,10 @@ function drawHero(s, t, bx, by, bs){
   else footShadow(X, Y, u, sw, sh, SCALE.hero * 100, LOOK.shadow.hero, jhG);   // 跟著太陽拉長，比一般影子深一點
   if (!sit) ctx.drawImage(CONTACT, X - 26 * u, Y - 6 * u, 48 * u, 11 * u);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u * (1 - 0.05 * hero.stair * hero.mv));   // 爬階梯：身體往前傾，從背後看起來矮一點點
+  heroDapUpd(t);   // 森林裡地上的光斑走到身上（只有自己）
   if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
   ctx.restore();
-  LIT.on = false;
+  LIT.on = false; LIT.dap = 0;
 }
 
 // 給登山口廣場用：在別的畫布 c 的 (X, Y) 腳底畫一個登山客（u：每公分幾像素）
@@ -3157,7 +3158,36 @@ function artFrame(c, id, i, cx, by, h, flip, fl){
   c.globalAlpha = a0; c.globalCompositeOperation = g0;
   return true;
 }
-function heroDapple(){}
+// 人身上的光斑：光線貼圖第 3 組（暖色剪影）只貼這一格的一小塊（三層由大到小疊成柔邊），所以只亮在人身上；位置 LIT.du、LIT.dv（0～1）
+const DAP_P = [[0.42, 0.2], [0.3, 0.13], [0.18, 0.07]], DAP_R = [0, 0, 0, 0];
+function heroDapple(c, id, i, cx, by, h, flip, L, a0){
+  const u = ART.mirrored(id, i, flip) ? 1 - LIT.du : LIT.du, v = LIT.dv;
+  c.globalCompositeOperation = 'lighter';
+  for (let k = 0; k < DAP_P.length; k++) {
+    const p = DAP_P[k];
+    DAP_R[0] = clamp(u - p[0], 0, 1); DAP_R[1] = clamp(v - p[1], 0, 1); DAP_R[2] = clamp(u + p[0], 0, 1); DAP_R[3] = clamp(v + p[1], 0, 1);
+    if (DAP_R[2] - DAP_R[0] < 0.02 || DAP_R[3] - DAP_R[1] < 0.02) continue;
+    c.globalAlpha = a0 * LIT.dap / DAP_P.length; ART.drawOver(c, id, i, cx, by, h, flip, L.c, L.rh * 3, L.k, DAP_R);
+  }
+}
+// 地上的光斑（groundLight 第二部分，同一組亂數）走到登山客身上：在光斑前後 LOOK.dapple.span 公尺內，光從頭頂滑到腳底；左右照光斑在路上的位置
+function heroDapUpd(t){
+  LIT.dap = 0;
+  if (!LOOK.q.dapple[qs.lvl] || isNight || isRain || isFog || isSnow || TH.alpine) return;
+  const lightA = clamp((sunVis - 0.3) / 0.5, 0, 1) * (1 - qs.light), D = LOOK.dapple, hd = (bG + jhG + fhG) * SEG;
+  if (lightA < 0.01) return;
+  for (let i = bG + jhG - 1; i <= bG + jhG + 1; i++) {
+    const da = clamp((wallAt(i) - 0.5) * 3, 0, 1); if (da < 0.01) continue;
+    for (let q = 0; q < 2; q++) {
+      if (Hh(i, 420 + q) > 0.4) continue;
+      const p = (hd - (i + Hh(i, 422 + q)) * SEG) / D.span + 0.5; if (p <= 0 || p >= 1) continue;
+      const k = lightA * da * Math.sin(p * Math.PI) * (0.8 + 0.2 * Math.sin(t * 0.8 + Hh(i, 426 + q) * TAU));
+      if (k * D.a <= LIT.dap) continue;
+      LIT.dap = k * D.a; LIT.dv = p;
+      LIT.du = clamp(0.5 + ((Hh(i, 424 + q) - 0.5) * 1.8 * rwAt(i) - TURN_X * hero.turn) / 0.9, 0.15, 0.85);   // 光斑離登山客左右多遠（人約 0.9 公尺寬）
+    }
+  }
+}
 
 // ═════════ 主繪製 ═════════
 S.render = function(s){
