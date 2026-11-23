@@ -267,6 +267,19 @@
   function pop(el, delay = 0){
     return run(el, calm() ? [{ opacity:0 }, { opacity:1 }] : [{ transform:'scale(0)' }, { transform:'scale(1.3)', offset:.55 }, { transform:'scale(1)' }], { duration:calm() ? 180 : 520, delay, easing:calm() ? EASE : 'cubic-bezier(.3,1.2,.5,1)', fill:'backwards' });
   }
+  // 換版面（登山狀態面板精簡／展開）：舊的樣子輕輕縮小淡出 → change() 換好 → 新的樣子從上面落下淡入；
+  // 不用 FLIP 拉伸，字不會被壓扁。減少動態時只淡出淡入。播放中再按一次不會重疊
+  function morph(els, change){
+    els = els.filter(Boolean);
+    if (els.some(e => e._mMorph)) return Promise.resolve(false);
+    const c = calm(), outK = c ? [{ opacity:1 }, { opacity:0 }] : [{ opacity:1, transform:'none' }, { opacity:0, transform:'scale(.94)' }];
+    const inK = c ? [{ opacity:0 }, { opacity:1 }] : [{ opacity:0, transform:'translateY(-6px) scale(.97)' }, { opacity:1, transform:'none' }];
+    els.forEach(e => { e._mMorph = true; });
+    return Promise.all(els.map(e => run(e, outK, { duration:c ? 90 : 110, fill:'forwards' }))).then(outs => {
+      change();
+      return Promise.all(els.map((e, i) => { const p = run(e, inK, { duration:c ? 140 : 240, easing:c ? EASE : SPRING }); if (outs[i]) outs[i].cancel(); return p; }));
+    }).then(() => { els.forEach(e => { e._mMorph = false; }); return true; });
+  }
   // 開關：底圖交叉淡換（css），木牌輕輕彈一下
   function toggle(btn, on){
     if (!btn) return;
@@ -335,5 +348,5 @@
   // 換到另一張以後（減少動態時沒有滑動），新的那張淡入
   function viewSwap(el){ return calm() ? run(el, [{ opacity:0 }, { opacity:1 }], { duration:160 }) : Promise.resolve(null); }
 
-  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, toggle, viewOpen, viewClose, viewSwap, settle, pager };
+  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager };
 })();

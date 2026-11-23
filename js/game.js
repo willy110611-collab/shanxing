@@ -27,7 +27,7 @@
     gifts:{},   // 新手禮物送過了沒：{ 代號: 日期 }（代號見 FIRST_GIFTS）
     likes:{},   // 看大圖時按了「我喜歡」的照片：{ 照片代號: 時間 }（自己的記號：不會告訴拍照的人、別人看不到；有帳號時只跟著自己的雲端存檔備份）
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, snowTop:0, bestStreak:0, walkSec:0 },   // walkSec：真的在走的秒數（個人紀錄用）
-    set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false, clean:false } });
+    set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false, clean:false, hudFull:false } });   // hudFull：登山狀態面板展開成完整的（平常精簡一排）
   let SV = blank();
   // 新手禮物：第一次登頂（summit）、第一次領每日獎勵（daily）、第一次連續上山 3 天簽到（streak3），各保證一件還沒有的寶物，值是稀有度
   const FIRST_GIFTS = { summit:'稀有', daily:'普通', streak3:'稀有' };
@@ -1362,6 +1362,11 @@
 
   // ───────── HUD ─────────
   try { HUD.mount($('#hudRoot')); } catch(e){ console.error('hud', e); }
+  // 狀態面板：平常精簡一排（山名＋高度），點面板（臉以外）展開看體力、體溫、距離、時間，再點收回；記在 SV.set.hudFull
+  HUD.setFull(!!SV.set.hudFull);
+  const flipHud = () => { A.pop(); MO.morph(['.hudP', '.radarBox', '#partyBox.on'].map(s => $(s)), () => { SV.set.hudFull = !SV.set.hudFull; HUD.setFull(SV.set.hudFull); save(); }); };
+  $('#hudRoot').addEventListener('click', e => { if (e.target.closest('.hudP') && !e.target.closest('.hudFace')) flipHud(); });
+  $('#hudRoot').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('hudP')) { e.preventDefault(); flipHud(); } });
   // 個人紀錄的入口：登山畫面點自己的臉、地圖點左上標題
   document.addEventListener('click', e => { if (e.target.closest('.hudFace') || e.target.closest('#scrMap .logo')) { A.pop(); openProfile(); } });
   { const bag = $('.i-bag'); if (bag) bag.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'><path d='M10 7c0-6 10-6 10 0' fill='none' stroke='${INK}' stroke-width='2'/><rect x='6' y='6.5' width='18' height='17.5' rx='5' fill='#f0a444' stroke='${INK}' stroke-width='2'/><path d='M6 12h18' stroke='${INK}' stroke-width='1.4'/><rect x='10' y='14.5' width='10' height='6.5' rx='2' fill='#ffe1a0' stroke='${INK}' stroke-width='1.6'/></svg>`) + '")'; }

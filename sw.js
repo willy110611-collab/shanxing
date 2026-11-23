@@ -1,14 +1,26 @@
 // 山行小日子：離線快取。程式與頁面「先抓網路、失敗才用快取」，所以更新會馬上生效；音樂圖示則先用快取。
-// 兩個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
+// 三個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
 // 玩家只會下載有換過的圖和新圖（美術圖網址帶 ?v=檔案指紋，圖換了網址才會變）。
-const CACHE = 'shanxing-v93';
+// FONT_CACHE 放手寫字型（fonts/ 底下，檔名帶內容指紋，由 tools/fonts.js 產生），一樣永遠不變名字，改版時只補新檔、清掉沒用的舊檔。
+const CACHE = 'shanxing-v94';
 const ART_CACHE = 'shanxing-art';
+const FONT_CACHE = 'shanxing-fonts';
 const isArt = u => /\/(audio|art)\//.test(u.pathname) && !/manifest\.json$/.test(u.pathname);
+const isFont = u => /\/fonts\/[^/]+\.woff2$/.test(u.pathname);
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== ART_CACHE).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()).then(() => pruneArt().catch(() => {})));   // 先接手畫面，整理快取慢慢做，網路慢也不會卡住
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== ART_CACHE && k !== FONT_CACHE).map(k => caches.delete(k))))
+    .then(() => self.clients.claim()).then(() => Promise.all([pruneArt().catch(() => {}), syncFonts().catch(() => {})])));   // 先接手畫面，整理快取慢慢做，網路慢也不會卡住
 });
+// 字型快取：css/fonts.css 列著的字型檔全部先存好（沒顯示過的字離線也是手寫字），沒列著的舊檔清掉
+async function syncFonts(){
+  const css = await (await fetch('css/fonts.css', { cache:'no-store' })).text();
+  const want = new Set([...css.matchAll(/url\(\.\.\/(fonts\/[^)]+\.woff2)\)/g)].map(m => new URL(m[1], self.registration.scope).href));
+  if (!want.size) return;
+  const c = await caches.open(FONT_CACHE), have = new Set((await c.keys()).map(r => r.url));
+  for (const u of have) if (!want.has(u)) await c.delete(u);
+  for (const u of want) if (!have.has(u)) { const res = await fetch(u); if (res.ok && res.status === 200) await c.put(u, res); }
+}
 // 美術快取整理：art/ 只留這一版 manifest 還列著的網址（刪掉的圖、舊版的圖清掉）；
 // 聲音網址沒有版本號，改版時用 HEAD（不下載內容）問伺服器檔案有沒有換，換了才清掉、下次用到再下載
 async function pruneArt(){
@@ -35,6 +47,8 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET' || u.origin !== location.origin) return;
   if (isArt(u)) {
     e.respondWith(caches.open(ART_CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(res => { if (res.ok && res.status === 200) putArt(c, req, res.clone()).catch(() => {}); return res; }))));
+  } else if (isFont(u)) {
+    e.respondWith(caches.open(FONT_CACHE).then(c => c.match(req, { ignoreSearch:true }).then(hit => hit || fetch(req).then(res => { if (res.ok && res.status === 200) c.put(req.url.split('?')[0], res.clone()); return res; }))));
   } else if (/\/icons\//.test(u.pathname)) {
     e.respondWith(caches.open(CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(res => { if (res.ok && res.status === 200) c.put(req, res.clone()); return res; }))));
   } else {

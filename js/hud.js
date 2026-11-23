@@ -1,6 +1,8 @@
 /* 山行小日子 - 登山 HUD (手繪木框風)
-   window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt }
-   左上：表情臉 + 體力 + 體溫 + 高度跳動數字；右上：天氣圖示 + 圓形等高線雷達小地圖 */
+   window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt, setFull }
+   左上：表情臉 + 體力 + 體溫 + 高度跳動數字；右上：天氣圖示 + 圓形等高線雷達小地圖
+   平常是精簡一排（小臉＋山名＋高度，體力偏低時多一條小體力條），點面板展開成完整的（setFull）；
+   這一整排實際的高度寫進 #scrClimb 的 --hudB，隊友卡片排在它下面 */
 (function () {
   'use strict';
   window.SX = window.SX || {};
@@ -16,7 +18,8 @@
     route: null, marks: [], seed: 1,
     base: null, world: null, wx0: 0, wy0: 0,
     cum: null, pts: null, total: 1,
-    angle: null, lastF: -1, lastDraw: 0, dirty: true
+    angle: null, lastF: -1, lastDraw: 0, dirty: true,
+    full: false   // 狀態面板展開成完整的（存在 SV.set.hudFull）
   };
   const WORLD = 720, EXTENT = 500, K = 0.5, RS = 104; // 世界畫布 / 路線範圍 / 世界→CSS 縮放 / 雷達 CSS 尺寸
 
@@ -36,7 +39,10 @@
     const tempBar = mk('div', 'hudBar', '<span>體溫</span><div class="hbar warm"><i></i></div>');
     const alt = mk('div', 'hudAlt', '<span class="up">▲</span><span class="digits"></span><small>m</small>');
     const sub = mk('div', 'hudSub', '<span class="dd"></span><span class="ee"></span>');
-    [name, stamBar, tempBar, alt, sub].forEach(e => col.appendChild(e));
+    const dot = mk('div', 'hbar hudDot', '<i></i>');   // 精簡時的小體力條：只在體力偏低（黃、紅）時出現
+    dot.setAttribute('role', 'img');
+    [name, stamBar, tempBar, alt, dot, sub].forEach(e => col.appendChild(e));
+    panel.setAttribute('role', 'button'); panel.tabIndex = 0;
     panel.appendChild(face); panel.appendChild(col);
 
     const right = mk('div', 'hudR');
@@ -46,14 +52,26 @@
     container.appendChild(panel); container.appendChild(right);
 
     H.els = {
-      face, faceCv, name, stam: stamBar.querySelector('.hbar'), stamI: stamBar.querySelector('i'),
+      panel, face, faceCv, name, stam: stamBar.querySelector('.hbar'), stamI: stamBar.querySelector('i'), dot, dotI: dot.querySelector('i'),
       temp: tempBar.querySelector('.hbar'), tempI: tempBar.querySelector('i'),
       digits: alt.querySelector('.digits'), dd: sub.querySelector('.dd'), ee: sub.querySelector('.ee'),
       wxCv, rCv, rctx: rCv.getContext('2d'), wxWrap: wx
     };
     H.digits = []; H.altStr = ''; H.mood = null; H.wxKey = null; H.dirty = true;
+    // 隊友卡片的位置跟著這一整排（面板、小地圖）實際的高度走：精簡、展開、換畫面大小都對得上
+    if (window.ResizeObserver) new ResizeObserver(() => { if (container.offsetHeight) container.parentNode.style.setProperty('--hudB', container.offsetHeight + 'px'); }).observe(container);
+    setFull(H.full);
     drawFace('happy');
     if (H.world) drawRadar(0, true);
+  }
+
+  // 狀態面板：精簡一排（false）／完整（true）
+  function setFull(on) {
+    H.full = !!on;
+    if (!H.root) return;
+    H.root.classList.toggle('mini', !H.full);
+    H.els.panel.setAttribute('aria-expanded', H.full ? 'true' : 'false');
+    H.els.panel.setAttribute('aria-label', H.full ? '登山狀態（點一下收成一排）' : '登山狀態（點一下看體力、體溫、距離和時間）');
   }
 
   // 美術圖晚一點才載完：重畫一次臉
@@ -348,8 +366,10 @@
     const E = H.els;
     if (s.name != null && E.name.textContent !== s.name) E.name.textContent = s.name;
     if (s.stam != null) {
-      const v = clamp(s.stam, 0, 100), lv = barLevel(v); E.stamI.style.width = v + '%';
-      E.stam.classList.toggle('mid', lv === 'mid'); E.stam.classList.toggle('low', lv === 'low');
+      const v = clamp(s.stam, 0, 100), lv = barLevel(v);
+      for (const [bar, fill] of [[E.stam, E.stamI], [E.dot, E.dotI]]) { fill.style.width = v + '%'; bar.classList.toggle('mid', lv === 'mid'); bar.classList.toggle('low', lv === 'low'); }
+      const lbl = lv === 'low' ? '體力快沒了' : lv === 'mid' ? '體力剩一半以下' : '';
+      if (E.dot.getAttribute('aria-label') !== lbl) E.dot.setAttribute('aria-label', lbl);
     }
     if (s.temp != null) {
       // 體溫自己的冷暖顏色照舊（未滿 35% 藍色）；黃色只在還沒變冷時出現，紅色蓋過一切
@@ -369,5 +389,5 @@
     if (s.frac != null) drawRadar(s.frac, false);
   }
 
-  window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt };
+  window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt, setFull };
 })();
