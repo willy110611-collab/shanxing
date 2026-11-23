@@ -1,9 +1,10 @@
 // 山行小日子 — 步道視角渲染器（偽 3D 山徑 + 手繪墨線 + 賽璐璐上色）
-// 取代 js/scene.js，對外提供 window.SX.scene。不依賴其他檔案（需在 game.js 之前載入）。
+// 取代 js/scene.js，對外提供 window.SX.scene。光線設定讀 js/look.js（SX.look，要在這個檔之前載入），其他不依賴（需在 game.js 之前載入）。
 (function(){
 'use strict';
 const SX = window.SX = window.SX || {};
 const S = SX.scene = {};
+const LOOK = SX.look;   // 光線設定（飽和度、對比、逆光、輪廓光、影子方向、人身上的光斑、各級畫質開關）只寫在 js/look.js
 
 // ═════════ 常數與狀態 ═════════
 const INK = '#3a2a20', TAU = Math.PI * 2;
