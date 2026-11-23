@@ -1358,6 +1358,10 @@
     next.label = trs.length ? `下一件（還有 ${trs.length} 件）` : '收進背包';
     showTreasure(tr, next);
   }
+  // 連續上山的 7 天：走過的一天是一枚金色小山印章，還沒到的只有淡淡的虛線圈和日子；拿稀有寶物的那天（第 3、7 天）是禮物盒
+  const STREAK_PEAK = '<svg viewBox="0 0 20 20"><path d="M2 15.5 7.5 7l3 4.2L13 8.5l5 7z" fill="#fff8e6" stroke="#3a2a20" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.3 8.9 7.5 7l1.3 1.9" fill="none" stroke="#3a2a20" stroke-width="1.1"/></svg>';
+  const STREAK_GIFT = '<svg viewBox="0 0 20 20"><rect x="3.5" y="8" width="13" height="9" rx="1.5" fill="#fff8e6" stroke="#3a2a20" stroke-width="1.3"/><rect x="2.5" y="5.5" width="15" height="3.5" rx="1" fill="#fff8e6" stroke="#3a2a20" stroke-width="1.3"/><path d="M10 5.5V17M10 5.5C8 2.5 5.5 3.5 7 5.5M10 5.5c2-3 4.5-2 3 0" fill="none" stroke="#3a2a20" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  const streakDay = (i, on, big) => `<i class="${on ? 'on' : ''}${big ? ' big' : ''}">${big ? STREAK_GIFT : on ? STREAK_PEAK : `<span>${i}</span>`}</i>`;
   function openDaily(){
     const D = dailyState(), s = D.streak, wk = ((s - 1) % 7) + 1;
     const g3 = !SV.gifts.streak3 && s <= 3;   // 新手禮物：第一次連續上山 3 天，簽到送稀有寶物
@@ -1365,7 +1369,7 @@
     const tip = wk === 7 ? '第 7 天了，簽到拿稀有寶物！' : signKind === 'streak3' ? '連續 3 天了！今天簽到送一件稀有寶物' : g3 ? `再 ${3 - s} 天，簽到送一件稀有寶物` : `再 ${7 - wk} 天拿稀有寶物`;
     const nClaim = (D.streakGot ? 0 : 1) + D.tasks.filter(t => t.done && !t.got).length;   // 可以領的件數（一鍵領取用）
     modal(`<h3>每日任務</h3>
-      <div class="streakBox"><b>連續上山 ${s} 天</b><div class="streakDots">${[1,2,3,4,5,6,7].map(i => `<i class="${i <= wk ? 'on' : ''}${i === 7 || (i === 3 && g3) ? ' big' : ''}"></i>`).join('')}</div>
+      <div class="streakBox"><b>連續上山 ${s} 天</b><div class="streakDots">${[1,2,3,4,5,6,7].map(i => streakDay(i, i <= wk, i === 7 || (i === 3 && g3))).join('')}</div>
         <small>${D.streakGot && signKind !== 'common' ? '今天的禮物領過了' : tip}</small>
         <button class="cbtn ${D.streakGot ? '' : 'go'} sm" id="dyIn" ${D.streakGot ? 'disabled' : ''}>${D.streakGot ? '今天簽到過了' : '簽到'}</button></div>
       ${D.tasks.map((tk, i) => { const def = DAILY_POOL.find(x => x.id === tk.id) || { name:tk.id, goal:1 }; const f = Math.min(1, tk.n / def.goal);
