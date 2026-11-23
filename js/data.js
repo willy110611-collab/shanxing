@@ -265,13 +265,23 @@ SX.MOUNTAINS.forEach(function(m){
   if (!m.waypoints) m.waypoints = [{m:0,name:'登山口'},{m:m.dist,name:m.end}];
 });
 SX.rawSpeed = m => m.dist / (m.recMin * 60);   // 山友實際紀錄的步調（公尺／秒），還沒算體能
-// 體能：登頂讓身體慢慢變強。fitness = 1 + 每座山的加成總和，最多 FIT.MAX；
-// 一座山登頂 n ≥ 1 次的加成 = 第一次（難度越高越多）＋ 之後每多登一次加 FIT.STEP（最多算 FIT.REPEAT_MAX 次）。done：山 id → 登頂次數
-SX.FIT = { MAX:2, STEP:0.001, FIRST_PER_DIFF:0.001, REPEAT_MAX:20 };
-SX.fitGain = (id, n) => { const m = SX.M[id]; return m && n > 0 ? SX.FIT.FIRST_PER_DIFF * (m.diff + 1) + SX.FIT.STEP * Math.min(n - 1, SX.FIT.REPEAT_MAX) : 0; };
-SX.fitness = done => Math.min(SX.FIT.MAX, 1 + Object.keys(done || {}).reduce((a, id) => a + SX.fitGain(id, done[id]), 0));
-SX.fitDone = () => ({});   // 目前存檔的登頂次數，game.js 開機後換成真的存檔
-SX.baseSpeed = m => SX.rawSpeed(m) * SX.fitness(SX.fitDone());   // 登山客的步速（公尺／秒）= 山友步調 × 體能：遊戲關著時就照這個速度自己走；畫面、離線補走、預估時間都從這裡拿
+// 體能：登頂讓身體慢慢變強；太久不爬山會慢慢退步（狀態 cond）。體能的常數和算法只寫在這裡。
+// fitness = 1 + 加成 × 狀態（加成最多 MAX - 1）。一座山的加成 = 第一次登頂（難度 + 1）× FIRST_PER_DIFF ＋ 算數的重複登頂次數 × 每次加成（難度 1～3 是 STEP_LOW、4～5 是 STEP_HIGH），
+// 每座山最多算 REPEAT_MAX 次、每天最多算一次（台灣日期）；超過的照樣算登頂（徽章、紀錄），只是不再加體能。
+// 狀態 cond：離上次打開超過 GRACE_DAYS 整天，之後每天 −DECAY_PER_DAY，最低 COND_MIN；打開遊戲的那天親自走滿 RECOVER_M 公尺就 +RECOVER（每天一次），最高 COND_MAX。離線補走不算運動。
+// 存檔欄位：done（登頂次數）、fitRep（山 id → 算數的重複次數）、fitDay（山 id → 最後一次算數的日期）、cond、lastSeen
+SX.FIT = { MAX:2, FIRST_PER_DIFF:0.001, STEP_LOW:0.001, STEP_HIGH:0.002, HIGH_DIFF:4, REPEAT_MAX:20, COND_MIN:0.6, COND_MAX:1, GRACE_DAYS:7, DECAY_PER_DAY:0.01, RECOVER:0.05, RECOVER_M:500 };
+SX.twDay = (t = Date.now()) => new Date(t + 8 * 36e5).toISOString().slice(0, 10);   // 台灣日期（UTC+8）YYYY-MM-DD
+SX.fitStep = m => m.diff >= SX.FIT.HIGH_DIFF ? SX.FIT.STEP_HIGH : SX.FIT.STEP_LOW;
+SX.fitGain = (id, n, rep) => { const m = SX.M[id]; return m && n > 0 ? SX.FIT.FIRST_PER_DIFF * (m.diff + 1) + SX.fitStep(m) * Math.min(rep || 0, SX.FIT.REPEAT_MAX) : 0; };
+SX.fitBonus = sv => Math.min(SX.FIT.MAX - 1, Object.keys(sv.done || {}).reduce((a, id) => a + SX.fitGain(id, sv.done[id], (sv.fitRep || {})[id]), 0));
+SX.fitCond = sv => Math.min(SX.FIT.COND_MAX, Math.max(SX.FIT.COND_MIN, sv.cond == null ? SX.FIT.COND_MAX : sv.cond));
+SX.fitness = sv => 1 + SX.fitBonus(sv || {}) * SX.fitCond(sv || {});
+SX.fitCanCount = (sv, id, day) => ((sv.fitRep || {})[id] || 0) < SX.FIT.REPEAT_MAX && (sv.fitDay || {})[id] !== day;   // 這次重複登頂算不算數
+SX.fitDecay = (cond, away) => Math.max(SX.FIT.COND_MIN, cond - SX.FIT.DECAY_PER_DAY * Math.max(0, away - SX.FIT.GRACE_DAYS));   // away：離上次打開隔了幾個整天
+SX.fitRecover = cond => Math.min(SX.FIT.COND_MAX, cond + SX.FIT.RECOVER);
+SX.fitSave = () => ({});   // 目前的存檔，game.js 開機後換成真的存檔
+SX.baseSpeed = m => SX.rawSpeed(m) * SX.fitness(SX.fitSave());   // 登山客的步速（公尺／秒）= 山友步調 × 體能：遊戲關著時就照這個速度自己走；畫面、離線補走、預估時間都從這裡拿
 // 一起爬：離線隊友大概走到哪。最後一次回報的距離＋步調×離開多久；離開時在休息或打瞌睡就停在原地；最多到山頂
 // s：{ dist, rest, t（伺服器時間，毫秒）, pace（他的遊戲關著時走的速度，舊版沒有就用山友步調）}；now：伺服器時間
 SX.mateGuess = function(m, s, now){
