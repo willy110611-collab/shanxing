@@ -2,7 +2,7 @@
 // 三個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
 // 玩家只會下載有換過的圖和新圖（美術圖網址帶 ?v=檔案指紋，圖換了網址才會變）。
 // FONT_CACHE 放手寫字型（fonts/ 底下，檔名帶內容指紋，由 tools/fonts.js 產生），一樣永遠不變名字，改版時只補新檔、清掉沒用的舊檔。
-const CACHE = 'shanxing-v114';
+const CACHE = 'shanxing-v115';
 const ART_CACHE = 'shanxing-art';
 const FONT_CACHE = 'shanxing-fonts';
 const isArt = u => /\/(audio|art)\//.test(u.pathname) && !/manifest\.json$/.test(u.pathname);
