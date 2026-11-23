@@ -597,7 +597,7 @@
       const n = a.sec >= 4 * 3600 ? 2 : 1;
       for (let i = 0; i < n; i++) {
         const ts = a.t0 + Math.random() * (a.t1 - a.t0), f = (a.from + Math.random() * (a.to - a.from)) / m.dist;
-        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts, f), a.enc, new Date(ts));   // 季節、時段、天氣照「當時」和那時走到的位置算
+        const e = pickEncounterAt(m.id, f, calcWx(m.id, ts, f), a.enc, new Date(ts), true);   // 季節、時段、天氣照「當時」和那時走到的位置算
         if (e) { a.enc.push(e.id); noteEncounterSeen(e.id); }
       }
     }
@@ -969,10 +969,11 @@
   }
   const pickEncounter = () => pickEncounterAt(M.id, st.dist / M.dist, wx, [lastEnc]);
   // 依山、走到幾成、天氣時段挑一個奇遇（skip：這次不要重複的；date：哪一天，不給就是今天）
-  function pickEncounterAt(mid, f, wx, skip, date){
+  // away：關著遊戲時自己走的路上補抽。稀有奇遇（rare）只在玩家開著遊戲時才會遇到，關著遊戲不會抽到
+  function pickEncounterAt(mid, f, wx, skip, date, away){
     const k = WXD[wx.kind];
     const pool = SX.ENCOUNTERS.filter(e => { const w = e.where || {}, ws = e.wx || w.wx, ts = e.time || w.time;
-      return !skip.includes(e.id) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(SX.groupOf(mid))) && (!w.peaks || w.peaks.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
+      return !skip.includes(e.id) && !(away && e.rare) && (!e.season || seasonOk(e.season, mid, wx, date)) && (!w.mountains || w.mountains.includes(SX.groupOf(mid))) && (!w.peaks || w.peaks.includes(mid)) && (w.minFrac == null || f >= w.minFrac) && (w.maxFrac == null || f <= w.maxFrac)
         && (!ws || ws.includes(k) || ws.includes(wx.kind)) && (!ts || ts.includes(wx.time)); });
     if (!pool.length) return null;
     const wt = e => encWeight(e) * (e.wxPref && e.wxPref.includes(wx.kind) ? WXPREF_X : 1);   // wxPref：在這種天氣比較容易遇到
