@@ -133,7 +133,7 @@
     moodNow();
   }
   document.addEventListener('click', e => {
-    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else go(g.dataset.go); }
+    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else if (g.dataset.go === 'find') findMt(); else go(g.dataset.go); }
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
 
@@ -411,6 +411,34 @@
   const gradeChip = g => `<span class="grd g${SX.GRADE_ORDER.indexOf(g)}">${g}</span>`;   // 官方分級小牌（A 綠、B 藍、C 橘、C+ 紅）
   const LOCK_SVG = `<svg viewBox="0 0 20 22"><path d="M5.5 10V7a4.5 4.5 0 0 1 9 0v3" fill="none" stroke="${INK}" stroke-width="2.2"/><rect x="2.5" y="9.5" width="15" height="11" rx="3" fill="#d9a441" stroke="${INK}" stroke-width="1.8"/><circle cx="10" cy="15" r="1.6" fill="${INK}"/></svg>`;
   // 群峰卡片：點地圖上的山群旗子先開這張，列出每一座山；點一列打開那座山的卡片（卡片裡有「← 群峰」回來）
+  // 一座山的一列（山群卡片、找山清單共用）：名字、距離時間、爬到一半的進度、官方分級、登頂打勾／鎖頭／箭頭；where：多寫在哪一區（找山用）
+  function peakRow(m, where){
+    const p = SV.prog[m.id], d = SV.done[m.id], lk = !unlocked(m), f = p && !p.fin && p.dist > 0 ? p.dist / m.dist : 0, gr = SX.gradeOf(m.id);
+    return `<button class="pkRow paper${lk ? ' lk' : ''}" data-pk="${m.id}"><span class="pkN"><b>${m.name}</b><small>${where ? m.area + '・' : ''}${(m.dist / 1000).toFixed(1)} km・${fmtMin(m.recMin)}</small>${f ? `<span class="dyBar"><i style="width:${f * 100}%"></i></span>` : ''}</span>
+          ${gr ? gradeChip(gr) : ''}<span class="pkS">${d ? '<i class="pkOk">✓</i>' : lk ? SX.art.img('icon_lock', LOCK_SVG) : '<i class="pkGo">›</i>'}</span></button>`;
+  }
+  // 找山：跟山群卡片同一張木框卡片、同一種清單；上面一個搜尋框和四個篩選小標籤。點一座山：地圖飛過去、打開那座山的卡片
+  const FIND_TABS = [['all', '全部'], ['open', '可以爬'], ['new', '還沒爬過'], ['done', '已登頂']];
+  let findTab = 'all', findQ = '';
+  function findMt(){
+    const card = $('#routeCard');
+    card.innerHTML = `<button class="cbtn sm cBack" id="rcX">← 返回</button>
+      <div class="ic-h"><b>找山</b><span class="ic-alt">已登頂 ${SX.MOUNTAINS.filter(m => SV.done[m.id]).length}／${SX.MOUNTAINS.length}</span></div>
+      <label class="fl findQ"><input id="fdQ" class="txtIn" maxlength="12" placeholder=" " value="${findQ.replace(/"/g, '')}"><span><b>山名或地區</b></span></label>
+      <div class="findTabs">${FIND_TABS.map(([k, n]) => `<button class="chip${findTab === k ? ' on' : ''}" data-ft="${k}">${n}</button>`).join('')}</div>
+      <div class="pkList" id="fdList"></div>`;
+    const list = () => {
+      const q = findQ.trim(), L = SX.MOUNTAINS.filter(m => (!q || m.name.includes(q) || m.area.includes(q))
+        && (findTab === 'all' || (findTab === 'open' ? unlocked(m) : findTab === 'new' ? !SV.done[m.id] : !!SV.done[m.id])))
+        .slice().sort((a, b) => a.recMin - b.recMin);
+      $('#fdList').innerHTML = L.length ? L.map(m => peakRow(m, true)).join('') : '<p class="rc-feat">沒有找到符合的山</p>';
+      $$('#fdList [data-pk]').forEach(b => b.onclick = e => { e.stopPropagation(); A.pop(); if (SX.worldmap && SX.worldmap.focus) SX.worldmap.focus(b.dataset.pk); showRoute(b.dataset.pk); });
+    };
+    card.classList.add('on'); card.scrollTop = 0; list();
+    $('#rcX').onclick = e => { e.stopPropagation(); hideRoute(); };
+    $('#fdQ').oninput = e => { findQ = e.target.value; list(); };
+    $$('#routeCard [data-ft]').forEach(b => b.onclick = e => { e.stopPropagation(); A.pop(); findTab = b.dataset.ft; $$('#routeCard [data-ft]').forEach(x => x.classList.toggle('on', x === b)); list(); });
+  }
   function showGroup(gid){
     const g = SX.GROUP[gid]; if (!g) return;
     const ps = SX.peaksOf(gid).slice().sort((a, b) => a.recMin - b.recMin), L = SX.M[g.lead], nDone = ps.filter(m => SV.done[m.id]).length;
@@ -419,10 +447,7 @@
       <div class="ic-h"><b>${g.full}</b><span class="ic-alt">${L.area}・已登頂 ${nDone}／${ps.length}</span></div>
       <div class="ic-wx paper"><canvas id="rcWx"></canvas><span>現在山上：${wxText(w) || '晴'}</span></div>
       ${seasonChips(gid)}
-      <div class="pkList">${ps.map(m => {
-        const p = SV.prog[m.id], d = SV.done[m.id], lk = !unlocked(m), f = p && !p.fin && p.dist > 0 ? p.dist / m.dist : 0, gr = SX.gradeOf(m.id);
-        return `<button class="pkRow paper${lk ? ' lk' : ''}" data-pk="${m.id}"><span class="pkN"><b>${m.name}</b><small>${(m.dist / 1000).toFixed(1)} km・${fmtMin(m.recMin)}</small>${f ? `<span class="dyBar"><i style="width:${f * 100}%"></i></span>` : ''}</span>
-          ${gr ? gradeChip(gr) : ''}<span class="pkS">${d ? '<i class="pkOk">✓</i>' : lk ? SX.art.img('icon_lock', LOCK_SVG) : '<i class="pkGo">›</i>'}</span></button>`; }).join('')}</div>
+      <div class="pkList">${ps.map(m => peakRow(m)).join('')}</div>
       <div class="rc-feat"><em>小提醒：</em>點一座山看路線、出發登山。</div>`;
     card.classList.add('on'); card.scrollTop = 0;
     wxIcon($('#rcWx'), w.kind, w.time);
