@@ -1032,6 +1032,36 @@ function buildWidth(){
   for (let i = 0; i <= N + 1; i++) { v += (t[i] - v) * WIDTH_EASE; rwA[i] = v; }
   v = rwA[N + 1];
   for (let i = N + 1; i >= 0; i--) { v += (rwA[i] - v) * WIDTH_EASE; rwA[i] = RW * v; }
+  buildSqueeze(wood);
+}
+// 有些段的草皮只從一邊長進路面（左邊或右邊吃進來一截），路變窄、而且偏一邊：
+// 每座山固定（用這座山的亂數），一段長 SQ_LEN 段、頭尾各 SQ_RAMP 段慢慢長進來又退回去；木棧道、有欄杆的路段、山頂過後不吃
+// 只存成「路中心往旁邊挪多少」coA ＋ 原本的半寬 rwA 縮多少（兩邊各自的路緣 = 中心 ± 半寬），畫的東西照舊只讀 rwAt／coAt
+const SQ_P = 0.55, SQ_GAP = [12, 34], SQ_LEN = [7, 16], SQ_RAMP = 5, SQ_E = [0.26, 0.48], SQ_MIN = 0.62;   // 出現機率、兩段之間隔幾段、長幾段、頭尾漸變幾段、吃進來幾公尺、半寬最少剩標準的幾成
+const SQ_HERO = 0.5;   // 路中心挪動時，登山客在畫面上跟著挪幾成（其餘由鏡頭跟過去）：只要看得出微微讓開，不要整個人左右晃
+let coA = new Float32Array(2);   // 每段近端路中心往右挪幾公尺（負的往左）：草皮從左邊長進來，路就往右偏
+function coAt(i){ return coA[i < 0 ? 0 : i > N + 1 ? N + 1 : i]; }
+function coF(i, f){ return lerp(coAt(i), coAt(i + 1), f); }
+function buildSqueeze(wood){
+  const eL = new Float32Array(N + 2), eR = new Float32Array(N + 2), r = mkrng(seed ^ 0x51de0a77);
+  coA = new Float32Array(N + 2);
+  for (let i = 6; i <= N; ) {
+    const r1 = r(), r2 = r(), r3 = r(), r4 = r(), r5 = r();   // 每段固定用掉 5 個亂數（改機率、長度時其他段的位置不會全部洗牌）
+    const len = Math.round(lerp(SQ_LEN[0], SQ_LEN[1], r2)), e = lerp(SQ_E[0], SQ_E[1], r4), E = r3 < 0.5 ? eL : eR;
+    if (r1 < SQ_P && !wood) for (let q = -SQ_RAMP; q <= len + SQ_RAMP; q++) {
+      const k = i + q; if (k < 0 || k > N + 1) continue;
+      const u = q < 0 ? ease01((q + SQ_RAMP) / SQ_RAMP) : q > len ? ease01((len + SQ_RAMP - q) / SQ_RAMP) : 1;
+      E[k] = Math.max(E[k], e * u * (railOn(Math.min(k, N)) || endK(k) > 0 ? 0 : 1));
+    }
+    i += len + 2 * SQ_RAMP + Math.round(lerp(SQ_GAP[0], SQ_GAP[1], r5));
+  }
+  // 有欄杆、山頂那幾段是 0：前後來回各推一次，接到 0 的地方也是慢慢退回去（不會一段突然跳回原寬）
+  for (const E of [eL, eR]) { let v = 0; for (let i = 0; i <= N + 1; i++) { v += (E[i] - v) * 0.35; E[i] = Math.min(E[i], v * 1.6); } v = 0; for (let i = N + 1; i >= 0; i--) { v += (E[i] - v) * 0.35; E[i] = Math.min(E[i], v * 1.6); } }
+  for (let i = 0; i <= N + 1; i++) {
+    let a = eL[i], b = eR[i]; const room = rwA[i] - RW * SQ_MIN;   // 已經很窄的地方（貼著石頭、稜線邊）少吃一點
+    if (a + b > 0 && (a + b) / 2 > room) { const k = Math.max(0, room) * 2 / (a + b); a *= k; b *= k; }
+    rwA[i] -= (a + b) / 2; coA[i] = (a - b) / 2;
+  }
 }
 
 // ═════════ 色盤、地面色表、背景圖塊 ═════════
@@ -1474,6 +1504,7 @@ S.props = function(fromM, toM){
 S.allProps = function(){ return AP.map(function(o){ return { type:o.type, m:o.m, side:o.side, text:o.text }; }); };   // 測試用：目前這座山所有路旁道具
 S.stepAt = function(){ const out = []; for (let i = 0; i < N; i++) if (stepF[i] && !stepF[i - 1]) out.push(i * SEG); return out; };   // 測試用：階梯段起點（公尺）
 S.edgeAt = function(){ const out = []; for (let i = 1; i <= N; i++) if (edgeK[i] > 0.5 && !(edgeK[i - 1] > 0.5)) out.push({ m:i * SEG, side:dropS[i] }); return out; };   // 測試用：貼著稜線邊緣那幾段的起點（公尺）與往下掉的那一邊
+S.squeezeAt = function(){ const out = []; for (let i = 1; i <= N; i++) { const c = coAt(i); if (Math.abs(c) > 0.08 && Math.abs(c) >= Math.abs(coAt(i - 1)) && Math.abs(c) > Math.abs(coAt(i + 1))) out.push({ m:Math.round(i * SEG), side:c > 0 ? -1 : 1, co:+c.toFixed(2), rw:+rwAt(i).toFixed(2) }); } return out; };   // 測試用：草皮從一邊吃進路面的地方（公尺、從哪一邊吃進來、路中心挪多少、剩下的半寬）
 S.passAt = function(){ const out = []; for (let i = 0; i <= N; i++) if (Hh(i, 300) < PASS_P && !railOn(i)) out.push(Math.round(i * SEG)); return out; };   // 測試用：鏡頭前掠過的芒草／蕨類在哪裡（公尺）
 S.curveAt = function(m){ return cAt(Math.floor(m / SEG)); };   // 測試用：某個位置（公尺）的彎度（0＝直線，正的＝右彎）
 S.turn = function(){ return hero.turn; };                     // 測試用：登山客現在轉彎傾身多少（-1～1）
@@ -3353,9 +3384,9 @@ S.render = function(s){
   const bob = RMOT && RMOT.matches ? 0 : hero.mv;   // 鏡頭跟著步伐極輕微上下晃（一步一次）；系統設定減少動態就不晃
   let j, x = 0, dx = -off * cAt(b);
   const crX = CREST * LOOK.climb.k * hero.crK, crS = hero.crD * LOOK.climb.lead;   // 前方有坡頂：從登山客到坡頂這段的 lead 成開始，路再多往下彎（坡頂提早、清楚地翻過去）
-  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ), dr = Math.max(0, dc - crS); pC[j] = x; pW[j] = eAt(b + j) - CREST * dc * dc - crX * dr * dr; x += dx; dx += cAt(b + j); }
+  for (j = 0; j <= DRAW + 1; j++) { const dc = Math.max(0, (j - off) * SEG - HZ), dr = Math.max(0, dc - crS); pC[j] = x + coAt(b + j); pW[j] = eAt(b + j) - CREST * dc * dc - crX * dr * dr; x += dx; dx += cAt(b + j); }   // pC：每段路中心（彎道累積的橫向位置 ＋ 草皮從一邊吃進來時中心挪多少 coAt）
   const hj = HZ / SEG + off; jhG = Math.floor(hj); fhG = hj - jhG;
-  camX = lerp(pC[jhG], pC[jhG + 1], fhG) + hero.pan + Math.sin(hero.ph) * 0.012 * bob;
+  camX = lerp(pC[jhG], pC[jhG + 1], fhG) - SQ_HERO * coF(b + jhG, fhG) + hero.pan + Math.sin(hero.ph) * 0.012 * bob;   // 鏡頭只跟一半的 coAt：路一邊變窄時登山客（走在剩下的路中間）在畫面上微微往另一邊移（SQ_HERO）
   camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH - Math.abs(Math.sin(hero.ph)) * 0.022 * bob;
   for (j = 0; j <= DRAW + 1; j++) {
     const dz = Math.max((j - off) * SEG, NEAR_Z), sc = F / dz;
