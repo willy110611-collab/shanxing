@@ -4,7 +4,7 @@
 // 實際上先把每一筆的頂點存進一大塊記憶體，換混色方式或用滿 8 張貼圖才一次送給顯示卡畫（一格約幾十次）。
 // 只做 trail.js 主畫面用到的那幾種畫法（API 表；check 會檢查 trail.js 沒有用到表外的）。
 // 美術圖、預先畫好的貼圖第一次用到時傳上顯示卡一次（之後重複用），trail.js 的 free() 釋放畫布時一起刪掉。
-// 整體調色（時間／天氣的 multiply、午後暖光 soft-light、霧的灰白）在 grade() 一次全螢幕處理完。
+// 整體調色（時間／天氣的 multiply、午後暖光 soft-light、霧的灰白、飽和度、對比）在 grade() 一次全螢幕處理完。
 // 不支援 WebGL2、或建立失敗時 create() 回 null，trail.js 照舊用 Canvas 2D 畫（見 trail.js 的 useGL）。
 (function(){
 'use strict';
@@ -43,12 +43,13 @@ void main(){
 // 第幾張貼圖：對半分的 if（GLSL ES 3.0 不能用變數當貼圖陣列的索引）
 function pick(a, b){ if (b - a === 1) return 'c = texture(t' + a + ', vT, B);'; const m = (a + b) >> 1; return 'if (vS < ' + m + ') { ' + pick(a, m) + ' } else { ' + pick(m, b) + ' }'; }
 // 整體調色：一張全螢幕的三角形，讀剛畫好的畫面 → 霧的灰白 → 時間天氣的 multiply → 午後暖光 soft-light（公式照 W3C 合成規格）
+// → 飽和度、對比（值來自 js/look.js；加對比用「畫面自己 overlay 自己」的 S 曲線、降對比往中灰混，跟 trail.js 的 Canvas 2D 版同一種算法）
 const GVS = `#version 300 es
 in vec2 aP; void main(){ gl_Position = vec4(aP, 0.0, 1.0); }`;
 const GFS = `#version 300 es
 precision highp float;
 uniform sampler2D uS, uW;
-uniform vec2 uR; uniform vec3 uMul; uniform vec4 uFog; uniform float uWA; uniform vec3 uWC;
+uniform vec2 uR; uniform vec3 uMul; uniform vec4 uFog; uniform float uWA; uniform vec3 uWC; uniform vec2 uSC;
 out vec4 o;
 float sl(float b, float s){
   if (s <= 0.5) return b - (1.0 - 2.0 * s) * b * (1.0 - b);
@@ -64,6 +65,9 @@ void main(){
     vec4 w = texture(uW, vec2(clamp(length(p - uWC.xy) / uWC.z, 0.0, 1.0) * (255.0 / 256.0) + 0.5 / 256.0, 0.5));
     c = mix(c, vec3(sl(c.r, w.r), sl(c.g, w.g), sl(c.b, w.b)), w.a * uWA);
   }
+  if (uSC.x != 1.0) { float l = dot(c, vec3(0.3, 0.59, 0.11)); c = clamp(vec3(l) + (c - vec3(l)) * uSC.x, 0.0, 1.0); }
+  if (uSC.y > 1.0) { vec3 ov = mix(2.0 * c * c, 1.0 - 2.0 * (1.0 - c) * (1.0 - c), step(0.5, c)); c = mix(c, ov, uSC.y - 1.0); }
+  else if (uSC.y < 1.0) c = mix(vec3(0.5), c, uSC.y);
   o = vec4(c, 1.0);
 }`;
 
@@ -148,7 +152,7 @@ P.init = function(){
   const gb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, gb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const ga = gl.getAttribLocation(this.gprog, 'aP'); gl.enableVertexAttribArray(ga); gl.vertexAttribPointer(ga, 2, gl.FLOAT, false, 8, 0);
   gl.useProgram(this.gprog);
-  this.gu = {}; ['uS', 'uW', 'uR', 'uMul', 'uFog', 'uWA', 'uWC'].forEach(k => { this.gu[k] = gl.getUniformLocation(this.gprog, k); });
+  this.gu = {}; ['uS', 'uW', 'uR', 'uMul', 'uFog', 'uWA', 'uWC', 'uSC'].forEach(k => { this.gu[k] = gl.getUniformLocation(this.gprog, k); });
   gl.uniform1i(this.gu.uS, 0); gl.uniform1i(this.gu.uW, 1);
   gl.bindVertexArray(this.vao); gl.useProgram(this.prog);
   gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -502,10 +506,12 @@ P.strokeText = function(s, x, y){ this.text(String(s), x, y, true); };
 
 // ───────── 整體調色：把畫好的畫面複製一份，一次全螢幕處理 ─────────
 // mul：[r,g,b]（0～255，multiply）；fogA：霧的灰白（0～1，顏色 fogC）；warmA：午後暖光強度；warm：暖光的放射漸層（createRadialGradient 做的，中心、半徑照它）；dpr：漸層座標（CSS 像素）換成畫布像素的倍數
-P.grade = function(mulC, fogA, fogC, warmA, warm, dpr){
+// sat、con：飽和度、對比（1＝不變；trail.js 從 js/look.js 照時間天氣算好傳進來）
+P.grade = function(mulC, fogA, fogC, warmA, warm, dpr, sat, con){
   if (this.lost) return;
-  const doMul = mulC[0] < 250 || mulC[1] < 250 || mulC[2] < 250, doW = warmA > 0.01 && warm;
-  if (!doMul && !(fogA > 0) && !doW) return;
+  sat = sat > 0 ? sat : 1; con = con > 0 ? con : 1;
+  const doMul = mulC[0] < 250 || mulC[1] < 250 || mulC[2] < 250, doW = warmA > 0.01 && warm, doSC = Math.abs(sat - 1) > 0.004 || Math.abs(con - 1) > 0.004;
+  if (!doMul && !(fogA > 0) && !doW && !doSC) return;
   this.flush();
   const gl = this.gl, cw = this.canvas.width, ch = this.canvas.height;
   if (!this.scr || this.scrW !== cw || this.scrH !== ch) {
@@ -527,6 +533,7 @@ P.grade = function(mulC, fogA, fogC, warmA, warm, dpr){
   gl.uniform3f(U.uMul, doMul ? (mulC[0] | 0) / 255 : 1, doMul ? (mulC[1] | 0) / 255 : 1, doMul ? (mulC[2] | 0) / 255 : 1);
   gl.uniform4f(U.uFog, fc[0], fc[1], fc[2], fogA > 0 ? fogA : 0);
   gl.uniform1f(U.uWA, doW ? warmA : 0);
+  gl.uniform2f(U.uSC, doSC ? sat : 1, doSC ? con : 1);
   if (doW) { const a = warm.a; gl.uniform3f(U.uWC, a[3] * k, a[4] * k, a[5] * k); }   // 漸層座標是 CSS 像素，乘上目前的解析度倍數
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   this.st.frameBatches++;

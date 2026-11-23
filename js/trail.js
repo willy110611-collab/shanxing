@@ -3017,6 +3017,26 @@ function drawParts(dt){
   ctx.globalAlpha = 1;
 }
 
+// ═════════ 光線（設定只在 js/look.js） ═════════
+// 照時間取 look.js 表裡的值：白天爬高時從 day 混到 sunset（palA、palB、palK 跟 PAL 調色同一組）
+function lookT(tab){ return lerp(tab[palA], tab[palB], palK); }
+// 這一格的飽和度、對比：時間那一組，霧天換成霧那一組
+const gSC = [1, 1];
+function gradeSC(){
+  const g = LOOK.grade, a = isFog ? g.fog : g[palA], b = isFog ? g.fog : g[palB];
+  gSC[0] = lerp(a.sat, b.sat, palK); gSC[1] = lerp(a.con, b.con, palK);
+}
+// Canvas 2D 版的飽和度、對比：只用合成模式蓋全螢幕的層（不逐點讀像素）。跟 gl2d.js 調色著色器同一種算法：
+// 降飽和＝saturation 模式蓋灰色；加飽和＝saturation 模式蓋純色（往最飽和那頭推一點，近似）；加對比＝畫面自己 overlay 自己（S 曲線）；降對比＝往中灰混
+function grade2D(sat, con){
+  const c = ctx;
+  if (sat < 0.996) { c.globalCompositeOperation = 'saturation'; c.globalAlpha = 1 - sat; c.fillStyle = '#808080'; c.fillRect(0, 0, W, H); }
+  else if (sat > 1.004) { c.globalCompositeOperation = 'saturation'; c.globalAlpha = Math.min(1, (sat - 1) * 0.45); c.fillStyle = '#ff0000'; c.fillRect(0, 0, W, H); }
+  if (con > 1.004) { c.globalCompositeOperation = 'overlay'; c.globalAlpha = Math.min(1, con - 1); c.drawImage(ocv, 0, 0, W, H); }
+  else if (con < 0.996) { c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1 - con; c.fillStyle = '#808080'; c.fillRect(0, 0, W, H); }
+  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+}
+
 // ═════════ 主繪製 ═════════
 S.render = function(s){
   if (!ctx || !M || !s) return;
@@ -3052,10 +3072,12 @@ S.render = function(s){
   // 整體調色（時間／天氣），之後再疊發光的東西
   // 午後暖光濾鏡：整個世界（含前景框）蓋一層從右上來的暖金柔光，不同批美術圖才會在同一個色溫裡；晚上、雨天不加
   const wa = isNight ? 0 : WARM_A * sunVis;
-  if (ctx.gpu) ctx.grade(cGrade, isFog ? FOG_TA : 0, FOG_TINT, wa, WARM, DPR);   // WebGL：霧的灰白、時間天氣調色、暖光一次全螢幕處理
+  gradeSC();
+  if (ctx.gpu) ctx.grade(cGrade, isFog ? FOG_TA : 0, FOG_TINT, wa, WARM, DPR, gSC[0], gSC[1]);   // WebGL：霧的灰白、時間天氣調色、暖光、飽和度對比一次全螢幕處理
   else {
     if (cGrade[0] < 250 || cGrade[1] < 250 || cGrade[2] < 250) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = css(cGrade); ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
     if (wa > 0.01 && WARM) { ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = wa; ctx.fillStyle = WARM; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+    if (LOOK.q.grade2d[qs.lvl]) grade2D(gSC[0], gSC[1]);
   }
   drawLights(t);
   if (isRain) drawRain(t);
