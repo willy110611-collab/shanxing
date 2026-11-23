@@ -172,14 +172,15 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .radar{width:112px;height:112px;flex:none;border-radius:50%;background:#2f5a3a;border:3px solid var(--ink);pointer-events:auto;overflow:hidden;position:relative}
 .radar svg{width:100%;height:100%}
 
-.bubble{position:absolute;z-index:4;background:var(--paper);color:var(--ink);border:2.5px solid var(--ink);border-radius:15px 17px 14px 18px;padding:7px 12px;font-size:14px;box-shadow:0 3px 0 var(--ink);transform:translate(-50%,-100%) scale(0);transform-origin:50% 100%;transition:transform .25s cubic-bezier(.34,1.6,.5,1);white-space:nowrap;pointer-events:none}
-.bubble::after{content:"";position:absolute;left:50%;bottom:-9px;margin-left:-7px;border:7px solid transparent;border-bottom:0;border-top:8px solid var(--ink)}
-.bubble.on{transform:translate(-50%,-100%) scale(1)}
+.bubble{position:absolute;z-index:4;background:var(--paper);color:var(--ink);border:2.5px solid var(--ink);border-radius:15px 17px 14px 18px;padding:7px 12px;font-size:14px;box-shadow:0 3px 0 var(--ink);transform:translate(0,-100%) scale(0);transform-origin:0 100%;transition:transform .25s cubic-bezier(.34,1.6,.5,1);width:max-content;max-width:calc(50% - 44px);pointer-events:none}   /* 放在頭的旁邊：最多半個畫面寬，長的句子換行 */
+.bubble::after{content:"";position:absolute;left:14px;bottom:-9px;margin-left:-7px;border:7px solid transparent;border-bottom:0;border-top:8px solid var(--ink)}
+.bubble.on{transform:translate(0,-100%) scale(1)}
+.bubble.left{transform-origin:100% 100%}.bubble.left::after{left:auto;right:7px}   /* 對話框在頭的左邊：尾巴在右下角 */
 .tapHint{position:absolute;left:50%;bottom:calc(98px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:3;background:rgba(251,241,218,.9);border:2px solid var(--ink);padding:5px 14px;border-radius:999px;font-size:13px;color:var(--ink);pointer-events:none;transition:opacity .6s;animation:hintBob 1.8s ease-in-out infinite}
 @keyframes hintBob{50%{transform:translate(-50%,-4px)}}
 .tapHint.off{opacity:0}
 /* 這次的小目標：長按提示上面一行小小的紙條，不擋登山客 */
-.segGoal{position:absolute;left:50%;bottom:calc(132px + env(safe-area-inset-bottom));z-index:3;transform:translateX(-50%);max-width:calc(100% - 110px);padding:3px 12px;border-radius:999px;background:rgba(251,241,218,.82);border:1.5px solid rgba(58,42,32,.55);font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;opacity:0;transition:opacity .5s,background .3s}
+.segGoal{position:absolute;left:50%;bottom:calc(142px + env(safe-area-inset-bottom));z-index:3;transform:translateX(-50%);max-width:calc(100% - 110px);padding:3px 12px;border-radius:999px;background:rgba(251,241,218,.82);border:1.5px solid rgba(58,42,32,.55);font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;opacity:0;transition:opacity .5s,background .3s}
 .segGoal.on{opacity:1}
 .segGoal.done{background:#e7f3cf;border-color:var(--ink);font-weight:bold}
 #scrClimb.clean .segGoal{opacity:0}
