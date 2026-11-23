@@ -1182,35 +1182,48 @@ function tile(img, off, y, h, a){
   ctx.globalAlpha = a; for (; x < W; x += w) ctx.drawImage(img, x, y, w + 1, h); ctx.globalAlpha = 1;
 }
 function layer(TA, TB, grp, idx, off, y, h){ tile(TA[grp][idx], off, y, h, 1); if (TB) tile(TB[grp][idx], off, y, h, palK); }
-// 遠景美術圖：依時段挑一張；左右鏡射接續，轉彎時跟著視差平移
+// 遠景美術圖：依時段挑一張；轉彎時跟著視差平移。左右接續用 skyTile 預先做好的「頭尾交疊淡換」那一張，一張接一張看不出縫
 const SKY_ART = { day:'sky_day', sunset:'sky_sunset', dusk:'sky_sunset', dawn:'sky_dawn', night:'sky_night' };
 function skyArt(key){ const e = ART.get(SKY_ART[key]); return e && e.frames.length ? e : null; }
 // 遠景分三層視差：天空＋最遠的山、中間的山、近的山＋雲海，轉彎時越近的層移得越快，爬得越高近的層越往下沉
-// 每層是天空圖的一條（上緣羽化），層與層之間蓋一條霧帶，錯開的山稜線才不會疊成兩條
+// 每層是天空圖的一條（上緣羽化），層與層之間蓋一條很淡的霧，錯開的山稜線才不會疊成兩條
 // [圖高從幾成、到幾成、上緣羽化幾成, 轉彎平移比例, 爬到山頂時往下沉幾像素]
-const PLX = [[0, 0.52, 0, 0.16, 0], [0.33, 0.72, 0.1, 0.36, 10], [0.52, 1, 0.1, 0.62, 26]];
+// 2026-11-23 玩家回報天空圖跟圖之間的縫很明顯。以前左右用鏡射接（接縫兩邊對稱，山稜線折成 V 字）、上下羽化只有一成又蓋一條直的霧帶（一條橫線）
+const PLX = [[0, 0.56, 0, 0.16, 0], [0.27, 0.76, 0.2, 0.36, 10], [0.46, 1, 0.2, 0.62, 26]];
+const SKY_OV = 0.3;       // 左右接縫：圖的最後這幾成跟開頭交疊淡換（淡換寬度越寬越看不出來，但重疊的山會有一點點雙重）
 let PLXC = {};            // 這座山用的各層圖（依時段），換山時釋放
-let MIST = null;          // 霧帶（上下淡、中間濃，用這座山的霧色），換山時重做
+let MIST = null;          // 霧（上下淡、中間濃，用這座山的霧色），換山時重做
+// 平滑的 0→1（頭尾斜率是 0）：羽化、淡換都用它，才不會在淡換開始和結束的地方看到一條折線
+function ease01(x){ x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+function easeStops(gr, a0, a1){ for (let q = 0; q <= 8; q++) gr.addColorStop(q / 8, 'rgba(0,0,0,' + lerp(a0, a1, ease01(q / 8)).toFixed(3) + ')'); }
+// 一層：從天空圖切出 [p0, p1] 那一條，做成左右頭尾接得起來的一張（寬度少了 SKY_OV）：
+// 開頭那 SKY_OV 寬蓋上圖尾那一截（左邊完全是圖尾、往右慢慢換回開頭），所以這張的最後一欄後面接開頭第一欄，顏色、山稜線都是連續的
+function skyTile(e, p){
+  const f = e.frames[0], h = Math.round(f.h * (p[1] - p[0])), ov = Math.round(f.w * SKY_OV), tw = f.w - ov, sy = f.y + f.h * p[0];
+  const d = mk(tw, h), g = d.getContext('2d'), t = mk(ov, h), tg = t.getContext('2d');
+  g.drawImage(e.img, f.x, sy, tw, h, 0, 0, tw, h);
+  tg.drawImage(e.img, f.x + tw, sy, ov, h, 0, 0, ov, h);
+  let gr = tg.createLinearGradient(0, 0, ov, 0); easeStops(gr, 1, 0);
+  tg.globalCompositeOperation = 'destination-in'; tg.fillStyle = gr; tg.fillRect(0, 0, ov, h);
+  g.drawImage(t, 0, 0); free(t);
+  if (p[2] > 0) {   // 上緣羽化（平滑曲線，不是直線漸層：開始和結束的地方不會有一條折線）
+    const fh = f.h * p[2]; gr = g.createLinearGradient(0, 0, 0, fh); easeStops(gr, 1, 0);
+    g.globalCompositeOperation = 'destination-out'; g.fillStyle = gr; g.fillRect(0, 0, tw, fh);
+  }
+  return d;
+}
 function plxLayers(key, e){
   let L = PLXC[key]; if (L) return L;
   const ks = Object.keys(PLXC);
   if (ks.length >= 3) for (const k of ks) if (k !== palA && k !== palB) { PLXC[k].forEach(l => free(l.c)); delete PLXC[k]; }
-  const f = e.frames[0];
-  L = PLXC[key] = PLX.map(function(p, n){
-    if (!n) return { c:null, p:p };   // 最上層直接畫原圖那一段，不另外存一張
-    const h = Math.round(f.h * (p[1] - p[0])), d = mk(f.w, h), g = d.getContext('2d'), fh = f.h * p[2];
-    g.drawImage(e.img, f.x, f.y + f.h * p[0], f.w, h, 0, 0, f.w, h);
-    const gr = g.createLinearGradient(0, 0, 0, fh); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.globalCompositeOperation = 'destination-out'; g.fillStyle = gr; g.fillRect(0, 0, f.w, fh);
-    return { c:d, p:p };
-  });
+  L = PLXC[key] = PLX.map(function(p){ return { c:skyTile(e, p), p:p }; });
   return L;
 }
 function freePlx(){ for (const k in PLXC) PLXC[k].forEach(l => free(l.c)); PLXC = {}; free(MIST); MIST = null; }
 function mist(){
   if (MIST) return MIST;
   const c = MIST = mk(4, 64), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 64);
-  gr.addColorStop(0, rgba(hazeRgb, 0)); gr.addColorStop(0.5, rgba(hazeRgb, 0.55)); gr.addColorStop(1, rgba(hazeRgb, 0));
+  for (let q = 0; q <= 8; q++) gr.addColorStop(q / 8, rgba(hazeRgb, 0.3 * Math.sin(Math.PI * q / 8) ** 2));   // 中間最濃 0.3、上下很長的尾巴（以前 0.55、三角形的濃淡，看得出一條橫帶）
   g.fillStyle = gr; g.fillRect(0, 0, 4, 64);
   return c;
 }
@@ -1218,17 +1231,14 @@ function mist(){
 function plxDy(n){ return LOOK.climb.farPx[n] * hero.gr * U; }
 function drawSkyArt(e, key, hd, a, frac){
   if (a <= 0.01) return;
-  const f = e.frames[0], h = HOR + 150 * U, w = Math.max(W * 1.05, h * f.w / f.h), L = plxLayers(key, e), M = mist();
+  const f = e.frames[0], h = HOR + 150 * U, sx = Math.max(W * 1.05, h * f.w / f.h) / f.w, L = plxLayers(key, e), M = mist();   // sx：原圖每像素畫多寬
   ctx.globalAlpha = a;
   for (let n = 0; n < L.length; n++) {
-    const p = L[n].p, dy = plxDy(n), y0 = h * p[0] + p[4] * U * frac + (n ? dy : 0), lh = h * (p[1] - p[0]) + (n ? 0 : dy), off = hd * p[3];   // 最上層（天空）頂端不動，只把下緣的遠山拉下來一點
-    if (n) ctx.drawImage(M, 0, 0, 4, 64, 0, y0 - 6 * U, W, h * p[2] + 20 * U);   // 霧帶蓋在上一層的接縫上
-    let k = Math.floor(off / w), x = -(off - k * w);
-    for (; x < W; x += w, k++) {
-      const src = L[n].c, sx = src ? 0 : f.x, sy = src ? 0 : f.y, sw = src ? src.width : f.w, sh = src ? src.height : f.h * p[1];
-      if (k & 1) { ctx.save(); ctx.translate(x + w, 0); ctx.scale(-1, 1); ctx.drawImage(src || e.img, sx, sy, sw, sh, 0, y0, w + 1, lh); ctx.restore(); }
-      else ctx.drawImage(src || e.img, sx, sy, sw, sh, x, y0, w + 1, lh);
-    }
+    const p = L[n].p, c = L[n].c, w = c.width * sx, dy = plxDy(n), y0 = h * p[0] + p[4] * U * frac + (n ? dy : 0), lh = h * (p[1] - p[0]) + (n ? 0 : dy), off = hd * p[3];   // 最上層（天空）頂端不動，只把下緣的遠山拉下來一點
+    if (n) ctx.drawImage(M, 0, 0, 4, 64, 0, y0 - 10 * U, W, h * p[2] + 30 * U);   // 很淡的霧蓋在上一層的接縫上
+    // 一張接一張（同方向，不鏡射）：頭尾已經淡換好。左右邊對齊到螢幕像素、剛好相接不重疊：
+    // 以前每張多畫 1 像素重疊，上緣羽化半透明的地方重疊那一欄被畫兩次，接縫就是一條深色細線
+    for (let x = -(((off % w) + w) % w); x < W; x += w) { const xa = Math.round(x * DPR) / DPR, xb = Math.round((x + w) * DPR) / DPR; ctx.drawImage(c, 0, 0, c.width, c.height, xa, y0, xb - xa, lh); }
   }
   ctx.globalAlpha = 1;
 }
