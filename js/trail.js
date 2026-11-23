@@ -2337,9 +2337,17 @@ function skirtEdge(xa, ya, xb, yb, n1, a){
 }
 // 遠處地面和天空的交界（2026-11-24 回報：開闊草原跟天空之間一條筆直的地平線）：離鏡頭 HZB.z 公尺以外的地面畫完時，
 // 在那些地面最高的地方（畫面上最上面那條，通常是翻過坡頂那條線）蓋一條起伏的霧帶：往上淡進天空、往下淡進遠處的地面。
-// 比較近的地面、樹之後才畫，不會被霧蓋到。霧帶貼圖一張（上緣高高低低，換霧色才重做），每格只貼兩三次
-const HZB = { z:60, up:30, dn:40, a:0.75, w:300, k:0.85 };
-const HZS = [{ y:Infinity, on:false }, { y:Infinity, on:false }];   // 現場畫、遠景快取各一份（快取一格只畫一截）
+// 比較近的地面、樹之後才畫，不會被霧蓋到。霧帶貼圖一張（上緣高高低低，換霧色才重做）
+// 霧帶沿著畫面寬切 HZK 格，每一格跟著那裡遠處地面最高的地方（sky：每條格線上遠處地面最高到哪裡）。以前整條霧帶只放在最高的那一點的高度：
+// 轉彎時遠處的山只在畫面一邊比較高，另一邊比較低的坡頂整條沒有霧，草地和遠山之間一條筆直的硬邊（2026-11-24 轉彎巡檢 玉山東峰 3755 公尺）
+const HZB = { z:25, zf:60, fMin:0.35, up:30, dn:40, a:0.75, w:300, k:0.85 }, HZK = 24;   // z：這麼遠以外的地面才算進霧帶的高度（以前 60 公尺：近一點的坡頂整條沒有霧）；坡頂比 zf 近時霧帶整條縮小（最小 fMin 倍），不會一大片霧蓋在近處的樹叢上
+const HZS = [{ y:Infinity, on:false, sky:new Float32Array(HZK + 1), lx:0, ly:0, z:Infinity }, { y:Infinity, on:false, sky:new Float32Array(HZK + 1), lx:0, ly:0, z:Infinity }];   // 現場畫、遠景快取各一份（快取一格只畫一截）
+// 遠處一段地面的遠端邊 (xa,ya)→(xb,yb) 蓋過的格線上，記下地面最高到哪裡
+function skyAdd(S, xa, ya, xb, yb, z){
+  if (xb < xa) { let t = xa; xa = xb; xb = t; t = ya; ya = yb; yb = t; }
+  const bw = W / HZK, k0 = Math.max(0, Math.ceil(xa / bw)), k1 = Math.min(HZK, Math.floor(xb / bw)), d = xb - xa;
+  for (let k = k0; k <= k1; k++) { const y = d > 1e-3 ? ya + (yb - ya) * (k * bw - xa) / d : Math.min(ya, yb); if (y < S.sky[k]) { S.sky[k] = y; if (z < S.z) S.z = z; } }
+}
 let hzbC = null;
 function hzbTex(){
   if (hzbC && hzbC.hk === hazeCss) return hzbC;
@@ -2353,11 +2361,23 @@ function hzbTex(){
   }
   g.putImageData(im, 0, 0); c.hk = hazeCss; return (hzbC = c);
 }
-function horizonBand(y, a){
+// 一格一格斜貼（格線對齊實際像素：相鄰兩格的直邊不會反鋸齒疊出細線）；貼圖橫向照世界方向捲動，跨過貼圖頭尾的那一格切兩塊
+function horizonBand(y, a, sky, z){
   if (!(y < H) || a < 0.01) return;
-  const T = hzbTex(), w = HZB.w * U, top = y - HZB.up * U, hh = (HZB.up + HZB.dn) * U, off = headAt((bG + jhG + fhG) * SEG) * F * HZB.k;
+  const f = clamp((z - HZB.z) / (HZB.zf - HZB.z), HZB.fMin, 1), T = hzbTex(), w = HZB.w * U, up = HZB.up * U * f, hh = (HZB.up + HZB.dn) * U * f, off = headAt((bG + jhG + fhG) * SEG) * F * HZB.k, bw = W / HZK, tw = T.width, th = T.height;
   ctx.globalAlpha = a;
-  for (let x = -(((off % w) + w) % w); x < W; x += w) { const xa = Math.round(x * DPR) / DPR, xb = Math.round((x + w) * DPR) / DPR; ctx.drawImage(T, 0, 0, T.width, T.height, xa, top, xb - xa, hh); }
+  for (let k = 0; k < HZK; k++) {
+    const ya = sky[k], yb = sky[k + 1]; if (!(ya < H + up && yb < H + up)) continue;
+    const xa = Math.round(k * bw * DPR) / DPR, xb = Math.round((k + 1) * bw * DPR) / DPR, ua = ((((xa + off) % w) + w) % w) / w * tw, du = (xb - xa) / w * tw;
+    const cut = Math.min(du, tw - ua), xm = xa + (xb - xa) * cut / du;
+    hzPiece(T, xa, ya - up, xm, lerp(ya, yb, cut / du) - up, ua, cut, hh, th);
+    if (cut < du - 1e-3) hzPiece(T, xm, lerp(ya, yb, cut / du) - up, xb, yb - up, 0, du - cut, hh, th);
+  }
+  ctx.setTransform(DPR, 0, 0, DPR, OX, OY);
+}
+function hzPiece(T, xa, ya, xb, yb, sx, sw, hh, th){
+  if (sw < 1e-3) return;
+  ctx.setTransform(DPR * (xb - xa) / sw, DPR * (yb - ya) / sw, 0, DPR * hh / th, DPR * xa + OX, DPR * ya + OY); ctx.drawImage(T, sx, 0, sw, th, 0, 0, sw, th);
 }
 const tX1 = new Float32Array(8), tY1 = new Float32Array(8), tX2 = new Float32Array(8), tY2 = new Float32Array(8), tSh = new Float32Array(8);
 const tD1 = new Float32Array(8), tH1 = new Float32Array(8), tD2 = new Float32Array(8), tH2 = new Float32Array(8);   // 帶子每一條離路中心幾公尺、地面多高
@@ -3129,9 +3149,9 @@ function drawWorld(b, t, jHi, jLo, far){
   let j, k, pi = AP.length - 1;
   heroDone = !!far; lodSkip = false; CQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
   const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
-  if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; } else if (!far) HS.on = false;
+  if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
   for (j = jHi; j >= jLo; j--) {
-    if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a); }
+    if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false; CQ.j = j;
     // 彎道上這三個點不在一條直線上（中間那點偏開超過半個像素）就不合併：合成一段會切掉彎的外側，露出一條條背景的細縫
@@ -3159,6 +3179,10 @@ function drawWorld(b, t, jHi, jLo, far){
         const lvS = side < 0 ? lvL : lvR;
         bandEnd(i, side, DS, nS, dW1, gw1, mo1, x1, y1, s1, tX1, tY1, tD1, tH1, lod ? 1 : 0);   // 路寬每段不一樣：帶子從這段的路緣量起
         bandEnd(i + 1, side, DS, nS, dW2, gw2, mo2, x2, y2, s2, tX2, tY2, tD2, tH2);
+        if (HS.on && fade > 0.05) {   // 地平線霧帶：這段遠端那條邊（兩側山坡、中間的路）在每條格線上的高度
+          for (k = 0; k < nS - 1; k++) skyAdd(HS, tX2[k], tY2[k], tX2[k + 1], tY2[k + 1], pZ[j + 1]);
+          if (side > 0) skyAdd(HS, HS.lx, HS.ly, tX2[0], tY2[0], pZ[j + 1]); else { HS.lx = tX2[0]; HS.ly = tY2[0]; }
+        }
         bandExt(nS, yb - y1);
         for (k = 0; k < nS - 1; k++) {           // 坡向：往外升高的那一面朝向哪裡（tSh 連續，地面明暗不分階；tLvS 只給草叢挑顏色）
           const g = (tH1[k + 1] - tH1[k]) / Math.max(0.3, tD1[k + 1] - tD1[k]);
@@ -3273,7 +3297,7 @@ function drawWorld(b, t, jHi, jLo, far){
             const tXA = xa + tc * wa, tYA = ya + tc * ka, tWA = wa * th, tKA = ka * th, tXB = xb + tc * wb, tYT = yt + tc * kt, tWB = wb * th, tKT = kt * th;
             ctx.fillStyle = curbC; quadE(tXA, tYA, tWA * cw + 0.6, tKA, tXB, tYT, tWB * cw + 0.6, tKT);
             ctx.fillStyle = LUT[7 * FOGN + fi]; quadE(tXA, tYA, tWA, tKA, tXB, tYT, tWB, tKT);
-            if (AUD.geo && fade > 0.5) AUD.geo.push({ t:1, i, q, xa:tXA, ya:tYA, wa:tWA, ka:tKA, xb:tXB, yt:tYT, wb:tWB, kt:tKT, yr, kr4, kt4, W4, riser });   // 測試用：這一階的踏面、立面（tools/turnaudit.js 檢查階梯有沒有扭轉、倒過來）
+            if (AUD.geo && fade > 0.5) AUD.geo.push({ t:1, i, q, xa:tXA, ya:tYA, wa:tWA, ka:tKA, xb:tXB, yt:tYT, wb:tWB, kt:tKT, riser:false }, { t:2, i, q, xb, yt, yr, kr4, kt4, W4, riser });   // 測試用：這一階的踏面（只畫看得到的那一截時是那一截）、立面（tools/turnaudit.js 檢查階梯有沒有扭轉、倒過來）
             const TT = TEX.moss && ST === TEX.road && Hh(i * 8 + q, 190) < 0.45 ? TEX.moss : ST;   // 森林石階：有的階踏面換成苔蘚石塊
             if (TT && ta > 0.03) { texRun(TT, ROAD_UC + tc * rwF(i, (fa + fb) * 0.5), tXA, (q === 0 ? y1 : ya) + tc * ka, sa, tXB, tYT, sb, zA + (F / sa - F / s1), ta, roadPath(tXA, (q === 0 ? y1 : ya) + tc * ka, sa, tXB, tYT, sb, rwF(i, fa) * th, rwF(i, fb) * th, tKA, tKT)); ctx.globalAlpha = fade; }   // 踏面貼圖（跟路面一樣連續對齊）
             if (sd > 0) {
