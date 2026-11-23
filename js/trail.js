@@ -41,7 +41,7 @@ const HEDGE_J = 38, HEDGE_N = 3, HEDGE_P = 1, TRUNK_P = 0.14;   // TRUNK_P：森
 // 尺寸表（公尺，畫在畫面上的高度）：全部對照登山客（1.76 公尺）訂的，路旁東西的大小只改這裡（check 會檢查畫圖時沒有另外寫數字）
 // 長椅：椅面約 0.45 公尺高（圖裡椅面在圖高 47% 左右）；石頭、路標、欄杆約 1.1 公尺；樹比人高很多
 const SCALE = {
-  hero:1.76, heroSit:1.12, heroBench:1.32, heroSleep:1.0, heroSummit:1.96, heroBreath:1.5, heroPose:1.74,   // heroBreath：彎腰喘氣比站著矮；heroPose：喝水、擦汗、看風景（站著）
+  hero:1.76, heroSit:1.6, heroBench:1.8, heroSleep:1.0, heroSummit:1.96, heroBreath:1.5, heroPose:1.74,   // heroBreath：彎腰喘氣比站著矮；heroPose：喝水、擦汗、看風景（站著）
   bench:0.96, benchBack:0.95, benchSeat:0.45, rail:1.1, sign:1.2, summit:1.5, rock:0.9, cairn:0.95, mycairn:0.45, note:1.4, treasure:0.6, view:1.75, fall:4.2,
   pine:8.2, broad:6.4, bigtree:12.5, sakura:5.6, wishtree:4.4,
   rhodo:1.5, bamboo:1.3, fern:0.75, grass:0.55,   // 2026-11-24 回報石頭、蕨類比例跟登山客對不上：路旁的長苔石頭 1.1 → 0.9 公尺（check 規定 0.9～1.3）、蕨類 0.9 → 0.75 公尺
