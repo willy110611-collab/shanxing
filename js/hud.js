@@ -1,5 +1,5 @@
 /* 山行小日子 - 登山 HUD (手繪木框風)
-   window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt, setFull }
+   window.SX.hud = { mount, update, setRoute, drawWxArt, wxArt, setFull }
    左上：表情臉 + 體力 + 體溫 + 高度跳動數字；右上：天氣圖示 + 圓形等高線雷達小地圖
    平常是精簡一排（小臉＋山名＋高度，體力偏低時多一條小體力條），點面板展開成完整的（setFull）；
    這一整排實際的高度寫進 #scrClimb 的 --hudB，隊友卡片排在它下面 */
@@ -15,13 +15,14 @@
   const H = {
     root: null, els: {},
     mood: null, wxKey: null, altStr: '', digits: [],
-    route: null, marks: [], seed: 1,
+    route: null, seed: 1,
     base: null, world: null, wx0: 0, wy0: 0,
     cum: null, pts: null, total: 1,
     angle: null, lastF: -1, lastDraw: 0, dirty: true,
     full: false   // 狀態面板展開成完整的（存在 SV.set.hudFull）
   };
   const WORLD = 720, EXTENT = 500, K = 0.5, RS = 104; // 世界畫布 / 路線範圍 / 世界→CSS 縮放 / 雷達 CSS 尺寸
+  const ARROW_K = 1.4;   // 玩家箭頭放大幾倍（小地圖上只剩這一個標記）
 
   function mk(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function cvs(w, h, cssW, cssH) { const c = document.createElement('canvas'); c.width = Math.round(w); c.height = Math.round(h); if (cssW) { c.style.width = cssW + 'px'; c.style.height = cssH + 'px'; } return c; }
@@ -237,7 +238,6 @@
     renderBase(); renderWorld(); H.dirty = true;
     if (H.els.rctx) drawRadar(H.lastFrac || 0, true);
   }
-  function setMarks(list) { H.marks = Array.isArray(list) ? list.filter(m => m && isFinite(m.f)) : []; if (H.base) { renderWorld(); H.dirty = true; } }
 
   function posAt(f) { // 依弧長取點 → [x,y]
     f = clamp(f, 0, 1); const d = f * H.total, c = H.cum; let lo = 0, hi = c.length - 1;
@@ -289,7 +289,7 @@
     H.base = c;
   }
 
-  // 底圖 + 步道 + 標記
+  // 底圖 + 步道（小地圖上只有路線和玩家的箭頭，不放其他標記）
   function renderWorld() {
     if (!H.base) return;
     const c = H.world || (H.world = cvs(WORLD, WORLD)), g = c.getContext('2d');
@@ -299,16 +299,6 @@
     g.strokeStyle = 'rgba(20,34,24,.55)'; g.lineWidth = 8; path(); g.stroke();      // 外緣暗線
     g.strokeStyle = '#f3e4bb'; g.lineWidth = 4.6; path(); g.stroke();               // 米色步道
     g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.4; path(); g.stroke();   // 亮芯
-    H.marks.forEach(m => {
-      const p = posAt(m.f);
-      g.lineWidth = 1.8; g.strokeStyle = INK;
-      if (m.type === 'photo') { g.fillStyle = '#fff'; g.beginPath(); g.arc(p[0], p[1], 5, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#5aa8e0'; g.beginPath(); g.arc(p[0], p[1], 2, 0, 7); g.fill(); }
-      else { g.fillStyle = '#ffe08a'; g.fillRect(p[0] - 4.5, p[1] - 4.5, 9, 9); g.strokeRect(p[0] - 4.5, p[1] - 4.5, 9, 9); }
-    });
-    // 山頂小旗
-    const e = H.pts[H.pts.length - 1];
-    g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(e[0], e[1]); g.lineTo(e[0], e[1] - 14); g.stroke();
-    g.fillStyle = '#d9533f'; g.beginPath(); g.moveTo(e[0], e[1] - 14); g.lineTo(e[0] + 10, e[1] - 10); g.lineTo(e[0], e[1] - 6); g.closePath(); g.fill(); g.lineWidth = 1.5; g.stroke();
   }
 
   /* ───────── 雷達 ───────── */
@@ -340,10 +330,12 @@
     g.fillStyle = lg; g.fillRect(0, 0, S, S);
     // 玩家藍色箭頭
     g.restore();
-    g.save(); g.translate(cx, py);
+    // 小地圖上唯一的標記：放大一點、外圈先描一圈深色再描白邊，米色步道和深綠底上都看得清楚（白天、晚上一樣）
+    g.save(); g.translate(cx, py); g.scale(ARROW_K, ARROW_K);
     g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.ellipse(1.5, 6.5, 6, 2.6, 0, 0, 7); g.fill();
     g.lineJoin = 'round';
     g.beginPath(); g.moveTo(0, -8.5); g.lineTo(6.2, 6.5); g.lineTo(0, 3); g.lineTo(-6.2, 6.5); g.closePath();
+    g.lineWidth = 4; g.strokeStyle = 'rgba(20,30,40,.75)'; g.stroke();
     g.fillStyle = '#2f86ee'; g.fill(); g.lineWidth = 2.2; g.strokeStyle = '#fff'; g.stroke();
     g.lineWidth = .9; g.strokeStyle = INK; g.stroke();
     g.fillStyle = 'rgba(255,255,255,.45)'; g.beginPath(); g.moveTo(0, -6); g.lineTo(3, 2); g.lineTo(0, 0); g.closePath(); g.fill();
@@ -389,5 +381,5 @@
     if (s.frac != null) drawRadar(s.frac, false);
   }
 
-  window.SX.hud = { mount, update, setRoute, setMarks, drawWxArt, wxArt, setFull };
+  window.SX.hud = { mount, update, setRoute, drawWxArt, wxArt, setFull };
 })();
