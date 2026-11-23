@@ -750,6 +750,7 @@
     const p = press; press = null; ptrHold = false;
     if (!p || p.long || e.type !== 'pointerup' || !st || paused) return;
     if (Math.hypot(e.clientX - p.cx, e.clientY - p.cy) > 14) return;
+    if (p.hit && p.hit.who && SX.social) { A.pop(); SX.social.strangerCard(p.hit.who); return; }   // 同山遇見的山友
     if (p.hit && p.hit.o) { A.pop(); useProp(p.hit.o, p.cx, p.cy); }
   };
   cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release);
