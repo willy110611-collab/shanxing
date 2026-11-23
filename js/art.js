@@ -22,12 +22,28 @@ const STAIRS16 = [7, 0, 1, 2, 3, 4, 5, 6, ~7, ~0, ~1, ~2, ~3, ~4, ~5, ~6];
 const STEP8 = [0, 1, 2, 3, 4, 5, 6, 7, ~0, ~1, ~2, ~3, ~4, ~5, ~6, ~7];
 // hiker_tired_step8：第 8 格幾乎就是第 1 格左右對調，照 STEP8 接會有兩格一樣（頓一下），所以每半步只用前 7 格、共 14 格
 const TIRED14 = [0, 1, 2, 3, 4, 5, 6, ~0, ~1, ~2, ~3, ~4, ~5, ~6];
+// 寵物走路、藍鵲飛行的播放順序（量過每格後挑的，見 INCIDENTS 2026-11-23 寵物新圖）
+// 柴犬、黑熊：Gemini 其實畫了「右腳一步＋左腳一步」整個循環（第 6、7、8 格≈第 3、2、1 格鏡射），照原順序播；像登山客那樣鏡射接成 16 格會變成倒著走
+// 石虎：尾巴第 3、5、6 格在左、其他在右，照原順序尾巴一直左右閃；改成右腳抬高（1、2、3）→ 放下（5、6）→ 兩腳並排（4）→ 左腳（7、8），尾巴一輪只換邊兩次
+// 藍鵲：兩列六格是一整輪拍翅（第 4、10 格、第 5、9 格是同一個姿勢：翅膀往下、再往上經過），照原順序、不鏡射；翅膀往上時身體低一點，保留不拉齊
+const PET_ORDER = {
+  shiba:[0, 1, 2, 3, 4, 5, 6, 7],
+  bear:[0, 1, 2, 3, 4, 5, 6, 7],
+  leopardcat:[0, 1, 2, 4, 5, 3, 6, 7],
+  magpie:[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+};
 const SHEETS = [
   [/_(walk|stairs)8$/, 4, 2],     // hiker_walk8、hiker_stairs8、hiker_tired_walk8、hiker_turn_walk8、hiker_front_walk8、hiker_side_walk8，和各自的雨衣版
   [/_walk$/, 4, 1],               // hiker_walk、hiker_rain_walk、pet_<id>_walk、pet_<id>_rain_walk
   [/_hop4$/, 4, 1, { air:true }], // hiker_hop4：蹲 → 跳起來 → 落地 → 站直
   [/_walk16$/, 8, 2, { order:WALK16 }],  // hiker_walk16、hiker_rain_walk16（兩張姿勢相同）
   [/_tired_step8$/, 8, 1, { order:TIRED14 }],   // hiker_tired_step8、hiker_rain_tired_step8（要排在 _step8 前面）
+  // 寵物（要排在 _step8 前面）：PET_ORDER 是每隻的播放順序；air：Gemini 畫的頭頂每格同一高度、腳照遠近上下，身體固定不拉齊腳底（拉齊的話整隻每格上下跳）
+  // wide：格子放不下「以身體置中」的寬度時（石虎尾巴一下左一下右），只裁掉格子外面、畫的時候照身體位置放，不把這格往旁邊推
+  [/^pet_shiba(_rain)?_step8$/, 8, 1, { order:PET_ORDER.shiba, air:true, wide:true }],
+  [/^pet_bear(_rain)?_step8$/, 8, 1, { order:PET_ORDER.bear, air:true, wide:true }],
+  [/^pet_leopardcat(_rain)?_step8$/, 8, 1, { order:PET_ORDER.leopardcat, air:true, wide:true }],
+  [/^pet_magpie(_rain)?_fly12$/, 6, 2, { order:PET_ORDER.magpie, air:true, wide:true }],
   [/_step8$/, 8, 1, { order:STEP8 }],    // hiker_step8、hiker_rain_step8
   [/_stairs16$/, 8, 2, { order:STAIRS16 }] // hiker_stairs16、hiker_rain_stairs16（兩張姿勢相同）
 ];
@@ -122,7 +138,13 @@ function prep(name, img){
     const y0s = fr.map((f, i) => Math.floor(i / cols) * ch), gl = air ? Math.max.apply(null, fr.map((f, i) => f.y + f.h - y0s[i])) : 0;
     const bys = fr.map((f, i) => air ? y0s[i] + gl : f.y + f.h), stand = fr[n - 1].h;
     const W = Math.max.apply(null, fr.map((f, i) => Math.ceil(2 * Math.max(cxs[i] - f.x, f.x + f.w - cxs[i])))), H = Math.max.apply(null, fr.map((f, i) => bys[i] - f.y));
-    fr.forEach((f, i) => { const x0 = (i % cols) * cw, w = Math.min(W, cw), by = bys[i]; f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.y = Math.max(y0s[i], by - H); f.w = w; f.h = by - f.y; });
+    const wide = !!(sh && sh[3] && sh[3].wide);
+    fr.forEach((f, i) => {
+      const x0 = (i % cols) * cw, w = Math.min(W, cw), by = bys[i];
+      if (wide) { const l = Math.max(x0, Math.round(cxs[i] - W / 2)); f.w = Math.min(x0 + cw, Math.round(cxs[i] + W / 2)) - l; f.x = l; f.cx = cxs[i]; }   // f.cx：身體在原圖的位置（put 照這個對齊）
+      else { f.x = Math.round(clampN(cxs[i] - w / 2, x0, x0 + cw - w)); f.w = w; }
+      f.y = Math.max(y0s[i], by - H); f.h = by - f.y;
+    });
     if (air) e.hk = fr[0].h / stand;   // 畫的時候給的高度是「人站直多高」：整格要再放大這麼多倍（多出來的是跳起來的空間）
   }
   e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => i < 0 ? Object.assign({}, fr[~i], { mx:true }) : fr[i]) : fr;
@@ -173,9 +195,9 @@ function frameOf(e, i){ return e.frames[((i % e.frames.length) + e.frames.length
 // 畫一格（drawFrame、drawOver 共用，位置、大小、鏡射只算在這裡）：來源圖 img 是「原圖的 k 倍大、往下偏 oy」的同樣排法；
 // u0～u1、v0～v1：只畫這一格的一小塊（0～1，以沒鏡射的這一格來算）
 function put(ctx, e, f, img, oy, k, cx, by, h, flip, u0, v0, u1, v1){
-  h *= e.hk || 1; const w = h * f.w / f.h;
+  h *= e.hk || 1; const w = h * f.w / f.h, c0 = f.cx == null ? w / 2 : (f.cx - f.x) * h / f.h;   // c0：(cx, by) 對到這一格的哪裡（沒有 f.cx 就是正中間）
   const sx = (f.x + f.w * u0) * k, sy = oy + (f.y + f.h * v0) * k, sw = f.w * (u1 - u0) * k, sh = f.h * (v1 - v0) * k;
-  const dx = -w / 2 + w * u0, dy = by - h + h * v0, dw = w * (u1 - u0), dh = h * (v1 - v0);
+  const dx = -c0 + w * u0, dy = by - h + h * v0, dw = w * (u1 - u0), dh = h * (v1 - v0);
   if (flip) { ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh); ctx.restore(); }
   else ctx.drawImage(img, sx, sy, sw, sh, cx + dx, dy, dw, dh);
 }

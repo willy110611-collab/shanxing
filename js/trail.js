@@ -68,7 +68,7 @@ const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
 let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
-const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, gr:0, crK:0, crD:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, sx:187, sy:650, u:0.75, top:520 };
+const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, gr:0, crK:0, crD:0, pan:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, pph:0, fly:1, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
 const RMOT = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // 系統設定「減少動態」：鏡頭不跟著步伐晃
 // 自動畫質：量「真正兩格之間隔了多久」（requestAnimationFrame 到下一次畫的時間，含顯示卡真的把圖畫出來的時間，不是只量程式跑多久）
@@ -125,6 +125,7 @@ function warmBuild(){
   for (const k in TEX) { const T = TEX[k]; if (T && T.lv) { q.push(function(){ up(T.c, true); }); for (let nx = 0; nx <= 3; nx++) for (let ny = nx; ny <= 6; ny++) if (nx || ny) q.push(function(){ up(texLevel(T, nx, ny).c, true); }); } }
   props.forEach(function(o){ if (o.type === 'sign') q.push(function(){ getSign(o.text); }); });
   LITE_WARM.forEach(function(id){ q.push(function(){ const L = liteOf(id); if (L) up(L.c); }); });   // 登山客的光線貼圖（逆光、輪廓光）
+  if (curS && curS.pet) { const P = petIds(curS.pet); [P.step, P.stepR, P.fly, P.flyR].forEach(function(id){ if (id) q.push(function(){ const L = liteOf(id); if (L) up(L.c); }); }); }   // 帶著的寵物走路、飛行圖也先做
   warmQ = q.reverse();
 }
 function warmStep(){ if (!warmQ.length) return; const t0 = performance.now(); while (warmQ.length && performance.now() - t0 < WARM_MS) warmQ.pop()(); }
@@ -1550,8 +1551,11 @@ function updHero(s, t, dt, dist, sp){
       inc = Math.max(inc * 0.35, inc + err * Math.min(1, dd / stepL * 2));
     }
     hero.ph += inc;
-  } else hero.ph = dist / strideOf() * TAU;   // 一下子跳很遠（換山、補進度）就直接重算
+    if (s.pet) hero.pph += dd / petStride(s.pet) * TAU;   // 寵物步伐：每座山一樣的節奏（PET_GAIT）
+  } else { hero.ph = dist / strideOf() * TAU; if (s.pet) hero.pph = dist / petStride(s.pet) * TAU; }   // 一下子跳很遠（換山、補進度）就直接重算
   hero.pd = dist;
+  // 會飛的寵物：休息、睡覺時慢慢飛下來停在旁邊，走了再飛回肩膀旁邊（暫停喝水、看風景不下來）
+  const fy = s.rest || s.sleep ? 0 : 1; hero.fly = fy > hero.fly ? Math.min(fy, hero.fly + dt / PET_FLY.land) : Math.max(fy, hero.fly - dt / PET_FLY.land);
   hero.stair += ((nSt ? clamp(rise / SEG / 0.45, 0.4, 1) : 0) - hero.stair) * Math.min(1, dt * 3);
   // 背包：阻尼彈簧跟著步伐上下彈
   const tgt = -Math.abs(Math.sin(hero.ph)) * 3 * hero.mv;
@@ -1901,24 +1905,61 @@ const PET_COL = {
   bear:       ['#4a413c', '#2a2422', '#f1e6cf', '#c9b89a'],
   leopardcat: ['#d2a464', '#9a7040', '#fbf0dc', '#d8c2a0'],
 };
-// 寵物美術圖：pet_<id>_walk（四格）；柴犬也接受第一批的 shiba_walk／shiba_sit。高度單位公分
+// 寵物美術圖：pet_<id>_step8（一列八格，播放順序在 art.js PET_ORDER）；沒有就用舊的四格 pet_<id>_walk；柴犬也接受第一批的 shiba_walk／shiba_sit。高度單位公分
 const PET_H = { shiba:46, bear:58, leopardcat:40, magpie:34 };
-function petArt(s, x, y, u, t){
-  const id = s.pet, rw = 'pet_' + id + '_rain_walk', walk = isRain && ART.get(rw) ? rw : ART.get('pet_' + id + '_walk') ? 'pet_' + id + '_walk' : (id === 'shiba' && ART.get('shiba_walk') ? 'shiba_walk' : null);   // 下雨天：有穿雨衣的走路圖就用（pet_<id>_rain_walk）
+// 寵物步伐：跟登山客一樣照「走了多遠」換格（腳不會在地上滑），每座山節奏一樣：hz＝照這座山平常速度走時，每秒走完幾個循環（八格一輪）
+// 小狗腿短步子碎、黑熊慢吞吞、石虎輕快；登山客累了、爬階梯變慢時寵物跟著慢
+const PET_GAIT = { shiba:1.25, bear:0.85, leopardcat:1.1 };
+// 藍鵲：在登山客右邊飛（約肩膀到頭的高度），一直拍翅膀、輕輕上下浮、左右飄；休息、睡覺時慢慢飛下來停在旁邊（pet_magpie_sit）
+// x：比地上寵物的位置再往右幾公分；y：飛的時候圖的下緣離地幾公分；h：飛行圖畫多高；hz：每秒拍幾下翅膀（十二格一輪）；bob、drift：上下、左右飄幾公分，幾秒一輪；land：飛下來、飛回去要幾秒
+const PET_FLY = { ids:{ magpie:1 }, x:-6, y:116, h:62, hz:2.1, bob:4, bobT:2.3, drift:5, driftT:5.5, land:1.2 };
+const PET_IDS = {};   // 每隻寵物的圖名（第一次用到組一次，每格不產生新字串）
+function petIds(id){
+  return PET_IDS[id] || (PET_IDS[id] = { step:'pet_' + id + '_step8', stepR:'pet_' + id + '_rain_step8', walk:'pet_' + id + '_walk', walkR:'pet_' + id + '_rain_walk', sit:'pet_' + id + '_sit',
+    fly:PET_FLY.ids[id] ? 'pet_' + id + '_fly12' : null, flyR:'pet_' + id + '_rain_fly12' });
+}
+// 寵物步伐相位：一個循環走幾公尺（這座山平常速度 ÷ 每秒循環數）
+function petStride(id){ return (vRef > 0 ? vRef : 0.5) / (PET_GAIT[id] || 1.1); }
+function petArt(s, x, y, u, t, ph){
+  const id = s.pet, P = petIds(id);
+  if (P.fly && petFly(s, P, x, y, u, t)) return true;
+  const step = isRain && ART.get(P.stepR) ? P.stepR : ART.get(P.step) ? P.step : null;   // 下雨天：有穿雨衣的就用
+  const walk = step || (isRain && ART.get(P.walkR) ? P.walkR : ART.get(P.walk) ? P.walk : (id === 'shiba' && ART.get('shiba_walk') ? 'shiba_walk' : null));
   if (!walk) return false;
   const sitting = hero.mv < 0.3 || s.sleep, h = PET_H[id] || 44;
-  const sit = !sitting ? null : ART.get('pet_' + id + '_sit') ? 'pet_' + id + '_sit' : (id === 'shiba' && ART.get('shiba_sit') ? 'shiba_sit' : null);   // 坐姿：pet_<id>_sit，柴犬也接受第一批的 shiba_sit
+  const sit = !sitting ? null : ART.get(P.sit) ? P.sit : (id === 'shiba' && ART.get('shiba_sit') ? 'shiba_sit' : null);   // 坐姿：pet_<id>_sit，柴犬也接受第一批的 shiba_sit
   if (LIT.on) footShadow(x, y, u, 50, 20, h, 1, jhG);   // 登山畫面：影子跟著太陽
   else ctx.drawImage(SHADOW, x - 27 * u, y - 10 * u, 50 * u, 20 * u);   // 廣場
   ctx.save(); ctx.translate(x, y); ctx.scale(u, u);
   if (sit) artFrame(ctx, sit, 0, 0, 0, h * 0.95);
-  else artFrame(ctx, walk, sitting ? 0 : Math.floor(hero.ph / TAU * 8), 0, 0, h);   // 小跑步：一個步伐循環跑兩輪
+  else if (step) artFrame(ctx, step, sitting ? 0 : Math.floor(ph / TAU * ART.get(step).frames.length), 0, 0, h);
+  else artFrame(ctx, walk, sitting ? 0 : Math.floor(hero.ph / TAU * 8), 0, 0, h);   // 舊的四格圖：一個步伐循環跑兩輪
   ctx.restore();
   return true;
 }
-function drawPet(s, x, y, u, t){
+// 會飛的寵物（藍鵲）：(x, y) 是停下來時站的地方；hero.fly 1＝在飛、0＝停好（updHero 慢慢變）。沒有飛行圖回 false（照舊用走路圖）
+function petFly(s, P, x, y, u, t){
+  const fly = isRain && ART.get(P.flyR) ? P.flyR : ART.get(P.fly) ? P.fly : null;
+  if (!fly) return false;
+  const F = PET_FLY, k = hero.fly, e = k * k * (3 - 2 * k), still = RMOT && RMOT.matches ? 0 : 1;   // e：飛下來的路線前後慢、中間快
+  const sit = ART.get(P.sit) && k < 0.02 ? P.sit : null;
+  if (sit) {   // 停好了：跟地上寵物一樣的坐姿和影子
+    if (LIT.on) footShadow(x, y, u, 34, 14, PET_H.magpie, 1, jhG); else ctx.drawImage(SHADOW, x - 17 * u, y - 7 * u, 34 * u, 14 * u);
+    ctx.save(); ctx.translate(x, y); ctx.scale(u, u); artFrame(ctx, sit, 0, 0, 0, PET_H.magpie * 0.95); ctx.restore();
+    return true;
+  }
+  const bx = x + (F.x + Math.sin(t * TAU / F.driftT) * F.drift * still) * e * u, alt = (F.y + Math.sin(t * TAU / F.bobT) * F.bob * still) * e;
+  // 影子在地上、不黏著鳥：飛越高越小越淡，往背光那邊偏一點
+  const a0 = ctx.globalAlpha, sw = 44 - 14 * e, ox = (LIT.sunR ? -1 : 1) * 10 * e;
+  ctx.globalAlpha = a0 * (1 - 0.3 * e); ctx.drawImage(SHADOW, bx + (ox - sw * 0.5) * u, y - sw * 0.2 * u, sw * u, sw * 0.4 * u); ctx.globalAlpha = a0;
+  ctx.save(); ctx.translate(bx, y - alt * u); ctx.scale(u, u);
+  artFrame(ctx, fly, Math.floor(t * F.hz * ART.get(fly).frames.length), 0, 0, F.h);
+  ctx.restore();
+  return true;
+}
+function drawPet(s, x, y, u, t, ph){
   if (!s.pet) return;
-  if (petArt(s, x, y, u, t)) return;
+  if (petArt(s, x, y, u, t, ph || 0)) return;
   if (s.pet === 'shiba') { on2D(function(){ drawDog(x, y, u * 0.98, s, t); }); return; }
   if (s.pet === 'magpie') { on2D(function(){ drawBird(x, y, u, s, t); }); return; }
   const pc = PET_COL[s.pet]; if (!pc) return;
@@ -1999,7 +2040,7 @@ function drawHero(s, t, bx, by, bs){
   hero.sx = X; hero.sy = Y; hero.u = u; hero.top = Y - (sit ? SCALE.heroSit : SCALE.hero) * 95 * u;
   ctx.globalAlpha = 1;
   LIT.on = true;   // 自己和寵物照登山畫面的陽光上光（artFrame）
-  drawPet(s, X + 68 * u, (onB ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t);
+  drawPet(s, X + 68 * u, (onB ? Y + SCALE.benchSeat * 100 * u : Y) - 6 * u, u, t, hero.pph);
   // 腳底影子：跨步時兩腳前後張開，影子前後拉長一點、左右縮一點；再疊一個貼著鞋底的小深影（坐在長椅上就只有椅面上一小片）
   const sd = sit ? 0 : Math.abs(Math.sin(hero.ph)) * hero.mv, sw = 86 * (1 - 0.06 * sd), sh = 34 * (1 + 0.3 * sd);
   if (onB) ctx.drawImage(CONTACT, X - 34 * u, Y - 8 * u, 68 * u, 14 * u);
@@ -2023,7 +2064,7 @@ S.drawPerson = function(c, X, Y, u, p, t){
   hero.ph = p.ph || 0; hero.mv = p.mv || 0; hero.lean = p.mv ? 0.3 : 0; hero.py = -Math.abs(Math.sin(hero.ph)) * 2 * hero.mv; hero.mga = Math.sin(t * 2 + (p.ph || 0)) * 0.3;
   try {
     if (p.tint >= 0) [JK_L, JK_S, BAG_L, BAG_S, HAT_L, HAT_S] = TINT_COLS[p.tint % 3];
-    if (p.pet) drawPet({ pet:p.pet, rest:p.sit }, X + (p.flip ? -62 : 62) * u, Y - 4 * u, u * 0.95, t);
+    if (p.pet) drawPet({ pet:p.pet, rest:p.sit }, X + (p.flip ? -62 : 62) * u, Y - 4 * u, u * 0.95, t, hero.ph * 2);   // 廣場：寵物步伐跟著山友的步伐（一步兩個循環）
     c.drawImage(SHADOW, X - 48 * u, Y - 17 * u, 86 * u, 34 * u);
     c.save(); c.translate(X, Y); c.scale(p.flip ? -u : u, u);
     const fl = p.tint >= 0 ? tintFilter(p.tint) : undefined, s = { rest:!!p.sit, face:p.face };   // 美術圖版本：換衣服色調
