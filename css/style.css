@@ -466,6 +466,22 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .frRow select{font:inherit;font-size:13px;max-width:84px;padding:4px;border-radius:8px;border:2px solid var(--ink);background:#fffdf4}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#bdb3a6;border:1.5px solid var(--ink)}
 .dot.on{background:#6fcf5a}
+/* 好友好感度：名字旁的「♥ LvN」（Lv2 起粉紅），點開好感小卡 */
+.affTag{flex:none;padding:1px 7px;border:1.5px solid var(--ink);border-radius:10px;background:#efe6d6;font:inherit;font-size:12px;line-height:18px;color:var(--ink2);white-space:nowrap}
+.affTag.pink{background:#ffe1ea;color:#b8325f;border-color:#b8325f}
+.affTag.big{font-size:15px;line-height:22px;padding:2px 10px}
+.affHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:var(--ink)}
+.affStats{display:flex;gap:6px;margin:8px 0}
+.affStats span{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;padding:4px 2px;border:1.5px solid rgba(58,42,32,.3);border-radius:10px;background:#fffdf4;font-size:12px;color:var(--ink2);white-space:nowrap}
+.affStats b{font-size:15px;color:var(--ink)}
+.affList{list-style:none;margin:0 0 8px;padding:0}
+.affList li{display:flex;align-items:center;gap:8px;padding:4px 2px;border-top:1px dashed rgba(58,42,32,.2);font-size:13px;color:var(--ink2);opacity:.6}
+.affList li.on{opacity:1;color:var(--ink)}
+.affList li i{flex:none;width:40px;font-style:normal;font-size:12px;text-align:center;border-radius:8px;background:#e6dccb}
+.affList li.on i{background:#ffd3e0;color:#b8325f}
+.affList li span{flex:1;min-width:0}
+.affList li small{flex:none;font-size:11px;opacity:.8}
+.carved{font-family:var(--fontT);letter-spacing:1px}
 .partyBox{position:absolute;left:10px;max-width:calc(100% - 20px);top:calc(var(--hudB) + 6px);display:none;transition:opacity .3s;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
 .partyBox.on{display:flex}
 .partyBox b{flex:none}

@@ -105,6 +105,7 @@ SX.LINES = {
   tired:['先瞇一下…','呼…休息一下下'],
   fog:['霧好濃，像在雲裡散步','看不到前面，那就看腳下'],
   snow:['下雪了！呼出來的氣都是白的','雪踩起來沙沙響','雪花落在帽子上了','手好冰，等下喝口熱茶'],
+  duo:['{n}，這裡的風好舒服對吧','跟{n}一起坐著，時間好像變慢了','{n}，等下山頂見！','分{n}一半我的茶','{n}，你上次說的那座山，下次一起去','跟{n}一起爬，腳都不痠了'],   // 好感 Lv6：跟好友一起休息時說的話（{n} 換成好友名字）
   seg:['到了！這一小段走得很棒','打個勾，下一站也慢慢走','原來走到這裡只要一下下','停一下看看，風景剛剛好','小小的一步，也是往山頂的一步'],   // 抵達「這次的小目標」時說的話
 };
 
@@ -313,18 +314,42 @@ SX.rawSpeed = m => m.dist / (m.recMin * 60);   // 山友實際紀錄的步調（
 // 每座山最多算 REPEAT_MAX 次、每天最多算一次（台灣日期）；超過的照樣算登頂（徽章、紀錄），只是不再加體能。
 // 狀態 cond：離上次打開超過 GRACE_DAYS 整天，之後每天 −DECAY_PER_DAY，最低 COND_MIN；打開遊戲的那天親自走滿 RECOVER_M 公尺就 +RECOVER（每天一次），最高 COND_MAX。離線補走不算運動。
 // 存檔欄位：done（登頂次數）、fitRep（山 id → 算數的重複次數）、fitDay（山 id → 最後一次算數的日期）、cond、lastSeen
-SX.FIT = { MAX:2, FIRST_PER_DIFF:0.001, STEP_LOW:0.001, STEP_HIGH:0.002, HIGH_DIFF:4, REPEAT_MAX:20, COND_MIN:0.6, COND_MAX:1, GRACE_DAYS:7, DECAY_PER_DAY:0.01, RECOVER:0.05, RECOVER_M:500 };
+SX.FIT = { MAX:2, FIRST_PER_DIFF:0.001, STEP_LOW:0.001, STEP_HIGH:0.002, HIGH_DIFF:4, REPEAT_MAX:20, COND_MIN:0.6, COND_MAX:1, GRACE_DAYS:7, DECAY_PER_DAY:0.01, RECOVER:0.05, RECOVER_M:500, LIFE_PER:0.01, LIFE_MAX:0.05 };
+// 體能上限：MAX，再加上「一輩子的山友」（好友好感 Lv10）每位 LIFE_PER、最多 LIFE_MAX（2.000 → 2.050）；上限只在這裡算
+SX.lifeMates = () => 0;   // 好感 Lv10 的好友有幾位（social.js 拿到好友清單後換成真的）
+SX.fitMax = () => SX.FIT.MAX + Math.min(SX.FIT.LIFE_MAX, SX.FIT.LIFE_PER * Math.max(0, SX.lifeMates() | 0));
 SX.twDay = (t = Date.now()) => new Date(t + 8 * 36e5).toISOString().slice(0, 10);   // 台灣日期（UTC+8）YYYY-MM-DD
 SX.fitStep = m => m.diff >= SX.FIT.HIGH_DIFF ? SX.FIT.STEP_HIGH : SX.FIT.STEP_LOW;
 SX.fitGain = (id, n, rep) => { const m = SX.M[id]; return m && n > 0 ? SX.FIT.FIRST_PER_DIFF * (m.diff + 1) + SX.fitStep(m) * Math.min(rep || 0, SX.FIT.REPEAT_MAX) : 0; };
-SX.fitBonus = sv => Math.min(SX.FIT.MAX - 1, Object.keys(sv.done || {}).reduce((a, id) => a + SX.fitGain(id, sv.done[id], (sv.fitRep || {})[id]), 0));
+SX.fitBonus = sv => Math.min(SX.fitMax() - 1, Object.keys(sv.done || {}).reduce((a, id) => a + SX.fitGain(id, sv.done[id], (sv.fitRep || {})[id]), 0));
 SX.fitCond = sv => Math.min(SX.FIT.COND_MAX, Math.max(SX.FIT.COND_MIN, sv.cond == null ? SX.FIT.COND_MAX : sv.cond));
 SX.fitness = sv => 1 + SX.fitBonus(sv || {}) * SX.fitCond(sv || {});
 SX.fitCanCount = (sv, id, day) => ((sv.fitRep || {})[id] || 0) < SX.FIT.REPEAT_MAX && (sv.fitDay || {})[id] !== day;   // 這次重複登頂算不算數
 SX.fitDecay = (cond, away) => Math.max(SX.FIT.COND_MIN, cond - SX.FIT.DECAY_PER_DAY * Math.max(0, away - SX.FIT.GRACE_DAYS));   // away：離上次打開隔了幾個整天
 SX.fitRecover = cond => Math.min(SX.FIT.COND_MAX, cond + SX.FIT.RECOVER);
 SX.fitSave = () => ({});   // 目前的存檔，game.js 開機後換成真的存檔
-SX.baseSpeed = m => SX.rawSpeed(m) * SX.fitness(SX.fitSave());   // 登山客的步速（公尺／秒）= 山友步調 × 體能：遊戲關著時就照這個速度自己走；畫面、離線補走、預估時間都從這裡拿
+SX.baseSpeed = m => SX.rawSpeed(m) * SX.fitness(SX.fitSave()) * (1 + SX.partyBoost(m));   // 登山客的步速（公尺／秒）= 山友步調 × 體能 ×（1＋好友好感加速）：遊戲關著時就照這個速度自己走；畫面、離線補走、預估時間都從這裡拿
+
+// ───────── 好友好感度 ─────────
+// 等級門檻、每種事件加多少、每天上限只寫在伺服器（server/src/index.js 的 AFF），好友清單會一起回來；這裡只有每一級的獎勵（Lv1～Lv10，跟伺服器的門檻一樣多級）
+// 效果欄位：heart 名字旁愛心變粉紅、pet 對方寵物跟著走、speed 一起爬時加速、duo 登頂兩人合照、chat 休息時專屬聊天、title 稱號、life 一輩子的山友（徽章、刻名字、體能上限 SX.FIT.LIFE_PER）
+SX.AFF_REWARDS = [
+  { lv:1, text:'剛成為好友' },
+  { lv:2, heart:true, text:'名字旁的愛心變粉紅' },
+  { lv:3, pet:true, text:'一起爬時，對方的寵物也跟著走' },
+  { lv:4, speed:0.01 },
+  { lv:5, duo:true, text:'登頂多一張兩人合照的拍立得' },
+  { lv:6, chat:true, text:'休息時坐在一起，有專屬聊天句子' },
+  { lv:7, speed:0.02 },
+  { lv:8, title:'生死之交' },
+  { lv:9, speed:0.03 },
+  { lv:10, life:true, text:'「一輩子的山友」：專屬徽章、登頂時兩人名字刻在山頂石頭上、體能上限 +' + SX.FIT.LIFE_PER.toFixed(2) },
+];
+SX.AFF_REWARDS.forEach(r => { if (r.speed) r.text = '一起爬時速度 +' + Math.round(r.speed * 100) + '%'; if (r.title) r.text = '專屬稱號「' + r.title + '」'; });
+SX.affHas = (lv, key) => SX.AFF_REWARDS.some(r => r.lv <= lv && r[key]);   // 這個等級拿到這種獎勵了沒
+// 一起爬的加速：隊裡每位好友的等級取最高的那一個加速，不疊加（lvs：隊友的好感等級）
+SX.affBoost = lvs => lvs.reduce((a, lv) => Math.max(a, SX.AFF_REWARDS.reduce((b, r) => r.lv <= lv && r.speed > b ? r.speed : b, 0)), 0);
+SX.partyBoost = m => 0;   // 現在這座山的好感加速（social.js 在好友清單、隊伍變了時用 SX.affBoost 算好換上；每格只讀數字）
 // 一起爬：離線隊友大概走到哪。最後一次回報的距離＋步調×離開多久；離開時在休息或打瞌睡就停在原地；最多到山頂
 // s：{ dist, rest, t（伺服器時間，毫秒）, pace（他的遊戲關著時走的速度，舊版沒有就用山友步調）}；now：伺服器時間
 SX.mateGuess = function(m, s, now){
@@ -736,6 +761,8 @@ SX.BADGES = [
   { id:'g_yushan', name:'玉山群峰全制霸', glyph:'玉', stat:'groupPeaks', group:'yushan', unit:'座', tiers:[1, 3, 5], desc:'玉山群峰的百岳，登頂過幾座' },
   // 完百之路：stat 'baiyue' 算登頂過幾座不同的百岳；之後開放更多百岳時往後加 30、50、100
   { id:'baiyue', name:'完百之路', glyph:'岳', stat:'baiyue', unit:'座', tiers:[10], desc:'登頂過幾座不同的台灣百岳' },
+  // 一輩子的山友：好友好感 Lv10 的好友有幾位（好感在伺服器，social.js 拿到好友清單後算 SX.lifeMates）
+  { id:'lifemate', name:'一輩子的山友', glyph:'友', stat:'lifeMates', unit:'位', tiers:[1, 3, 5], desc:'好友好感到 Lv10 的山友有幾位' },
 ];
 
 // 世界區域：目前只有台灣。之後可以加入世界名山（例如富士山、少女峰、吉力馬札羅），現在先不啟用。

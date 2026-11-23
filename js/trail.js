@@ -1871,12 +1871,12 @@ const MATE_SLOW = 0.4, MATE_FAST = 2.5;
 const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去；但只要他或要去的地方在畫面裡就不跳，用最快步調走過去
 const MATE_OFF_A = 0.5;   // 離線隊友畫多透明（位置是估的）
 let mates = [];
-// list：[{ dist, name, rest, off, v }]；off＝離線（dist 是遊戲端估的位置、v 是估計的步調，每秒更新一次）
+// list：[{ dist, name, rest, off, v, pet }]；pet＝隊友的寵物（好友好感 Lv3 以上才帶，跟著他走）；off＝離線（dist 是遊戲端估的位置、v 是估計的步調，每秒更新一次）
 S.setMates = function(list){
   const now = performance.now() / 1000;
   mates = (list || []).map(m => {
     const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0), rest = !!m.rest, off = !!m.off;
-    const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now };
+    const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now, pet: PET_H[m.pet] ? m.pet : null };
     if (off) { mt.v = Math.max(0, +m.v || 0); mt.at = now; }   // 離線：步調由遊戲端估好（休息中、到山頂是 0）
     else if (old && old.off) { mt.v = old.v || hero.walkV; mt.at = now; }   // 剛上線：先照離線時的步調走，等下一筆回報再算他真正的步調，不會一上線就衝過去
     else {
@@ -1911,19 +1911,22 @@ function drawMate(mt, j, f, t, fade){
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
   const cols = [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S];
   JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
-  hero.ph = mt.d / strideOf() * TAU + 1.3; hero.mv = mt.rest ? 0 : 1; hero.lean = mt.rest ? 0 : 0.45; hero.py = 0; hero.mga = Math.sin(t * 2) * 0.3;
+  hero.ph = mt.d / strideOf() * TAU + 1.3; hero.mv = mt.rest || mt.still ? 0 : 1; hero.lean = mt.rest ? 0 : 0.45; hero.py = 0; hero.mga = Math.sin(t * 2) * 0.3;
   ctx.globalAlpha = fade;
   footShadow(X, Y, u, 86, 34, SCALE.hero * 100, 1, j);
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
     LIT.on = true;   // 隊友跟自己一樣上光（逆光、輪廓光）
-    const drawn = heroArt(ctx, { rest:mt.rest, stair:onSt }, t);   // 隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
+    const drawn = heroArt(ctx, { rest:mt.rest, stair:onSt, frac:mt.still ? 1 : 0 }, t);   // still：合照時站著（山頂舉杖）；隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
     if (!drawn) on2D(function(c){ if (mt.rest) heroRest(c, t); else heroWalk(c, t); });
   } finally {
     LIT.on = false;
     ctx.restore();
-    [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols; Object.assign(hero, sv);
+    [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols;
   }
+  // 隊友的寵物（好感 Lv3）：跟自己的寵物一樣畫在他右邊，步伐照他走了多遠
+  if (mt.pet) { LIT.on = true; try { drawPet({ pet:mt.pet, rest:mt.rest || mt.still }, X + 68 * u, Y - 6 * u, u, t, mt.d / petStride(mt.pet) * TAU); } finally { LIT.on = false; } }
+  Object.assign(hero, sv);
   // 名牌（離線隊友的名牌只淡一點，字要看得清楚）
   if (mt.off) ctx.globalAlpha = fade / MATE_OFF_A * 0.85;
   const ty = Y - (mt.rest ? 118 : 182) * u - 6, fs = clamp(22 * u, 9, 14);
@@ -3620,10 +3623,12 @@ const PHOTO_COMPS = [
 // 拍照：先用「這一刻的位置」重畫一格再取畫面（遊戲在背景補進度、或不在登山畫面時，畫布可能是空的 → 拍出全黑）
 const SNAP_DPR = 1.5;   // 拍照那一格的解析度至少這麼多倍（自動畫質把畫面降到 1 倍以下時，照片才不會糊）
 let snapDpr = 0;
-S.snapshot = function(dist){
+// duo：{ name, pet }＝兩人合照（好友好感 Lv5）：只為這張照片讓這位好友站在登山客旁邊，拍完換回原本的隊友
+S.snapshot = function(dist, duo){
   if (!ocv || !curS) return '';
-  const F0 = F;
+  const F0 = F, keep = mates;
   try {
+    if (duo) mates = [{ name:String(duo.name || '山友').slice(0, 12), d:Math.max(0, (dist != null ? dist : curS.dist) - 0.4), target:0, rest:false, off:false, still:true, v:0, at:0, pet:PET_H[duo.pet] ? duo.pet : null }];
     if (DPR < SNAP_DPR) { snapDpr = SNAP_DPR; S.resize(); }
     // 構圖依拍照的位置固定挑一種（同一個地方拍，構圖每次一樣）：寬景、中景、登山客偏左／偏右；登頂用寬景把山頂標誌拍進去
     const d = dist != null ? dist : curS.dist, comp = d >= total - 1 ? PHOTO_COMPS[0] : PHOTO_COMPS[Math.abs(Math.round(d / 100) * 7919) % PHOTO_COMPS.length];
@@ -3642,7 +3647,7 @@ S.snapshot = function(dist){
     const url = px[3] === 0 ? '' : c.toDataURL('image/jpeg', 0.74);   // 還是沒畫出東西：不要存一張黑照片
     free(c);
     return url;
-  } catch (e) { return ''; } finally { F = F0; if (snapDpr) { snapDpr = 0; S.resize(); } }
+  } catch (e) { return ''; } finally { F = F0; mates = keep; if (snapDpr) { snapDpr = 0; S.resize(); } }
 };
 S.SEG = SEG;
 })();
