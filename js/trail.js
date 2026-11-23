@@ -970,7 +970,8 @@ function buildProps(){
   for (m = 45 + r() * 60; m < lim; m += 150 + r() * 110) put(TT[Math.floor(r() * 3)], m, r() < 0.5 ? -1 : 1);
   for (m = 160 + r() * 120; m < lim; m += 300 + r() * 150) put('bench', m, r() < 0.5 ? -1 : 1);
   for (m = 420 + r() * 250; m < lim; m += 700 + r() * 300) put('view', m, r() < 0.5 ? -1 : 1);
-  for (m = 260 + r() * 400; m < lim; m += 600 + r() * 600) put('treasure', m, r() < 0.5 ? -1 : 1);
+  const TG = SX.TREASURE_GAP;   // 寶物多久一個：寫在 data.js（好友跟隨分寶物的「每人平均幾件」也照這個算）
+  for (m = TG.first + r() * TG.firstVar; m < lim; m += TG.step + r() * TG.stepVar) put('treasure', m, r() < 0.5 ? -1 : 1);
   for (m = 500; m < lim; m += 500) { o = put('sign', m, 1); if (o) { const left = total - m; o.text = left >= 1000 ? '山頂 ' + (left / 1000).toFixed(1) + 'K' : '山頂 ' + Math.round(left / 10) * 10 + 'm'; } }
   // 只有美術圖才有的景物，放在最後（不影響上面固定道具的位置）：小瀑布（中低海拔）。欄杆改成沿路連續畫（railOn）
   if (ART.get('waterfall') && !TH.alpine) for (m = 600 + r() * 400; m < lim; m += 900 + r() * 600) put('fall', m, r() < 0.5 ? -1 : 1);

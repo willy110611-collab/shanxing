@@ -464,6 +464,12 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .frRow small{font-size:12px;color:var(--ink2);width:100%;padding-left:16px}
 .frRow .frDel{margin-left:8px;padding:3px 6px;border:0;background:none;font:inherit;font-size:12px;color:var(--ink2);text-decoration:underline;opacity:.75;white-space:nowrap}
 .frRow select{font:inherit;font-size:13px;max-width:84px;padding:4px;border-radius:8px;border:2px solid var(--ink);background:#fffdf4}
+/* 好友跟隨：我的隊伍卡片、好友列的「隊友」小牌、隊長選山清單（原因可能比較長，可以換行） */
+.frRow .cbtn.sm{white-space:nowrap}
+.tmCard .frRow small{padding-left:0}
+.tmBtns{justify-content:flex-end;margin-top:8px}
+.tmTag{font-style:normal;font-size:12px;padding:1px 8px;border:1.5px solid var(--ink);border-radius:10px;background:#e3f1d6;color:var(--ink);white-space:nowrap}
+.tpList .pkN small{white-space:normal}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#bdb3a6;border:1.5px solid var(--ink)}
 .dot.on{background:#6fcf5a}
 /* 好友好感度：名字旁的「♥ LvN」（Lv2 起粉紅），點開好感小卡 */

@@ -32,17 +32,21 @@ const QUOTA_RL_WINDOW = 10 * 60 * 1000, QUOTA_RL_MAX = 20;   // 登記名額：�
 const twDay = t => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 // 測試用時鐘：只有本機 wrangler dev 加 --var TEST_CLOCK:1 時，才看 X-Test-Now 標頭（正式環境沒有這個變數，永遠用真的時間）
 const clock = (env, req) => (env.TEST_CLOCK === '1' && +req.headers.get('X-Test-Now')) || now();
-// 登記一個名額：一句有條件的新增（今天人數還沒滿才寫進去；同一人同一天同一座山已經有就不重寫），人數由資料表的 trigger 跟著加一
+// 登記名額：一句有條件的新增（今天人數還沒滿才寫進去；同一人同一天同一座山已經有就不重寫），人數由資料表的 trigger 跟著加一
 // 一句 SQL 在 D1 裡是一次做完的，兩個人同時搶最後一格也只會有一個成功
-async function quotaClaim(env, key, player, t){
+// players：一起登記的人（自己出發就是 [我]；好友跟隨的隊長出發時是全隊）。一群人要「今天已經用掉的＋這群人還沒登記的人數」不超過名額才整批寫進去（g 那一段），
+// 不夠全隊用就一個都不寫（全有或全無）；每寫進一人，用掉的 +1、還沒登記的 −1，兩個加起來不變，所以同一句裡每一列的判斷都一樣
+async function quotaClaim(env, key, players, t){
   const day = twDay(t), cap = QUOTA[key].cap;
-  const r = await env.DB.prepare('INSERT INTO quota_spots (day, quota, player, at) SELECT ?1, ?2, ?3, ?4 WHERE COALESCE((SELECT n FROM quota_count WHERE day = ?1 AND quota = ?2), 0) < ?5 ON CONFLICT(day, quota, player) DO NOTHING')
-    .bind(day, key, player, t, cap).run();
-  const c = await env.DB.prepare('SELECT n FROM quota_count WHERE day = ? AND quota = ?').bind(day, key).first();
-  const used = c ? c.n : 0;
-  if (r.meta.changes) return { ok: true, used, cap };
-  const had = await env.DB.prepare('SELECT 1 FROM quota_spots WHERE day = ? AND quota = ? AND player = ?').bind(day, key, player).first();
-  return had ? { ok: true, used, cap, again: true } : { ok: false, full: true, used, cap };
+  const r = await env.DB.prepare(`INSERT INTO quota_spots (day, quota, player, at) SELECT ?1, ?2, j.value, ?4 FROM json_each(?3) j
+      JOIN (SELECT COALESCE((SELECT n FROM quota_count WHERE day = ?1 AND quota = ?2), 0) + (SELECT COUNT(*) FROM json_each(?3) x WHERE NOT EXISTS (SELECT 1 FROM quota_spots s WHERE s.day = ?1 AND s.quota = ?2 AND s.player = x.value)) AS need) g ON g.need <= ?5
+      WHERE COALESCE((SELECT n FROM quota_count WHERE day = ?1 AND quota = ?2), 0) < ?5 ON CONFLICT(day, quota, player) DO NOTHING`)
+    .bind(day, key, JSON.stringify(players), t, cap).run();
+  const c = await env.DB.prepare(`SELECT COALESCE((SELECT n FROM quota_count WHERE day = ?1 AND quota = ?2), 0) AS used,
+      (SELECT COUNT(*) FROM json_each(?3) x WHERE NOT EXISTS (SELECT 1 FROM quota_spots s WHERE s.day = ?1 AND s.quota = ?2 AND s.player = x.value)) AS miss`).bind(day, key, JSON.stringify(players)).first();
+  const used = Math.min(c.used, cap);
+  if (c.miss) return { ok: false, full: true, used, cap, miss: c.miss };
+  return r.meta.changes ? { ok: true, used, cap } : { ok: true, used, cap, again: true };
 }
 
 // ───────── 好友好感度 ─────────
@@ -58,7 +62,7 @@ const AFF = {
   WALK_CALL_MAX: 6000,                                 // 一次回報跟一位隊友一起走最多算幾公尺（遊戲端滿 WALK_M 就送，多的當怪資料丟掉）
   RL_WINDOW: 10 * 60 * 1000, RL_MAX: 30,               // 回報好感：每人 10 分鐘最多 30 次
 };
-const AFF_RULES = { lv: AFF.LV, walkM: AFF.WALK_M, walkPts: AFF.WALK_PTS, walkCap: AFF.WALK_CAP, top: AFF.TOP_PTS, like: AFF.LIKE_PTS, likeCap: AFF.LIKE_CAP, day: AFF.DAY_CAP };   // 給遊戲端畫「怎麼增加」「還差多少」
+const AFF_RULES = { lv: AFF.LV, walkM: AFF.WALK_M, walkMax: AFF.WALK_CALL_MAX, walkPts: AFF.WALK_PTS, walkCap: AFF.WALK_CAP, top: AFF.TOP_PTS, like: AFF.LIKE_PTS, likeCap: AFF.LIKE_CAP, day: AFF.DAY_CAP };   // 給遊戲端畫「怎麼增加」「還差多少」
 const affLv = pts => AFF.LV.filter(x => pts >= x).length;
 const affPair = (a, b) => a < b ? [a, b] : [b, a];
 // 一位好友的好感（好友清單用）：r 是 LEFT JOIN affinity 的欄位（還沒有這列就是 0）
@@ -97,14 +101,94 @@ async function affTop(env, me, mate, mountain, day){
   const g = await env.DB.prepare('UPDATE aff_tops SET granted = 1 WHERE lo = ? AND hi = ? AND day = ? AND mountain = ? AND granted = 0').bind(lo, hi, day, mountain).run();
   if (g.meta.changes) await affGain(env, me, mate, 'top', day);
 }
-// 同一隊：同一位邀請人、同一座山、INVITE_MS 內已接受的邀請（自己邀他、他邀自己、或兩人都接受同一位邀請人的邀請）
-const sameParty = (env, a, b, mountain) => env.DB.prepare(`SELECT 1 FROM invites i WHERE i.status = 'accepted' AND i.mountain = ?3 AND i.created > ?4 AND (
-    (i.host = ?1 AND i.guest = ?2) OR (i.host = ?2 AND i.guest = ?1)
-    OR (i.guest = ?1 AND EXISTS (SELECT 1 FROM invites j WHERE j.status = 'accepted' AND j.host = i.host AND j.mountain = ?3 AND j.guest = ?2 AND j.created > ?4))) LIMIT 1`)
+// 同一隊：同一支隊伍、同一趟（同一座山）一起出發的兩個人（team_runs 有兩人的那一趟；離開隊伍後，之前一起走完的那幾趟照樣算）
+const sameParty = (env, a, b, mountain) => env.DB.prepare(`SELECT 1 FROM team_runs ra JOIN team_runs rb ON rb.team = ra.team AND rb.trip = ra.trip
+    JOIN team_trips t ON t.team = ra.team AND t.trip = ra.trip WHERE ra.player = ?1 AND rb.player = ?2 AND t.mountain = ?3 AND t.started > ?4 LIMIT 1`)
   .bind(a, b, mountain, now() - INVITE_MS).first();
 // 回報好感送太快：每人 AFF.RL_WINDOW 內最多 AFF.RL_MAX 次（跟入園名額同一張 rate_limits 表，一句 SQL 算次數）
 const affLimited = async (env, me) => { const r = await env.DB.prepare('INSERT INTO rate_limits (k, n, first) VALUES (?1, 1, ?2) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ?2 - first >= ?3 THEN 1 ELSE n + 1 END, first = CASE WHEN ?2 - first >= ?3 THEN ?2 ELSE first END RETURNING n').bind('aff:' + me.id, now(), AFF.RL_WINDOW).first(); return !!r && r.n > AFF.RL_MAX; };
 const INVITE_MS = 7 * 864e5;   // 邀請多久內有效（邀請清單和好感度的「同一隊」都看這個）
+
+// ───────── 好友跟隨（隊伍）─────────
+// 規格：docs/好友跟隨與好感度.md 第二節。隊伍的狀態只存在伺服器（teams、team_members、team_trips、team_runs），遊戲端只照這裡回的畫
+// 一個人同時只能在一支隊伍（team_members 用 player 當主鍵）；隊長也是 team_members 的一列
+// 一趟（trip）＝隊長選好一座山全隊一起出發；出發時的隊員名單寫死在 team_trips.members（寶物怎麼分，每支手機照這份名單算，才會一樣）
+// 每人每趟一列 team_runs：最後回報走到哪（dist、at）、預估登頂時間（eta，關著遊戲也照這個時間算登頂）、登頂了沒（summited）
+const TEAM = {
+  MAX: 6,                               // 一隊最多幾人（隊長＋5 位隊員；唯一的定義，GET /api/team 會一起回給遊戲端）
+  LEADER_AWAY_MS: 48 * 3600 * 1000,     // 隊長超過 48 小時沒上線，隊長自動交給最近上線的隊員
+  RL_WINDOW: 10 * 60 * 1000, RL_MAX: 60, // 隊伍的動作和進度回報：每人 10 分鐘最多 60 次（遊戲端每 45～60 秒回報一次）
+  TRIPS: 6,                             // 回最近幾趟給遊戲端（關著遊戲時隊長帶著走完的那幾趟，打開時補算）
+  UNLOCK_KEYS: 200, UNLOCK_MIN_MAX: 3 * 24 * 60,   // 能爬的山最多收幾座、自己走上去最多記幾分鐘
+};
+const teamLimited = async (env, me) => { const r = await env.DB.prepare('INSERT INTO rate_limits (k, n, first) VALUES (?1, 1, ?2) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ?2 - first >= ?3 THEN 1 ELSE n + 1 END, first = CASE WHEN ?2 - first >= ?3 THEN ?2 ELSE first END RETURNING n').bind('team:' + me.id, now(), TEAM.RL_WINDOW).first(); return !!r && r.n > TEAM.RL_MAX; };
+// 遊戲端回報「我能爬哪幾座山」：{ 山 id: 關著遊戲自己從登山口走到山頂要幾分鐘 }（遊戲端照自己的解鎖規則和體能算；伺服器只收乾淨的數字）
+function cleanUnlocks(o){
+  if (!o || typeof o !== 'object') return null;
+  const out = {};
+  for (const [k, v] of Object.entries(o).slice(0, TEAM.UNLOCK_KEYS)) if (/^[a-z0-9_]{1,24}$/.test(k)) out[k] = Math.max(1, Math.min(TEAM.UNLOCK_MIN_MAX, Math.round(+v) || 1));
+  return JSON.stringify(out);
+}
+const unlockMap = p => { try { return JSON.parse(p.unlocks || '{}') || {}; } catch (e) { return {}; } };
+// 能選的山：每位隊員自己能爬的山取交集（照權限最小的人）。交集只在這裡算：隊伍畫面（GET）和出發（POST /api/team/go）都用這個
+// 回 { ok:[大家都能爬的山], lack:{ 山: [還沒解鎖的人名] } }；離線的隊員用他最後一次回報的
+function teamPick(members){
+  const maps = members.map(unlockMap), ok = [], lack = {};
+  for (const id of new Set(maps.flatMap(o => Object.keys(o)))) {
+    const no = members.filter((p, i) => !(id in maps[i])).map(p => p.name);
+    if (no.length) lack[id] = no; else ok.push(id);
+  }
+  return { ok, lack };
+}
+const myTeam = (env, pid) => env.DB.prepare('SELECT t.* FROM team_members m JOIN teams t ON t.id = m.team WHERE m.player = ?').bind(pid).first();
+const teamMembers = (env, team) => env.DB.prepare('SELECT p.id, p.name, p.mountain, p.dist, p.unlocks, m.joined FROM team_members m JOIN players p ON p.id = m.player WHERE m.team = ? ORDER BY m.joined').bind(team).all().then(r => r.results);
+// 這一趟全員登頂了：done 從 0 變時間只會成功一次，成功的那一次通知隊長
+async function teamDone(env, team, t){
+  const r = await env.DB.prepare(`UPDATE team_trips SET done = ?2 WHERE team = ?1 AND done = 0 AND trip = (SELECT trip FROM teams WHERE id = ?1)
+    AND NOT EXISTS (SELECT 1 FROM team_runs r WHERE r.team = ?1 AND r.trip = team_trips.trip AND r.summited = 0) RETURNING trip`).bind(team, t).first();
+  if (!r) return;
+  const tm = await env.DB.prepare('SELECT leader FROM teams WHERE id = ?').bind(team).first();
+  if (tm) await notify(env, tm.leader, '全隊登頂了，選下一座山吧', '打開山友大廳的「好友」，在「我的隊伍」選下一座山，全隊一起出發。', 'team');
+}
+// 隊長超過 TEAM.LEADER_AWAY_MS 沒上線：一句有條件的 UPDATE 交給最近上線的隊員（要比原隊長更近上線才換）；原隊長變隊員，回來時告訴他（handed_from）
+async function teamHandover(env, team, t){
+  const r = await env.DB.prepare(`UPDATE teams SET leader = n.player, handed_from = teams.leader FROM (SELECT m.player, p.seen FROM team_members m JOIN players p ON p.id = m.player
+      WHERE m.team = ?1 AND m.player != (SELECT leader FROM teams WHERE id = ?1) ORDER BY p.seen DESC LIMIT 1) AS n
+    WHERE teams.id = ?1 AND (SELECT seen FROM players WHERE id = teams.leader) < ?2 - ?3 AND n.seen > (SELECT seen FROM players WHERE id = teams.leader) RETURNING leader, handed_from`)
+    .bind(team, t, TEAM.LEADER_AWAY_MS).first();
+  if (!r) return;
+  const old = await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(r.handed_from).first();
+  await notify(env, r.leader, '你接手當隊長了', `${old ? old.name : '隊長'}超過兩天沒上線，現在由你帶隊。`, 'team');
+}
+// 讀隊伍前先把時間到了的事做完：預估時間到了的人算登頂、全員登頂通知隊長、隊長太久沒上線就交接（排程每 5 分鐘也會做一次）
+async function teamTick(env, team, t){
+  await env.DB.prepare('UPDATE team_runs SET summited = eta WHERE team = ? AND summited = 0 AND eta > 0 AND eta <= ?').bind(team, t).run();
+  await teamDone(env, team, t);
+  await teamHandover(env, team, t);
+}
+// 給遊戲端的隊伍畫面資料（GET /api/team、各個隊伍動作都回這個）
+async function teamPayload(env, me, t){
+  const invites = (await env.DB.prepare(`SELECT i.id, i.host, i.team, i.created, h.name AS host_name FROM invites i JOIN players h ON h.id = i.host
+    WHERE i.guest = ? AND i.status = 'pending' AND i.team IS NOT NULL AND i.created > ? ORDER BY i.created DESC LIMIT 10`).bind(me.id, t - INVITE_MS).all()).results;
+  let tm = await myTeam(env, me.id);
+  if (tm) { await teamTick(env, tm.id, t); tm = await myTeam(env, me.id); }
+  if (!tm) return { team: null, invites, max: TEAM.MAX, now: t };
+  let handover = null;
+  if (tm.handed_from === me.id) {   // 我是原隊長：回來時說一次「某某接手當隊長了」
+    const c = await env.DB.prepare('UPDATE teams SET handed_from = NULL WHERE id = ? AND handed_from = ?').bind(tm.id, me.id).run();
+    if (c.meta.changes) handover = ((await env.DB.prepare('SELECT name FROM players WHERE id = ?').bind(tm.leader).first()) || {}).name || '隊友';
+  }
+  const mem = await teamMembers(env, tm.id);
+  const trips = (await env.DB.prepare('SELECT trip, mountain, day, started, done, members FROM team_trips WHERE team = ? ORDER BY trip DESC LIMIT ?').bind(tm.id, TEAM.TRIPS).all()).results;
+  const runs = trips.length ? (await env.DB.prepare('SELECT trip, player, dist, at, eta, summited FROM team_runs WHERE team = ? AND trip >= ?').bind(tm.id, trips[trips.length - 1].trip).all()).results : [];
+  const cur = trips.find(x => x.trip === tm.trip) || null;
+  return { team: {
+    id: tm.id, leader: tm.leader, trip: tm.trip,
+    members: mem.map(p => ({ id: p.id, name: p.name, mountain: p.mountain, dist: p.dist, run: (cur && runs.find(r => r.trip === cur.trip && r.player === p.id)) || null })),
+    trips: trips.map(x => ({ trip: x.trip, mountain: x.mountain, day: x.day, started: x.started, done: x.done, members: JSON.parse(x.members || '[]'), mine: runs.find(r => r.trip === x.trip && r.player === me.id) || null })),
+    pick: tm.leader === me.id && (!cur || cur.done) ? teamPick(mem) : null,   // 隊長要選下一座山時才算
+  }, invites, max: TEAM.MAX, now: t, handover };
+}
 
 // ───────── 小工具 ─────────
 const now = () => Date.now();
@@ -234,7 +318,17 @@ export default {
     await env.DB.prepare('DELETE FROM push_queue WHERE created < ?').bind(now() - 3 * 864e5).run();
     await env.DB.prepare('DELETE FROM login_fails WHERE first < ?').bind(now() - LOGIN_WINDOW).run();   // 猜密碼紀錄過了時間就清掉
     const old = twDay(now() - 3 * 864e5);   // 入園名額：三天前的紀錄用不到了
-    await env.DB.batch([env.DB.prepare('DELETE FROM quota_spots WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM quota_count WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM rate_limits WHERE first < ?').bind(now() - Math.max(QUOTA_RL_WINDOW, AFF.RL_WINDOW)), env.DB.prepare('DELETE FROM aff_tops WHERE day < ?').bind(old)]);   // 一起登頂的紀錄也只留三天
+    await env.DB.batch([env.DB.prepare('DELETE FROM quota_spots WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM quota_count WHERE day < ?').bind(old), env.DB.prepare('DELETE FROM rate_limits WHERE first < ?').bind(now() - Math.max(QUOTA_RL_WINDOW, AFF.RL_WINDOW, TEAM.RL_WINDOW)), env.DB.prepare('DELETE FROM aff_tops WHERE day < ?').bind(old)]);   // 一起登頂的紀錄也只留三天
+    // 好友跟隨：關著遊戲的隊員預估時間到了就算登頂 → 全員登頂的隊伍通知隊長 → 隊長太久沒上線的交接；很久以前走完的那幾趟清掉
+    const t = now();
+    await env.DB.prepare('UPDATE team_runs SET summited = eta WHERE summited = 0 AND eta > 0 AND eta <= ?').bind(t).run();
+    const open = (await env.DB.prepare(`SELECT x.team FROM team_trips x JOIN teams tm ON tm.id = x.team AND tm.trip = x.trip WHERE x.done = 0
+      AND NOT EXISTS (SELECT 1 FROM team_runs r WHERE r.team = x.team AND r.trip = x.trip AND r.summited = 0) LIMIT 100`).all()).results;
+    for (const o of open) await teamDone(env, o.team, t);
+    const away = (await env.DB.prepare('SELECT tm.id FROM teams tm JOIN players p ON p.id = tm.leader WHERE p.seen < ? LIMIT 100').bind(t - TEAM.LEADER_AWAY_MS).all()).results;
+    for (const o of away) await teamHandover(env, o.id, t);
+    await env.DB.batch([env.DB.prepare('DELETE FROM team_trips WHERE (done > 0 AND done < ?1) OR (started < ?1 AND NOT EXISTS (SELECT 1 FROM teams WHERE id = team_trips.team))').bind(t - INVITE_MS),
+      env.DB.prepare('DELETE FROM team_runs WHERE NOT EXISTS (SELECT 1 FROM team_trips x WHERE x.team = team_runs.team AND x.trip = team_runs.trip)')]);
   },
   async fetch(req, env){
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors(env, req) });
@@ -326,10 +420,8 @@ export default {
         if (!me) return E(env, req, 'unauthorized', 401);
         const room = (url.searchParams.get('room') || 'lobby').replace(/[^a-z0-9:_-]/gi, '').slice(0, 48);
         if (room.startsWith('party:')) {
-          const inv = await env.DB.prepare('SELECT * FROM invites WHERE id = ? AND status = \'accepted\'').bind(room.slice(6)).first();
-          // 一隊＝同一位邀請人、同一座山已接受的邀請：同隊的其他隊友也能進這個房間（三人以上一起爬）
-          const mate = inv && inv.host !== me.id && inv.guest !== me.id && await env.DB.prepare('SELECT 1 FROM invites WHERE guest = ? AND status = \'accepted\' AND host = ? AND mountain = ?').bind(me.id, inv.host, inv.mountain).first();
-          if (!inv || (inv.host !== me.id && inv.guest !== me.id && !mate)) return E(env, req, 'forbidden', 403);
+          // 隊伍房間（party:隊伍代號）：只有這支隊伍的人進得來
+          if (!await env.DB.prepare('SELECT 1 FROM team_members WHERE player = ? AND team = ?').bind(me.id, room.slice(6)).first()) return E(env, req, 'forbidden', 403);
         } else if (room !== 'lobby') return E(env, req, 'bad room');
         const qp = url.searchParams.get('pet'), pet = qp !== null ? (/^[a-z]{1,16}$/.test(qp) ? qp : null) : me.pet;   // 現在帶著的寵物（廣場上跟在身邊）
         const fwd = () => { const f = new Request(req.url, req); f.headers.set('X-Player', JSON.stringify({ id: me.id, name: me.name, pet })); return f; };
@@ -384,8 +476,9 @@ export default {
         // 累積距離只會往上加（避免換手機、清存檔把排行洗掉）；換週時把本週起點設成上週結束時的累積值
         const walked = Math.max(me.walked || 0, Math.min(+b.walked || 0, 5e7)), summits = Math.max(me.summits || 0, Math.min(+b.summits || 0, 1e5));
         const wk = weekNo(), wkBase = me.wk === wk ? (me.wk_base || 0) : (me.walked || 0);
-        await env.DB.prepare('UPDATE players SET name = ?, mountain = ?, dist = ?, pet = ?, seen = ?, walked = ?, summits = ?, wk = ?, wk_base = ? WHERE id = ?')
-          .bind(name, b.mountain === undefined ? me.mountain : (b.mountain ? String(b.mountain).slice(0, 24) : null), +b.dist >= 0 ? +b.dist : me.dist, b.pet === undefined ? me.pet : (b.pet ? String(b.pet).slice(0, 16) : null), now(), walked, summits, wk, wkBase, me.id).run();
+        // unlocks：我能爬的山（好友跟隨的隊長選山時取全隊交集），遊戲端有變才帶
+        await env.DB.prepare('UPDATE players SET name = ?, mountain = ?, dist = ?, pet = ?, seen = ?, walked = ?, summits = ?, wk = ?, wk_base = ?, unlocks = COALESCE(?, unlocks) WHERE id = ?')
+          .bind(name, b.mountain === undefined ? me.mountain : (b.mountain ? String(b.mountain).slice(0, 24) : null), +b.dist >= 0 ? +b.dist : me.dist, b.pet === undefined ? me.pet : (b.pet ? String(b.pet).slice(0, 16) : null), now(), walked, summits, wk, wkBase, cleanUnlocks(b.unlocks), me.id).run();
         return J(env, req, { ok: true, name, week: Math.round(walked - wkBase) });
       }
 
@@ -399,7 +492,7 @@ export default {
         const rl = await env.DB.prepare('INSERT INTO rate_limits (k, n, first) VALUES (?1, 1, ?2) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ?2 - first >= ?3 THEN 1 ELSE n + 1 END, first = CASE WHEN ?2 - first >= ?3 THEN ?2 ELSE first END RETURNING n')
           .bind('quota:' + me.id, now(), QUOTA_RL_WINDOW).first();
         if (rl && rl.n > QUOTA_RL_MAX) return E(env, req, '按太快了，等幾分鐘再試', 429);
-        return J(env, req, Object.assign({ quota: key, name: QUOTA[key].name }, await quotaClaim(env, key, me.id, t)));
+        return J(env, req, Object.assign({ quota: key, name: QUOTA[key].name }, await quotaClaim(env, key, [me.id], t)));
       }
 
       // 雲端存檔（不含照片圖檔）
@@ -512,23 +605,133 @@ export default {
           AND i.created > ? ORDER BY i.created DESC LIMIT 20`).bind(me.id, me.id, me.id, now() - INVITE_MS).all();   // 也列出同隊其他隊友接受的邀請：被邀的人才知道隊伍有幾個人
         return J(env, req, { invites: r.results });
       }
+      // 好友跟隨：隊長「邀請跟隨」好友（還沒有隊伍就先建一支，自己當隊長）
       if (path === '/api/invites' && M === 'POST') {
-        const b = await req.json().catch(() => ({}));
-        const fr = await env.DB.prepare('SELECT 1 FROM friends WHERE a = ? AND b = ?').bind(me.id, String(b.friend || '')).first();
+        const b = await req.json().catch(() => ({})), fid = String(b.friend || '');
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const fr = await env.DB.prepare('SELECT 1 FROM friends WHERE a = ? AND b = ?').bind(me.id, fid).first();
         if (!fr) return E(env, req, '只能邀請好友');
+        let tm = await myTeam(env, me.id);
+        if (tm && tm.leader !== me.id) return E(env, req, '只有隊長可以邀請跟隨', 403);
+        if (!tm) {   // 建隊：先寫自己這一列（一個人只能在一隊，主鍵擋住同時按兩次），成功才建隊伍
+          const id = rid(8), j = await env.DB.prepare('INSERT INTO team_members (player, team, joined) VALUES (?, ?, ?) ON CONFLICT(player) DO NOTHING').bind(me.id, id, now()).run();
+          if (j.meta.changes) await env.DB.prepare('INSERT INTO teams (id, leader, trip, created) VALUES (?, ?, 0, ?)').bind(id, me.id, now()).run();
+          tm = await myTeam(env, me.id);
+          if (!tm) return E(env, req, '隊伍建不起來，等一下再試', 409);
+        }
+        const n = await env.DB.prepare('SELECT COUNT(*) AS n, SUM(player = ?2) AS has FROM team_members WHERE team = ?1').bind(tm.id, fid).first();
+        if (n.has) return E(env, req, '已經在你的隊伍裡了');
+        if (n.n >= TEAM.MAX) return E(env, req, `隊伍已經 ${TEAM.MAX} 人滿了`, 409);
         const id = rid(8);
-        await env.DB.prepare('INSERT INTO invites (id, host, guest, mountain, created) VALUES (?, ?, ?, ?, ?)').bind(id, me.id, b.friend, String(b.mountain || '').slice(0, 24), now()).run();
-        await notify(env, b.friend, `${me.name} 邀你一起爬山`, '打開山友大廳的「好友」看看要不要一起去。', 'invite');
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM invites WHERE host = ? AND guest = ? AND status = 'pending'").bind(me.id, fid),   // 同一位好友只留最新的一張
+          env.DB.prepare('INSERT INTO invites (id, host, guest, mountain, created, team) VALUES (?, ?, ?, ?, ?, ?)').bind(id, me.id, fid, '', now(), tm.id),
+        ]);
+        await notify(env, fid, `${me.name} 邀你跟隨`, '打開山友大廳的「好友」，看看要不要加入隊伍一起爬。', 'invite');
         return J(env, req, { id });
       }
+      // 回覆邀請：接受＝加入隊伍。一句有條件的新增：隊伍還在、還沒滿 TEAM.MAX、這張邀請還沒回覆、我還沒在別的隊伍，才加得進去
       if ((m = path.match(/^\/api\/invites\/([0-9a-f]+)$/)) && M === 'POST') {
         const b = await req.json().catch(() => ({}));
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
         const inv = await env.DB.prepare('SELECT * FROM invites WHERE id = ?').bind(m[1]).first();
         if (!inv || inv.guest !== me.id) return E(env, req, 'not found', 404);
-        const status = b.accept ? 'accepted' : 'declined';
-        await env.DB.prepare('UPDATE invites SET status = ? WHERE id = ?').bind(status, m[1]).run();
-        if (b.accept) await notify(env, inv.host, `${me.name} 接受了你的邀請`, '一起出發吧！打開遊戲就能一起爬。', 'invite');
-        return J(env, req, { ok: true, status, mountain: inv.mountain });
+        if (!b.accept || !inv.team) { await env.DB.prepare("UPDATE invites SET status = 'declined' WHERE id = ? AND status = 'pending'").bind(m[1]).run(); return J(env, req, Object.assign({ ok: true, status: 'declined' }, await teamPayload(env, me, clock(env, req)))); }
+        const mine = await myTeam(env, me.id);
+        if (mine && mine.id !== inv.team) {   // 自己建了隊伍但還沒有人加入：直接收掉，跟去別人的隊伍
+          const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM team_members WHERE team = ?').bind(mine.id).first();
+          if (mine.leader !== me.id || c.n > 1) return E(env, req, '你已經在別的隊伍了，先離開再加入', 409);
+          await env.DB.batch([env.DB.prepare('DELETE FROM team_members WHERE team = ?').bind(mine.id), env.DB.prepare('DELETE FROM teams WHERE id = ?').bind(mine.id), env.DB.prepare("DELETE FROM invites WHERE team = ? AND status = 'pending'").bind(mine.id)]);
+        }
+        const j = await env.DB.prepare(`INSERT INTO team_members (player, team, joined) SELECT ?1, ?2, ?3 WHERE (SELECT COUNT(*) FROM team_members WHERE team = ?2) < ?4
+            AND EXISTS (SELECT 1 FROM teams WHERE id = ?2) AND EXISTS (SELECT 1 FROM invites WHERE id = ?5 AND guest = ?1 AND team = ?2 AND status = 'pending') ON CONFLICT(player) DO NOTHING`)
+          .bind(me.id, inv.team, now(), TEAM.MAX, inv.id).run();
+        if (!j.meta.changes) {
+          const st = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM team_members WHERE team = ?1) AS n, EXISTS (SELECT 1 FROM teams WHERE id = ?1) AS live').bind(inv.team).first();
+          if (!st.live) await env.DB.prepare("UPDATE invites SET status = 'declined' WHERE id = ?").bind(inv.id).run();
+          return E(env, req, !st.live ? '這支隊伍已經解散了' : st.n >= TEAM.MAX ? `隊伍已經 ${TEAM.MAX} 人滿了` : '這張邀請已經用過了', 409);
+        }
+        await env.DB.prepare("UPDATE invites SET status = 'accepted' WHERE id = ?").bind(inv.id).run();
+        await notify(env, inv.host, `${me.name} 加入你的隊伍了`, '人到齊了，就在「我的隊伍」選一座山，全隊一起出發。', 'invite');
+        return J(env, req, Object.assign({ ok: true, status: 'accepted' }, await teamPayload(env, me, clock(env, req))));
+      }
+
+      // 好友跟隨：我的隊伍（隊員、這一趟每個人走到哪、最近幾趟、隊長能選哪幾座山、收到的邀請）
+      if (path === '/api/team' && M === 'GET') return J(env, req, await teamPayload(env, me, clock(env, req)));
+      // 回報這一趟的進度：{ trip, dist, eta（關著遊戲時預估幾點登頂）, top（登頂了）}；回傳最新的隊伍資料
+      if (path === '/api/team/sync' && M === 'POST') {
+        const b = await req.json().catch(() => ({})), t = clock(env, req);
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const tm = await myTeam(env, me.id), trip = Math.floor(+b.trip) || 0;
+        if (tm && trip > 0) {
+          const eta = +b.eta > 0 ? Math.max(t, Math.min(t + 3 * 864e5, +b.eta)) : 0;
+          await env.DB.prepare(`UPDATE team_runs SET dist = MAX(dist, ?4), at = ?5, eta = CASE WHEN ?6 > 0 THEN ?6 ELSE eta END,
+              summited = CASE WHEN summited = 0 AND ?7 = 1 THEN ?5 ELSE summited END WHERE team = ?1 AND trip = ?2 AND player = ?3`)
+            .bind(tm.id, trip, me.id, Math.max(0, Math.min(1e5, +b.dist || 0)), t, eta, b.top ? 1 : 0).run();
+        }
+        return J(env, req, await teamPayload(env, me, t));
+      }
+      // 隊長選下一座山，全隊一起出發：上一趟要全員登頂、這座山要全隊都能爬（teamPick）、熱門山幫全隊一次登記名額（不夠全隊用就不能出發）
+      if (path === '/api/team/go' && M === 'POST') {
+        const b = await req.json().catch(() => ({})), t = clock(env, req), mt = String(b.mountain || '');
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        if (!/^[a-z0-9_]{1,24}$/.test(mt)) return E(env, req, '沒有這座山');
+        if (b.unlocks) await env.DB.prepare('UPDATE players SET unlocks = COALESCE(?, unlocks) WHERE id = ?').bind(cleanUnlocks(b.unlocks), me.id).run();   // 隊長最新的解鎖
+        let tm = await myTeam(env, me.id);
+        if (!tm) return E(env, req, '你還沒有隊伍');
+        await teamTick(env, tm.id, t); tm = await myTeam(env, me.id);
+        if (tm.leader !== me.id) return E(env, req, '只有隊長可以選山', 403);
+        const cur = tm.trip ? await env.DB.prepare('SELECT done FROM team_trips WHERE team = ? AND trip = ?').bind(tm.id, tm.trip).first() : null;
+        if (cur && !cur.done) return E(env, req, '還有隊友沒登頂，全員登頂後才能選下一座', 409);
+        const mem = await teamMembers(env, tm.id), pk = teamPick(mem);
+        if (!pk.ok.includes(mt)) return E(env, req, `${(pk.lack[mt] || ['大家']).join('、')}還沒解鎖這座山`, 409);
+        const key = QUOTA_OF[mt];
+        if (key) { const q = await quotaClaim(env, key, mem.map(p => p.id), t); if (!q.ok) return J(env, req, { ok: false, full: true, name: QUOTA[key].name, left: Math.max(0, q.cap - q.used), need: q.miss, size: mem.length }); }
+        // 出發：一句有條件的 UPDATE（還是我當隊長、還在同一趟、隊伍還是剛剛算交集的那幾個人），成功才寫這一趟
+        const ids = mem.map(p => p.id).sort();
+        const up = await env.DB.prepare('UPDATE teams SET trip = trip + 1 WHERE id = ?1 AND leader = ?2 AND trip = ?3 AND (SELECT COUNT(*) FROM team_members WHERE team = ?1) = ?4 RETURNING trip').bind(tm.id, me.id, tm.trip, ids.length).first();
+        if (!up) return E(env, req, '隊伍剛剛有變動，再選一次', 409);
+        const maps = mem.map(unlockMap);
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO team_trips (team, trip, mountain, day, started, members) VALUES (?, ?, ?, ?, ?, ?)').bind(tm.id, up.trip, mt, twDay(t), t, JSON.stringify(ids)),
+          ...mem.map((p, i) => env.DB.prepare('INSERT INTO team_runs (team, trip, player, dist, at, eta) VALUES (?, ?, ?, 0, ?, ?)').bind(tm.id, up.trip, p.id, t, maps[i][mt] ? t + maps[i][mt] * 60e3 : 0)),
+        ]);
+        const nm = cleanName(b.name) || '下一座山';
+        for (const p of mem) if (p.id !== me.id) await notify(env, p.id, '隊長帶大家出發了', `${me.name}選了${nm}，你會照自己的速度跟著走。`, 'team');
+        return J(env, req, Object.assign({ ok: true }, await teamPayload(env, me, t)));
+      }
+      // 隊員離開隊伍（隊長要用解散）：還沒走完的那一趟不算他了，其他人都登頂的話就算這一趟完成
+      if (path === '/api/team/leave' && M === 'POST') {
+        const t = clock(env, req);
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const tm = await myTeam(env, me.id);
+        if (tm && tm.leader === me.id) return E(env, req, '隊長要用「解散隊伍」');
+        if (tm) {
+          await env.DB.batch([
+            env.DB.prepare('DELETE FROM team_members WHERE player = ? AND team = ?').bind(me.id, tm.id),
+            env.DB.prepare('DELETE FROM team_runs WHERE team = ? AND player = ? AND trip IN (SELECT trip FROM team_trips WHERE team = ? AND done = 0)').bind(tm.id, me.id, tm.id),
+          ]);
+          await teamDone(env, tm.id, t);
+          await notify(env, tm.leader, `${me.name} 離開隊伍了`, '打開山友大廳的「好友」看看隊伍。', 'team');
+        }
+        return J(env, req, await teamPayload(env, me, t));
+      }
+      // 隊長解散隊伍：先刪隊伍那一列（確定是我當隊長），之後誰都加不進來，再清掉隊員和還沒回覆的邀請
+      if (path === '/api/team/disband' && M === 'POST') {
+        const t = clock(env, req);
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const tm = await myTeam(env, me.id);
+        if (!tm) return J(env, req, await teamPayload(env, me, t));
+        const del = await env.DB.prepare('DELETE FROM teams WHERE id = ? AND leader = ? RETURNING id').bind(tm.id, me.id).first();
+        if (!del) return E(env, req, '只有隊長可以解散隊伍', 403);
+        const mem = await teamMembers(env, tm.id);
+        await env.DB.batch([
+          env.DB.prepare('DELETE FROM team_members WHERE team = ?').bind(tm.id),
+          env.DB.prepare("DELETE FROM invites WHERE team = ? AND status = 'pending'").bind(tm.id),
+          env.DB.prepare('DELETE FROM team_runs WHERE team = ? AND trip IN (SELECT trip FROM team_trips WHERE team = ? AND done = 0)').bind(tm.id, tm.id),
+        ]);
+        for (const p of mem) if (p.id !== me.id) await notify(env, p.id, '隊伍解散了', `${me.name}解散了隊伍，接下來自己慢慢走。`, 'team');
+        return J(env, req, await teamPayload(env, me, t));
       }
 
       // 照片：上傳（原始 jpeg 位元組放在 body，其他資訊放網址參數）

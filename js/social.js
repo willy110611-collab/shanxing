@@ -9,7 +9,7 @@
   const LOBBY_REFRESH_MS = 60000;   // 大廳畫面多久重新拿一次好友、邀請（打開大廳、切到好友分頁、加好友、送邀請、回覆邀請時會立刻拿）
   const PARTY_STATE_MS = 10000;     // 一起爬：多久回報一次自己的進度（隊友在登山畫面上照估計的步調慢慢走，不會跳）
   const REPORT_MS = 60000;          // 回報在爬哪座山、累積距離、拿回本週公里數（/me）：只有 report 這一處在送
-  const KEY = 'shanxing-net-v1', KEY_PARTY = 'shanxing-party-v1', KEY_ADMIN = 'shanxing-admin-key';
+  const KEY = 'shanxing-net-v1', KEY_TEAM = 'shanxing-team-v1', KEY_ADMIN = 'shanxing-admin-key', KEY_AFFSENT = 'shanxing-aff-sent-v1';
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch(e){ return d; } };
@@ -32,11 +32,11 @@
   // 再加 &fakenew=1：一開始沒有帳號，看取暱稱、換手機登入的卡片
   const FAKE_ACCT = { id: 'dev', token: 'dev0123456789abcdef0123456789abcdef0123456789ab', name: '測試山友', code: 'TEST0001', login: null };
   let acct = FAKE ? (/[?&]fakenew=1\b/.test(location.search) ? null : Object.assign({}, FAKE_ACCT)) : load(KEY, null);   // { id, token, name, code, login }（假帳號不存進手機）
-  // 一起爬的隊伍：{ id:隊伍房間（同一隊最早的那張邀請）, ids:這隊所有邀請, mountain, host:邀請人, mates:[{id,name}]（不含自己）}
-  // 舊存檔只有 with（一位隊友）：換成 mates，host 等下次讀到邀請再補
-  let party = load(KEY_PARTY, null);
-  if (party && !party.mates) party = party.with ? { id: party.id, ids: [party.id], mountain: party.mountain, host: null, mates: [party.with] } : null;
-  let invMt = null;   // 從山的卡片按「邀請山友」來的：好友分頁的山先選好這座
+  // 好友跟隨（隊伍）：隊伍的狀態只在伺服器（GET /team），這裡存一份最後拿到的（沒網路時登山畫面也知道隊友是誰）
+  // team：{ id, leader, trip（現在第幾趟）, members:[{ id, name, mountain, dist, run（這一趟的進度）}], trips:[最近幾趟], pick（隊長能選哪幾座山）}
+  // party＝隊伍現在這一趟（登山畫面的隊友、好感度、雪季組隊人數用），從 team 算出來，不另外存
+  let team = load(KEY_TEAM, null), teamMax = 0, teamGone = false, party = null;
+  let invMt = null;   // 從山的卡片按「邀請山友」來的：好友分頁上面提醒一下要爬哪座
 
   // ───────── API ─────────
   // 假伺服器（只有 FAKE 時用）：每次拿好友清單，大家本週的公里數都會變一點，看得出下拉更新有重新拿
@@ -59,6 +59,7 @@
     if (p.startsWith('/friends/') && opt.method === 'DELETE') { fakeGone.push(p.slice(9)); return { ok: true }; }
     if (p === '/friends') return { friend: { name: '新朋友' } };
     if (p === '/invites') return { invites: [] };
+    if (p.startsWith('/team')) return { team: null, invites: [], max: 6, now: Date.now() };   // 假伺服器：沒有隊伍（隊伍要用本機的真伺服器測）
     if (p.startsWith('/affinity')) return { ok: true };
     if (p === '/me') return opt.body ? { week: 3400 + fakeN * 50, name: acct.name } : acct;
     const b = opt.body ? JSON.parse(opt.body) : {};
@@ -260,16 +261,17 @@
   async function refresh(){
     if (!acct) return;
     try {
-      const [f, i] = await Promise.all([api('/friends'), api('/invites')]);   // 我的本週公里數（/me）由 report 每分鐘拿，這裡不重複拿
-      friends = f.friends || []; friendMax = f.max || 0; friendsAt = Date.now(); invites = i.invites || []; affRule = f.aff || affRule;
-      checkParty(); affSync();
+      // 好友清單和隊伍（含收到的邀請）一起拿；我的本週公里數（/me）由 report 每分鐘拿，這裡不重複拿
+      const [f] = await Promise.all([api('/friends'), teamFetch(true)]);
+      friends = f.friends || []; friendMax = f.max || 0; friendsAt = Date.now(); affRule = f.aff || affRule;
+      affSync();
       if (tab === 'friends') renderFriends();
       updateBadge();
     } catch(e){ if (tab !== 'plaza') toast(e.message, 3000); }
     if (!netReady) { netReady = true; if (tab === 'friends') renderFriends(); }
   }
   function updateBadge(){
-    const n = invites.filter(v => v.guest === (acct && acct.id) && v.status === 'pending').length;
+    const n = invites.length;   // 隊伍資料回來的 invites 都是別人邀我、還沒回覆的
     $$('[data-go="lobby"]').forEach(b => b.dataset.badge = n ? String(n) : '');
   }
   function render(){
@@ -312,23 +314,22 @@
       : '<div class="lg tip">點地面走走，跟山友打聲招呼吧</div>';
     L.scrollTop = L.scrollHeight;
   }
-  // 點了廣場上的別人：加好友、邀請一起爬
-  const mtOpts = () => SX.MOUNTAINS.map(m => `<option value="${m.id}"${m.id === invMt ? ' selected' : ''}>${m.name}</option>`).join('');
+  // 點了廣場上的別人：加好友、邀請跟隨
   function personCard(p){
-    const fr = friends.find(f => f.id === p.id), opts = mtOpts();
+    const fr = friends.find(f => f.id === p.id), inTeam = team && team.members.some(x => x.id === p.id), canInv = !team || team.leader === acct.id;
     const mc = $('#mCard'); $('#modal').classList.add('on');
     mc.innerHTML = `<h3>${esc(p.name)}</h3>
-      ${fr ? `<p class="summitBig">你們是好友。要邀對方一起爬哪座山？</p><select id="pcMt" class="txtIn">${opts}</select>
-        <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcInv">邀請一起爬</button></div>`
-      : `<p class="summitBig">加好友後，就能邀對方一起爬山。</p>
-        <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcAdd">加好友</button></div>`}`;
+      ${!fr ? `<p class="summitBig">加好友後，就能邀對方跟著你一起爬山。</p>
+        <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcAdd">加好友</button></div>`
+      : inTeam ? `<p class="summitBig">你們是好友，也是隊友。</p><div class="mBtns"><button class="cbtn go" id="pcX">好</button></div>`
+      : canInv ? `<p class="summitBig">你們是好友。邀對方跟隨，對方接受就加入你的隊伍，你選山、全隊一起出發。</p>
+        <div class="mBtns"><button class="cbtn" id="pcX">先不用</button><button class="cbtn go" id="pcInv">邀請跟隨</button></div>`
+      : `<p class="summitBig">你們是好友。只有隊長可以邀請跟隨。</p><div class="mBtns"><button class="cbtn go" id="pcX">好</button></div>`}`;
     $('#pcX').onclick = () => $('#modal').classList.remove('on');
     if ($('#pcAdd')) $('#pcAdd').onclick = async () => {
       try { await api('/friends', { json: { id: p.id } }); toast(`和 ${p.name} 成為好友了！`); if (A().sparkle) A().sparkle(); await refresh(); personCard(p); } catch(e){ toast(e.message, 3000); }
     };
-    if ($('#pcInv')) $('#pcInv').onclick = async () => {
-      try { await api('/invites', { json: { friend: p.id, mountain: $('#pcMt').value } }); toast('邀請送出了，對方接受後就能一起爬'); $('#modal').classList.remove('on'); refresh(); } catch(e){ toast(e.message, 3000); }
-    };
+    if ($('#pcInv')) $('#pcInv').onclick = () => { $('#modal').classList.remove('on'); teamInvite(p.id); };
   }
   // 好友多久以前在線（ago＝伺服器回的毫秒數，再加上拿到之後過了多久）
   const ONLINE_AGO = 5 * 60e3;
@@ -347,7 +348,7 @@
       $('#rmOk').disabled = true;
       try {
         await api('/friends/' + f.id, { method: 'DELETE' });
-        friends = friends.filter(x => x.id !== f.id); invites = invites.filter(v => !(v.status === 'pending' && (v.host === f.id || v.guest === f.id)));
+        friends = friends.filter(x => x.id !== f.id); invites = invites.filter(v => v.host !== f.id);
         $('#modal').classList.remove('on'); toast(`已把${f.name}從好友移除`); renderFriends(); updateBadge(); refresh();
       } catch(e){ toast(e.message, 3000); $('#rmOk').disabled = false; }
     };
@@ -355,73 +356,176 @@
   function renderFriends(){
     const body = $('#lobbyBody'); if (!body) return;
     if (!netReady) { body.innerHTML = `<div class="setRow">${MO.skeleton(1, 40)}</div><div class="setRow">${MO.skeleton(3, 34)}</div>`; return; }
-    const inc = invites.filter(v => v.guest === acct.id && v.status === 'pending');
-    const opts = mtOpts();
-    body.innerHTML = `${invMt ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁按「邀請」（山已經選好了），對方接受就會加入你的隊伍。</p></div>` : ''}
+    const canInv = !team || team.leader === acct.id, mateOf = id => team && team.members.some(x => x.id === id);
+    body.innerHTML = `${invMt && canInv ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁按「邀請跟隨」，對方接受就加入你的隊伍；人到齊了，在「我的隊伍」選這座山，全隊一起出發。</p></div>` : ''}
+      ${invites.length ? `<div class="setRow"><h4>收到的邀請</h4>${invites.map(v => `<div class="frRow"><span><b>${esc(v.host_name)}</b> 邀你跟隨</span>
+        <span><button class="cbtn go sm" data-acc="${v.id}">加入</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
+      ${teamHtml()}
       <div class="setRow"><h4>我的好友碼 <span class="codeTag">${esc(acct.code)}</span></h4>
         <p>把好友碼給朋友，對方輸入後就成為好友。</p>
         <form class="pw" id="addF"><input id="fcIn" maxlength="8" placeholder="輸入朋友的好友碼" autocapitalize="characters"><button class="cbtn sm">加好友</button></form></div>
-      ${inc.length ? `<div class="setRow"><h4>收到的邀請</h4>${inc.map(v => `<div class="frRow"><span><b>${esc(v.host_name)}</b> 邀你一起爬 <b>${esc(mName(v.mountain))}</b></span>
-        <span><button class="cbtn go sm" data-acc="${v.id}">一起去</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
-      ${party ? `<div class="setRow"><h4>正在一起爬（${partySize(party.mountain)} 人）</h4><div class="frRow"><span>和 <b>${party.mates.map(x => esc(x.name)).join('、')}</b> 爬 <b>${esc(mName(party.mountain))}</b></span>
-        <span><button class="cbtn go sm" id="pGo">出發</button><button class="cbtn sm" id="pEnd">結束</button></span></div></div>` : ''}
       ${friends.length ? `<div class="setRow"><h4>本週誰走最多</h4>${[{ id: acct.id, name: acct.name + '（我）', week: myWeek }, ...friends].sort((a, b) => (b.week || 0) - (a.week || 0)).slice(0, 10)
         .map((p, i) => `<div class="rankRow${p.id === acct.id ? ' me' : ''}"><i>${i + 1}</i><b>${esc(p.name)}</b><span>${((p.week || 0) / 1000).toFixed(1)} km</span></div>`).join('')}
         <p class="tiny">每週一凌晨重新計算。</p></div>` : ''}
       <div class="setRow"><h4>好友（${friends.length}${friendMax ? ` / ${friendMax}` : ''}）</h4>
         ${friends.length ? [...friends].sort((a, b) => agoOf(a) - agoOf(b)).map(f => { const on = agoOf(f) < ONLINE_AGO; return `<div class="frRow"><span><i class="dot${on ? ' on' : ''}"></i><b>${esc(f.name)}</b>${affTag(f)}
           <small>${on && f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : agoText(agoOf(f))}<button class="frDel" data-del="${f.id}">刪除</button></small></span>
-          <span><select data-sel="${f.id}">${opts}</select><button class="cbtn sm" data-inv="${f.id}">邀請</button></span></div>`; }).join('')
+          <span>${mateOf(f.id) ? '<i class="tmTag">隊友</i>' : canInv ? `<button class="cbtn sm" data-inv="${f.id}">邀請跟隨</button>` : ''}</span></div>`; }).join('')
         : '<p>還沒有好友，先把好友碼傳給朋友吧。</p>'}</div>`;
     $('#addF').onsubmit = async e => { e.preventDefault(); const v = $('#fcIn').value.trim(); if (!v) return;
       try { const d = await api('/friends', { json: { code: v } }); toast(`和 ${d.friend.name} 成為好友了！`); if (A().sparkle) A().sparkle(); refresh(); } catch(err){ toast(err.message, 3000); } };
-    $$('[data-inv]').forEach(b => b.onclick = async () => { const fid = b.dataset.inv, mt = $(`[data-sel="${fid}"]`).value;
-      try { await api('/invites', { json: { friend: fid, mountain: mt } }); toast('邀請送出了，對方接受後就能一起爬'); refresh(); } catch(err){ toast(err.message, 3000); } });
+    $$('[data-inv]').forEach(b => b.onclick = () => teamInvite(b.dataset.inv));
     $$('[data-del]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.del); if (f) removeCard(f); });
     $$('[data-aff]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.aff); if (f) affCard(f); });
     $$('[data-acc]').forEach(b => b.onclick = () => answer(b.dataset.acc, true));
     $$('[data-dec]').forEach(b => b.onclick = () => answer(b.dataset.dec, false));
-    if ($('#pGo')) $('#pGo').onclick = () => { if (G().startClimb) G().startClimb(party.mountain); };
-    if ($('#pEnd')) $('#pEnd').onclick = () => { setParty(null); renderFriends(); };
+    if ($('#tmPick')) $('#tmPick').onclick = () => { if (A().pop) A().pop(); teamPicker(); };
+    if ($('#tmEnd')) $('#tmEnd').onclick = () => { if (A().pop) A().pop(); teamQuit(team.leader === acct.id); };
+  }
+
+  // ───────── 好友跟隨（隊伍）─────────
+  // 規格：docs/好友跟隨與好感度.md 第二節。人數上限、能選哪幾座山（交集）、隊長交接都由伺服器算；這裡只畫、只送玩家按的動作
+  const tripNow = T => (T && T.trips && T.trips.find(x => x.trip === T.trip)) || null;
+  // 隊伍現在這一趟（我有在出發名單裡才算）→ 登山畫面的隊友、好感度用的 party
+  function partyOf(T){
+    const tr = tripNow(T), me = acct && acct.id;
+    if (!tr || !me || !tr.members.includes(me)) return null;
+    const names = {}; T.members.forEach(x => { names[x.id] = x.name; });
+    return { id: T.id, trip: tr.trip, key: T.id + ':' + tr.trip, mountain: tr.mountain, host: T.leader, mates: tr.members.filter(id => id !== me && names[id]).map(id => ({ id, name: names[id] })) };
+  }
+  party = partyOf(team);
+  // 這一趟我走到哪（還沒登頂才送）：伺服器拿來畫給隊友看、照 eta（關著遊戲時預估幾點登頂）算我登頂
+  function teamProgress(){
+    const S = G().SV, q = party && S && S.prog[party.mountain];
+    if (!q || q.team !== party.key || q.fin || !SX.game) return null;
+    const e = SX.game.summitEta();
+    return { trip: party.trip, dist: Math.round(q.dist), eta: (e && e.mountain === party.mountain ? e.at : Date.now()) + skew };
+  }
+  // 拿隊伍：還在走這一趟就順便回報進度（POST /team/sync），不然只拿（GET /team）。大廳每 LOBBY_REFRESH_MS、其他畫面每 45 秒一次，不會每格送
+  let teamP = null;
+  function teamFetch(){
+    if (!acct) return Promise.resolve();
+    if (!teamP) { const b = teamProgress(); teamP = (b ? api('/team/sync', { json: b }) : api('/team')).then(teamApply).catch(() => {}).finally(() => { teamP = null; }); }
+    return teamP;
+  }
+  // 伺服器回來的隊伍資料：存起來、換這一趟的 party、交給 game.js 補算（新的一趟出發、關著遊戲時隊長帶著走完的那幾趟）
+  function teamApply(d){
+    if (!d || !('team' in d)) return;
+    const had = team, T = d.team, me = acct.id;
+    team = T; teamMax = d.max || teamMax; invites = d.invites || []; if (d.now) skew = d.now - Date.now();
+    store(KEY_TEAM, T);
+    // 不是玩家自己按出來的消息走 game.js 的背景通知排隊（視窗、徽章卡收起來才跳）
+    const bgNote = (m, ms) => SX.game && SX.game.notice ? SX.game.notice(m, ms) : toast(m, ms);
+    if (had && !T && !teamGone) bgNote('隊伍解散了，接下來自己慢慢走', 3600);
+    teamGone = false;
+    if (d.handover) bgNote(`${d.handover}接手當隊長了`, 4200);
+    const p = partyOf(T);
+    if (JSON.stringify(p) !== JSON.stringify(party)) setParty(p);
+    if (SX.game && SX.game.follow) {
+      const lead = !T || T.leader === me ? '' : (T.members.find(x => x.id === T.leader) || {}).name || '隊長';   // 我自己是隊長：空字串
+      SX.game.follow(T ? T.trips.filter(x => x.members.includes(me)).sort((a, b) => a.trip - b.trip).map(x => ({ key: T.id + ':' + x.trip, team: T.id, trip: x.trip, mountain: x.mountain, day: x.day,
+        started: x.started - skew, members: x.members, current: x.trip === T.trip, summited: x.mine && x.mine.summited ? x.mine.summited - skew : 0 })) : [], lead);
+    }
+    seedMates(); updateBadge();
+    if (tab === 'friends' && $('#scrLobby.on')) renderFriends();
+  }
+  // 離線、還沒連進隊伍房間的隊友：先照伺服器的這一趟進度（最後回報的距離、預估登頂時間）放在登山畫面上，房間連上後換成即時的
+  function seedMates(){
+    const M = party && SX.M[party.mountain]; if (!M || !team) return;
+    team.members.forEach(x => {
+      const r = x.run, s = mates[x.id]; if (!r || x.id === acct.id || (s && !s.seed)) return;
+      const sec = (r.eta - r.at) / 1000;
+      mates[x.id] = { seed: true, off: true, mountain: party.mountain, dist: r.summited ? M.dist : r.dist, rest: false, t: r.at, pace: !r.summited && sec > 0 ? Math.max(0, M.dist - r.dist) / sec : 0 };
+    });
+  }
+  // 隊員現在大概走到哪（沒在線上的用最後回報的距離和預估登頂時間，照時間比例往前推）
+  function teamEst(r, M){ const T = Date.now() + skew; return !r.eta || r.eta <= r.at ? r.dist : r.dist + (M.dist - r.dist) * Math.min(1, Math.max(0, (T - r.at) / (r.eta - r.at))); }
+  function memberLine(x){
+    const tr = tripNow(team), M = tr && SX.M[tr.mountain], r = x.run, me = x.id === acct.id, f = friends.find(y => y.id === x.id), on = me || (f && agoOf(f) < ONLINE_AGO);
+    if (M && r) {
+      if (r.summited) return tr.done ? `登頂${M.name}了` : `在${M.name}山頂等大家`;
+      const S = G().SV, d = me ? (S && S.prog[M.id] ? S.prog[M.id].dist : 0) : on && x.mountain === M.id ? x.dist : teamEst(r, M);
+      return me ? `在${M.name}・${km(d)}` : on ? `在線・在${M.name}・${km(d)}` : `跟隨中${f ? '・' + agoText(agoOf(f)) : ''}・約在 ${km(d)}`;   // 不是我好友的隊員不給「多久以前在線」
+    }
+    if (tr && !tr.done && !tr.members.includes(x.id)) return '下一座一起出發';
+    return me ? '' : on ? '在線上' : f ? agoText(agoOf(f)) : '';
+  }
+  // 「我的隊伍（N／6）」卡片：隊長（👑）在最前面，每人一列狀態；下面是隊長選山／解散、隊員離開
+  function teamHtml(){
+    if (!team) return '';
+    const T = team, lead = T.leader === acct.id, tr = tripNow(T), inTrip = tr ? T.members.filter(x => tr.members.includes(x.id)) : [], tops = inTrip.filter(x => x.run && x.run.summited).length;
+    const head = !tr ? (lead ? '人到齊了，就選一座山，全隊一起出發。' : '等隊長選山出發。')
+      : tr.done ? (lead ? `全隊登頂${mName(tr.mountain)}了，選下一座山吧。` : `全隊登頂${mName(tr.mountain)}了，等隊長選下一座山。`)
+      : `這一趟：${mName(tr.mountain)}・${tops}／${inTrip.length} 人登頂。大家照自己的速度走，先到的在山頂等。`;
+    const L = [...T.members].sort((a, b) => (b.id === T.leader) - (a.id === T.leader));
+    return `<div class="setRow tmCard"><h4>我的隊伍（${T.members.length}／${teamMax}）</h4><p>${esc(head)}</p>
+      ${L.map(x => `<div class="frRow"><span><b>${x.id === T.leader ? '👑 ' : ''}${esc(x.name)}</b>${x.id === acct.id ? '（我）' : ''}<small>${esc(memberLine(x))}</small></span></div>`).join('')}
+      <div class="mBtns tmBtns">${lead && T.pick ? `<button class="cbtn go sm" id="tmPick">${tr ? '選下一座山' : '選山出發'}</button>` : ''}<button class="cbtn sm${lead ? ' red' : ''}" id="tmEnd">${lead ? '解散隊伍' : '離開隊伍'}</button></div></div>`;
+  }
+  // 隊長選山：每一座列出來，大家都能爬的才能按；不能選的寫原因（誰還沒解鎖、雪季要幾人以上組隊）
+  function teamPicker(){
+    const T = team, P = T && T.pick; if (!P) return;
+    const n = T.members.length, now = new Date();
+    const why = m => { const lack = P.lack[m.id], pm = SX.permitNeed(m.id, now);
+      return !P.ok.includes(m.id) ? (lack ? `${lack.join('、')}還沒解鎖` : '大家都還沒解鎖') : pm && n < pm.minParty ? `${pm.reason}（目前 ${n} 人）` : ''; };
+    const L = SX.MOUNTAINS.map(m => ({ m, w: why(m) })).sort((a, b) => !!a.w - !!b.w);
+    const mc = $('#mCard'); $('#modal').classList.add('on'); mc.scrollTop = 0;
+    mc.innerHTML = `<button class="cbtn sm mBack" id="tpX">← 返回</button><h3>選下一座山</h3>
+      <p class="summitBig">全隊都能爬的山才能選。大家照自己的速度走，全員登頂後再選下一座。</p>
+      <div class="pkList tpList">${L.map(({ m, w }) => `<button class="pkRow paper${w ? ' lk' : ''}" data-tp="${m.id}"><span class="pkN"><b>${esc(m.name)}</b><small>${esc(w || `${(m.dist / 1000).toFixed(1)} km`)}</small></span><span class="pkS">${w ? '' : '<i class="pkGo">›</i>'}</span></button>`).join('')}</div>`;
+    $('#tpX').onclick = () => $('#modal').classList.remove('on');
+    $$('[data-tp]').forEach(b => b.onclick = () => { const x = L.find(y => y.m.id === b.dataset.tp); if (x.w) { MO.shake(b); toast(x.w, 3000); return; } teamGo(x.m.id, b); });
+  }
+  // 隊長出發：伺服器檢查全員登頂、交集、熱門山幫全隊一次登記名額（不夠全隊用就不能出發）
+  async function teamGo(id, btn){
+    if (btn) btn.disabled = true;
+    try {
+      const d = await api('/team/go', { json: { mountain: id, name: mName(id), unlocks: SX.game ? SX.game.teamUnlocks() : undefined } });
+      if (d.full) { toast(`${d.name}今天的名額不夠全隊用（還剩 ${d.left} 個，隊伍要 ${d.need} 個），明天再來`, 4600); if (btn) btn.disabled = false; return; }
+      $('#modal').classList.remove('on');
+      teamApply(d);   // game.js 會照這一趟幫我出發
+      toast(`全隊出發去${mName(id)}！`, 3000); if (A().chime) A().chime();
+      if (G().startClimb) G().startClimb(id);
+    } catch(e){ toast(e.message, 3600); if (btn) btn.disabled = false; }
+  }
+  async function teamInvite(fid){
+    try { await api('/invites', { json: { friend: fid } }); toast('邀請送出了，對方接受後就會跟著你走', 3000); refresh(); } catch(e){ toast(e.message, 3000); }
+  }
+  // 隊員離開／隊長解散：先問一下
+  function teamQuit(disband){
+    const mc = $('#mCard'); $('#modal').classList.add('on');
+    mc.innerHTML = `<h3>${disband ? '解散隊伍' : '離開隊伍'}</h3><p class="summitBig">${disband ? '解散以後，大家接下來各自慢慢走。' : '離開以後就不再跟著隊長走，正在爬的這座接著自己走。'}</p>
+      <div class="mBtns"><button class="cbtn" id="tqX">先不要</button><button class="cbtn red" id="tqOk">${disband ? '解散' : '離開'}</button></div>`;
+    $('#tqX').onclick = () => $('#modal').classList.remove('on');
+    $('#tqOk').onclick = async () => {
+      $('#tqOk').disabled = true;
+      try { teamGone = true; const d = await api(disband ? '/team/disband' : '/team/leave', { json: {} }); $('#modal').classList.remove('on'); teamApply(d); toast(disband ? '隊伍解散了' : '離開隊伍了', 2600); }
+      catch(e){ teamGone = false; toast(e.message, 3000); $('#tqOk').disabled = false; }
+    };
   }
   async function answer(id, yes){
     try {
       const d = await api('/invites/' + id, { json: { accept: yes } });
-      const v = invites.find(x => x.id === id);
-      if (yes && v) { v.status = 'accepted'; setParty(teamOf(v.host, d.mountain)); toast(`出發！和 ${v.host_name} 一起爬${mName(d.mountain)}`); if (G().startClimb) G().startClimb(d.mountain); }
-      refresh();
-    } catch(e){ toast(e.message, 3000); }
+      teamApply(d);
+      if (yes) { toast('加入隊伍了！隊長選好山，就會帶你一起出發', 3600); if (A().sparkle) A().sparkle(); }
+      else renderFriends();
+    } catch(e){ toast(e.message, 3600); teamFetch(); }
   }
-  // 一隊＝同一位邀請人、同一座山、3 天內已接受的邀請：邀請人邀好幾位好友去同一座山，大家併成一隊（雪季 C+ 的山要三人以上）
-  function teamOf(host, mountain){
-    const done = load('shanxing-party-done', []);
-    const L = invites.filter(v => v.host === host && v.mountain === mountain && v.status === 'accepted' && Date.now() - v.created < 3 * 864e5 && !done.includes(v.id)).sort((a, b) => a.created - b.created);
-    if (!L.length) return null;
-    const mates = [], add = (id, name) => { if (id !== acct.id && !mates.some(x => x.id === id)) mates.push({ id, name }); };
-    add(L[0].host, L[0].host_name); L.forEach(v => add(v.guest, v.guest_name));
-    return { id: L[0].id, ids: L.map(v => v.id), mountain, host, mates };
+  // 雪季組隊看的人數：隊伍有幾個人（自己＋隊友；寵物不算）
+  const partySize = () => team ? team.members.length : 1;
+  // 在隊伍裡就跟著隊長選的山走：自己從山的卡片出發別座山時，game.js 問這裡要擋下來的原因
+  const teamBlock = () => !team ? null : team.leader === acct.id ? '你在帶隊：到山友大廳「好友」的「我的隊伍」選山，全隊一起出發' : '你在隊伍裡，跟著隊長選的山走；想自己爬，先到「我的隊伍」離開隊伍';
+  // 登頂了（自己看著登頂，或關著遊戲時隊長帶著走完、在背景算的那一趟）：告訴伺服器；背景算的那一趟順便回報一起登頂、一起走的好感
+  function teamTop(info, bg){
+    if (!acct || FAKE || !info) return;
+    if (team && team.id === info.team) api('/team/sync', { json: { trip: info.trip, top: true, dist: (SX.M[info.mountain] || {}).dist || 0 } }).then(teamApply).catch(() => {});
+    if (bg) affFlush(true, false, { key: info.key, mountain: info.mountain, mates: info.members.filter(id => id !== acct.id).map(id => ({ id })) });
   }
-  // 邀請人：看到對方接受了，就自動組隊；已經有隊伍時，又有人接受同一座山的邀請就加進來
-  function checkParty(){
-    if (!acct) return;
-    if (party) {
-      const inv = invites.find(v => v.id === party.id), host = party.host || (inv && inv.host), t = host && teamOf(host, party.mountain);
-      if (!t || (t.id === party.id && t.mates.length === party.mates.length && party.host)) return;
-      const add = t.mates.filter(x => !party.mates.some(y => y.id === x.id));
-      setParty(t); if (add.length) toast(`${add.map(x => x.name).join('、')} 加入隊伍了！現在 ${partySize(t.mountain)} 人`, 3600);
-      return;
-    }
-    const ok = invites.find(v => v.host === acct.id && v.status === 'accepted' && Date.now() - v.created < 3 * 864e5 && !(load('shanxing-party-done', [])).includes(v.id));
-    if (ok) { setParty(teamOf(acct.id, ok.mountain)); toast(`${ok.guest_name} 接受邀請了！一起去爬${mName(ok.mountain)}吧`, 3600); }
-  }
-  // 這座山的隊伍有幾個人（自己＋隊友；寵物不算）。雪季管制看這個數字
-  const partySize = mid => party && party.mountain === mid ? 1 + party.mates.length : 1;
-  // 山的卡片按「邀請山友」：打開山友大廳的好友分頁，邀請的山先選好
+  // 山的卡片按「邀請山友」：打開山友大廳的好友分頁
   function openInvite(mid){ invMt = mid; tab = 'friends'; if (G().go) G().go('lobby'); }
   function setParty(p){
-    if (!p && party) { const done = load('shanxing-party-done', []); done.push(...(party.ids || [party.id])); store('shanxing-party-done', done.slice(-30)); }
-    if (party && party !== p) affFlush(false);   // 換隊、結束前，一起走的距離先送出去
-    party = p; store(KEY_PARTY, p); if (pRoom) { pRoom.close(); pRoom = null; } affSync(); partyBox();
+    if (party && (!p || p.key !== party.key)) affFlush(false);   // 換一趟、離開隊伍前，一起走的距離先送出去
+    party = p; if (pRoom) { pRoom.close(); pRoom = null; mates = {}; } affSync(); partyBox();
   }
   const pwState = () => acct.login ? `已設定。換新手機時，用登入名「${acct.login}」和密碼登入。` : '還沒設定。設了以後，換新手機只要輸入名字和密碼。';
   function renderMe(){
@@ -521,16 +625,35 @@
     party.mates.forEach(x => { const s = mates[x.id]; if (s && !s.off && !s.rest && s.mountain === M.id && T - s.t < AFF_FRESH) affAcc[x.id] = (affAcc[x.id] || 0) + dd; });
     if (affRule && Object.keys(affAcc).some(k => affAcc[k] >= affRule.walkM)) affFlush(false);
   }
-  // 送出一起走的距離（top：我登頂了；leaving：關掉遊戲，用 keepalive 送）。之後的好友跟隨也走這一條（POST /affinity）
-  function affFlush(top, leaving){
-    if (!acct || !party || FAKE) { affAcc = {}; return; }
-    const walk = {}; Object.keys(affAcc).forEach(k => { if (affAcc[k] >= 1) walk[k] = Math.round(affAcc[k]); }); affAcc = {};
+  // 送出一起走的距離（top：我登頂了；leaving：關掉遊戲，用 keepalive 送）。好友跟隨也走這一條（POST /affinity）
+  // trip：不是現在這一趟（關著遊戲時隊長帶著走完、在背景算登頂的那一趟）{ key, mountain, mates }，不給就是現在的 party
+  // 跟隨也算一起走：登頂時，這一趟跟每位隊友還沒報過的距離一次補上（整座山都是一起走的）；已經報過多少記在手機裡（KEY_AFFSENT），關掉再開也不會重報
+  // 一次最多報幾公尺照伺服器給的 affRule.walkMax（AFF.WALK_CALL_MAX），多的拆成好幾次送
+  const affSentOf = key => (load(KEY_AFFSENT, {})[key]) || {};
+  const affSentSave = (key, v) => { const all = load(KEY_AFFSENT, {}); all[key] = v; const ks = Object.keys(all); ks.slice(0, Math.max(0, ks.length - 12)).forEach(k => delete all[k]); store(KEY_AFFSENT, all); };
+  function affFlush(top, leaving, trip){
+    const P0 = trip || party;
+    if (!acct || !P0 || FAKE) { if (!trip) affAcc = {}; return; }
+    const walk = {};
+    if (!trip) { Object.keys(affAcc).forEach(k => { if (affAcc[k] >= 1) walk[k] = Math.round(affAcc[k]); }); affAcc = {}; }
+    const sent = affSentOf(P0.key), M = SX.M[P0.mountain];
+    if (top && M) P0.mates.forEach(x => { const rem = Math.round(M.dist - (sent[x.id] || 0) - (walk[x.id] || 0)); if (rem > 0) walk[x.id] = (walk[x.id] || 0) + rem; });
     if (!top && !Object.keys(walk).length) return;
-    const body = { mountain: party.mountain, walk, top: !!top, mates: party.mates.map(x => x.id) };
-    if (leaving) { fetch(API + '/affinity', { method: 'POST', keepalive: true, headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {}); return; }
-    api('/affinity', { json: body }).then(() => refresh()).catch(() => { Object.keys(walk).forEach(k => { affAcc[k] = (affAcc[k] || 0) + walk[k]; }); });   // 沒送成功：距離留著下次再送
+    Object.keys(walk).forEach(k => { sent[k] = (sent[k] || 0) + walk[k]; }); affSentSave(P0.key, sent);
+    const cap = (affRule && affRule.walkMax) || Infinity, bodies = [], left = Object.assign({}, walk);
+    do { const w = {}; Object.keys(left).forEach(k => { const v = Math.min(cap, left[k]); if (v > 0) w[k] = v; left[k] -= v; });
+      bodies.push({ mountain: P0.mountain, walk: w, top: !!top && !bodies.length, mates: P0.mates.map(x => x.id) }); } while (Object.keys(left).some(k => left[k] > 0));
+    if (leaving) { bodies.forEach(body => fetch(API + '/affinity', { method: 'POST', keepalive: true, headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {})); return; }
+    bodies.reduce((p, body) => p.then(() => api('/affinity', { json: body })), Promise.resolve()).then(() => refresh())
+      .catch(() => { const s = affSentOf(P0.key); Object.keys(walk).forEach(k => { s[k] = Math.max(0, (s[k] || 0) - walk[k]); if (!trip) affAcc[k] = (affAcc[k] || 0) + walk[k]; }); affSentSave(P0.key, s); });   // 沒送成功：距離留著下次再送
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) affFlush(false, true); });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) return;
+    affFlush(false, true);
+    // 關掉遊戲：告訴伺服器這一趟我走到哪、預估幾點登頂（關著遊戲也照這個時間算登頂）
+    const b = acct && !FAKE && teamProgress();
+    if (b) fetch(API + '/team/sync', { method: 'POST', keepalive: true, headers: { Authorization: 'Bearer ' + acct.token, 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).catch(() => {});
+  });
   const affTop = mid => { if (party && party.mountain === mid) affFlush(true); };
   // 按好友照片的愛心（看大圖的「我喜歡」）：伺服器判斷是不是好友的照片、同一張只算一次、每天上限
   const affLike = id => { if (acct && !FAKE) api('/affinity/like', { json: { photo: id } }).then(d => { if (d.counted) refresh(); }).catch(() => {}); };
@@ -560,10 +683,12 @@
     const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
     // 一起爬：連到隊伍房間，每 PARTY_STATE_MS 回報自己的進度
     if (party && climbing && M.id === party.mountain) {
+      if (!pRoom) seedMates();   // 還沒連上房間：離線的隊友先照伺服器的這一趟進度放上去
       if (!pRoom) pRoom = room('party:' + party.id, d => {
         if (d.type === 'hello') {
           if (d.now) skew = d.now - Date.now();
-          (d.away || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = Object.assign({}, x.state, { off: true }); });   // 存起來的離線隊友最後進度
+          // 存起來的離線隊友最後進度（比伺服器那一趟的進度舊、或是別座山的就不用）
+          (d.away || []).forEach(x => { const c = mates[x.id]; if (x.id !== acct.id && x.state && (!c || !c.seed || (x.state.mountain === party.mountain && x.state.t >= c.t))) mates[x.id] = Object.assign({}, x.state, { off: true }); });
           (d.people || []).forEach(x => { if (x.id !== acct.id && x.state) mates[x.id] = x.state; });
         }
         else if (d.type === 'state' && d.who.id !== acct.id) mates[d.who.id] = d.state;
@@ -579,13 +704,14 @@
   }
   setInterval(tick, 1000);
   // 每分鐘回報一次：在爬哪座山、累積距離、登頂次數（好友列表與週排行用）
-  let myWeek = 0;
+  let myWeek = 0, ulSent = '';
   function report(){
     if (!acct || !SX.game) return Promise.resolve();
     const M = G().M, st = G().st, climbing = M && st && $('#scrClimb.on');
     const body = { walked: Math.round(SX.game.stats().walked || 0), summits: SX.game.summits() };
+    const ul = SX.game.teamUnlocks ? JSON.stringify(SX.game.teamUnlocks()) : ulSent; if (ul !== ulSent) body.unlocks = JSON.parse(ul);   // 我能爬哪幾座山（好友跟隨選山用）：有變才送
     if (climbing) { body.mountain = M.id; body.dist = Math.round(st.dist); }
-    return api('/me', { json: body }).then(d => { myWeek = d.week || 0; }).catch(() => {});
+    return api('/me', { json: body }).then(d => { myWeek = d.week || 0; if (body.unlocks) ulSent = ul; }).catch(() => {});
   }
   setInterval(report, REPORT_MS);
 
@@ -605,7 +731,7 @@
       if (confirm(`雲端有 ${new Date(d.updated).toLocaleString('zh-TW')} 的存檔，要載入嗎？\n（會取代這支手機的進度，照片不會搬過來）`)) SX.game.applySave(d.data);
     } catch(e){ toast(e.message, 3000); }
   }
-  setInterval(() => { if (acct && !$('#scrLobby.on')) api('/invites').then(i => { invites = i.invites || []; checkParty(); updateBadge(); }).catch(() => {}); }, 45000);
+  setInterval(() => { if (acct && !$('#scrLobby.on')) teamFetch(); }, 45000);   // 不在大廳時：每 45 秒拿一次隊伍和邀請（在大廳時跟著 refresh）
 
   // ───────── 共享照片：上傳、500 m 照片牆、檢舉 ─────────
   function uploadPhoto(canvas, rec){
@@ -758,6 +884,8 @@
   async function quickRegister(name){ return register(name); }
 
   SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite,
+    teamBlock, teamTop,   // 好友跟隨：在隊伍裡不能自己出發別座山的原因、登頂了告訴伺服器
+   
     affMates, affTop, affLike, affNear,   // 好友好感度：同隊好友的等級、登頂回報、按照片愛心、休息時旁邊的好友
     quotaLoad, quotaInfo, quotaClaim, register };   // register：還沒有帳號的人要爬有名額的山，取個暱稱就好（跟大廳一樣的帳號）
   if (acct) { refresh(); report(); }

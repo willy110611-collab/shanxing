@@ -358,6 +358,22 @@ SX.mateGuess = function(m, s, now){
   const v = +s.pace > 0 ? +s.pace : SX.rawSpeed(m), sec = Math.max(0, (now - (+s.t || now)) / 1000);
   return Math.min(m.dist, d0 + v * sec);
 };
+// 固定亂數（同一個字串種子，每支手機算出同一串數字）：繪圖（SX.clay）和好友跟隨分寶物都用這一個
+SX.hash = str => { let h = 2166136261; for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+SX.rng = seed => { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; };
+// 路上的寶物多久放一個（公尺）：第一個在 first + 0～firstVar，之後每隔 step + 0～stepVar。js/trail.js 放寶物照這個
+SX.TREASURE_GAP = { first:260, firstVar:400, step:600, stepVar:600 };
+// 好友跟隨：一個人爬這座山平均撿到幾件寶物（照上面的間隔取平均）
+SX.teamPer = m => { const G = SX.TREASURE_GAP, a = G.first + G.firstVar / 2; return m && m.dist > a ? 1 + Math.floor((m.dist - a) / (G.step + G.stepVar / 2)) : 0; };
+// 好友跟隨的寶物：全隊這一趟的寶物總數 = 每人平均幾件 × 人數，一件一件隨機分給隊員。
+// 亂數種子＝隊伍代號＋山＋日期，每支手機算出一樣的結果，不用伺服器算。ids：這一趟出發時的名單（伺服器寫死的那份）；
+// pick(rnd)：用同一串亂數挑一件寶物（game.js 的 rollTreasure）。回 { 隊員 id: [寶物…] }
+SX.teamSplit = (team, mid, day, ids, pick) => {
+  const L = [...ids].map(String).sort(), r = SX.rng(SX.hash(team + '|' + mid + '|' + day)), out = {}, n = SX.teamPer(SX.M[mid]) * L.length;
+  L.forEach(id => { out[id] = []; });
+  for (let k = 0; k < n; k++) { const who = L[Math.floor(r() * L.length)]; out[who].push(pick(r)); }
+  return out;
+};
 // 地圖旗子：不在山群裡的山一座一根；山群只有一根（位置、難度看 lead，海拔用山群裡最高的）
 SX.PINS = [];
 SX.MOUNTAINS.forEach(m => {

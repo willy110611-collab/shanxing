@@ -10,8 +10,7 @@
   C.rgba = (h, a) => { const [r,g,b] = hex2rgb(h); return `rgba(${r},${g},${b},${a})`; };
 
   // 固定亂數
-  C.rng = seed => { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; };
-  C.hash = str => { let h = 2166136261; for (const ch of str) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+  C.rng = SX.rng; C.hash = SX.hash;   // 固定亂數只寫在 data.js（好友跟隨分寶物也用同一個，每支手機算出一樣的結果）
 
   // 黏土上色：漸層填色 + 左上亮邊 + 右下陰影 + 深色描邊
   // path: (ctx) => 建立路徑
