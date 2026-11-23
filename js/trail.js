@@ -1874,13 +1874,15 @@ const MATE_CATCH = 8;     // 落差幾秒路程內慢慢追：走快一點或慢
 const MATE_SLOW = 0.4, MATE_FAST = 2.5;
 const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去；但只要他或要去的地方在畫面裡就不跳，用最快步調走過去
 const MATE_OFF_A = 0.5;   // 離線隊友畫多透明（位置是估的）
+const STRANGER_A = 0.55;  // 同山遇見的山友（不是隊友）畫多透明
 let mates = [];
-// list：[{ dist, name, rest, off, v, pet }]；pet＝隊友的寵物（好友好感 Lv3 以上才帶，跟著他走）；off＝離線（dist 是遊戲端估的位置、v 是估計的步調，每秒更新一次）
+// list：[{ id, dist, name, rest, off, v, pet, ghost }]；pet＝隊友的寵物（好友好感 Lv3 以上才帶，跟著他走）；off＝離線（dist 是遊戲端估的位置、v 是估計的步調，每秒更新一次）
+// ghost＝同山遇見的山友（半透明、只有名牌，點得到）；id 給聊天泡泡、打招呼、點人用
 S.setMates = function(list){
   const now = performance.now() / 1000;
   mates = (list || []).map(m => {
-    const old = mates.find(o => o.name === m.name), tg = Math.max(0, +m.dist || 0), rest = !!m.rest, off = !!m.off;
-    const mt = { name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now, pet: PET_H[m.pet] ? m.pet : null };
+    const key = m.id || m.name, old = mates.find(o => o.key === key), tg = Math.max(0, +m.dist || 0), rest = !!m.rest, off = !!m.off;
+    const mt = { key, id: m.id || null, ghost: !!m.ghost, name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now, pet: PET_H[m.pet] ? m.pet : null, seen: old ? old.seen : 0, sx: old ? old.sx : 0, sy: old ? old.sy : 0, ty: old ? old.ty : 0, u: old ? old.u : 0 };
     if (off) { mt.v = Math.max(0, +m.v || 0); mt.at = now; }   // 離線：步調由遊戲端估好（休息中、到山頂是 0）
     else if (old && old.off) { mt.v = old.v || hero.walkV; mt.at = now; }   // 剛上線：先照離線時的步調走，等下一筆回報再算他真正的步調，不會一上線就衝過去
     else {
@@ -1911,7 +1913,7 @@ function drawMate(mt, j, f, t, fade){
   const ms = Math.floor(mt.d / SEG), mf = mt.d / SEG - ms, rw = rwF(ms, mf), onSt = sAt(ms) === 1;   // 隊友腳下這段的路半寬、是不是階梯
   const X = gx + (near ? 0.5 : -0.25) * rw * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
   if (Y - 200 * u > H || na <= 0) return;   // 整個人（含名牌）都在畫面下緣以外才不畫
-  fade *= na * (mt.off ? MATE_OFF_A : 1);   // 離線的隊友半透明（名牌也是）
+  fade *= na * (mt.off ? MATE_OFF_A : mt.ghost ? STRANGER_A : 1);   // 離線的隊友、同山遇見的山友半透明（名牌也是）
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
   const cols = [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S];
   JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
@@ -1921,7 +1923,8 @@ function drawMate(mt, j, f, t, fade){
   ctx.save(); ctx.translate(X, Y); ctx.scale(u, u);
   try {
     LIT.on = true;   // 隊友跟自己一樣上光（逆光、輪廓光）
-    const drawn = heroArt(ctx, { rest:mt.rest, stair:onSt, frac:mt.still ? 1 : 0 }, t);   // still：合照時站著（山頂舉杖）；隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
+    const em = mt.id && emos[mt.id], pose = em && performance.now() - em.t < em.e.ms && em.e.pose && ART.get(em.e.pose) ? em.e : null;   // 同山的山友跟你打招呼：換上廣場那套揮手、鞠躬、歡呼圖
+    const drawn = pose ? artFrame(ctx, pose.pose, 0, 0, 0, pose.poseCm, false) : heroArt(ctx, { rest:mt.rest, stair:onSt, frac:mt.still ? 1 : 0 }, t);   // still：合照時站著（山頂舉杖）；隊友不換色（整張換色調連臉和靴子都變色很怪），靠名牌分辨
     if (!drawn) on2D(function(c){ if (mt.rest) heroRest(c, t); else heroWalk(c, t); });
   } finally {
     LIT.on = false;
@@ -1932,7 +1935,7 @@ function drawMate(mt, j, f, t, fade){
   if (mt.pet) { LIT.on = true; try { drawPet({ pet:mt.pet, rest:mt.rest || mt.still }, X + 68 * u, Y - 6 * u, u, t, mt.d / petStride(mt.pet) * TAU); } finally { LIT.on = false; } }
   Object.assign(hero, sv);
   // 名牌（離線隊友的名牌只淡一點，字要看得清楚）
-  if (mt.off) ctx.globalAlpha = fade / MATE_OFF_A * 0.85;
+  if (mt.off || mt.ghost) ctx.globalAlpha = fade / (mt.off ? MATE_OFF_A : STRANGER_A) * 0.85;   // 同山的山友：人淡、名牌照樣看得清楚
   const ty = Y - (mt.rest ? 118 : 182) * u - 6, fs = clamp(22 * u, 9, 14);
   ctx.font = `${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const tag = mt.off ? mt.name + '・離線' : mt.name, w = ctx.measureText(tag).width + 12;
@@ -1940,6 +1943,30 @@ function drawMate(mt, j, f, t, fade){
   ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(X - w / 2, ty - fs * 0.8, w, fs * 1.6, fs * 0.8); else ctx.rect(X - w / 2, ty - fs * 0.8, w, fs * 1.6); ctx.fill(); ctx.stroke();
   ctx.fillStyle = INK; ctx.fillText(tag, X, ty + 0.5);
   ctx.globalAlpha = 1;
+  // 記下這一格畫在哪：聊天泡泡畫在名牌上面、點同山的山友用（遠景快取那一次畫的位置會晚幾格，差幾像素）
+  mt.seen = talkF; mt.sx = X; mt.sy = Y; mt.ty = ty - fs * 0.8; mt.u = u;
+}
+// ───────── 爬山聊天泡泡、同山山友打招呼 ─────────
+// 規則（冒幾秒、對話框長相）跟廣場同一份：SX.plaza.bubble／SX.plaza.SAY_MS；動作表是 SX.plaza.EMO
+const talk = {}, emos = {};   // talk：誰（隊友 id，自己是 'me'）說了什麼；emos：誰在做打招呼動作
+let talkF = 1;                // 第幾格（每格 +1）
+const SEEN_F = 8;             // 最近幾格內有畫到才算「在畫面裡」（遠的人畫進遠景快取，幾格才畫一次）
+S.say = function(id, text){ talk[id] = { s:String(text || ''), t:performance.now() }; };
+S.emote = function(id, k){ const e = SX.plaza && SX.plaza.EMO.find(x => x.k === k); if (e) emos[id] = { e, t:performance.now() }; };
+// 這位隊友現在畫在畫面裡嗎（聊天時不在畫面裡就改在畫面邊緣提示）
+function onScr(mt){ return mt.seen > 0 && talkF - mt.seen <= SEEN_F && mt.sx > 0 && mt.sx < W && mt.ty > 0 && mt.sy < H; }
+S.mateSeen = function(id){ const mt = mates.find(m => m.id === id); return !!mt && onScr(mt); };
+// 一格畫完、調色之後才畫泡泡（夜晚、霧裡字也看得清楚）；沒有人在說話時什麼都不做
+function drawTalk(){
+  const P = SX.plaza; if (!P) return;
+  const now = performance.now();
+  for (const id in talk) {
+    const k = talk[id], age = now - k.t;
+    if (age >= P.SAY_MS) { delete talk[id]; continue; }
+    if (id === 'me') { P.bubble(ctx, k, k.s, age, hero.sx, hero.top - 4, true, W); continue; }
+    const mt = mates.find(m => m.id === id);
+    if (mt && onScr(mt)) P.bubble(ctx, k, k.s, age, mt.sx, mt.ty - 2, false, W);
+  }
 }
 // ───────── 寵物：柴犬原樣；黑熊、石虎先用換色的四腳獸，藍鵲畫一隻跳著走的小鳥（之後換成 Gemini 美術） ─────────
 const PET_COL = {
@@ -3555,7 +3582,7 @@ S.render = function(s){
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
   if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
-  updPalette(wx, frac, dt); litUpd(); shdUpd(); sunUpd(s.dt); updHero(s, t, dt, dist, sp); stepMates(dt);
+  updPalette(wx, frac, dt); litUpd(); shdUpd(); sunUpd(s.dt); updHero(s, t, dt, dist, sp); stepMates(dt); talkF++;
   if (ctx.gpu) ctx.begin();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
@@ -3595,12 +3622,15 @@ S.render = function(s){
   if (snowFall > 0.02) drawSnow(t, snowFall);
   drawParts(dt);
   if (vig) { ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H); }
+  drawTalk();   // 爬山聊天泡泡（隊友、自己頭上）
   if (ctx.gpu) ctx.flush();   // WebGL：這一格剩下的一次送出去
   if (s.dt > 0) { farStep(t, dt); warmStep(); }   // 畫完這一格：遠景快取再畫一截、剩下的時間慢慢預先做之後會用到的圖
 };
 
 // ═════════ 對外：查詢與互動 ═════════
 S.hitTest = function(x, y){
+  // 同山遇見的山友：點他（身體到名牌）→ 打招呼、加好友的小卡
+  for (const mt of mates) if (mt.ghost && onScr(mt) && Math.abs(x - mt.sx) < Math.max(22, 40 * mt.u) && y > mt.ty - 6 && y < mt.sy + 6) return { who:{ id:mt.id, name:mt.name } };
   for (let i = hitN - 1; i >= 0; i--) { const h = hits[i]; if (x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) return { o:{ type:h.o.type, m:h.o.m } }; }
   return null;
 };

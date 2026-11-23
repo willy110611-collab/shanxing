@@ -11,6 +11,9 @@ const PLAZA_MAX = 40;              // 最多開到第幾個廣場
 const SAY_MAX = 40;                // 廣場說話一次最多幾個字（頭上冒字用；hello 會告訴遊戲端，輸入框照這個限制）
 const PARTY_SAVE_MS = 60 * 1000;   // 一起爬：隊友最新進度多久最多存一次（存起來給離線時看；斷線時一定再存一次）
 const PACE_MAX = 30;               // 一起爬：遊戲端給的步調最多幾公尺／秒（開發者快速模式約 20 倍，再大就是怪資料）
+// 同山遇見山友：同一座山一個房間（mt:山 id），位置只轉給前後 MT_NEAR 公尺內的人（唯一的定義；hello 會告訴遊戲端，遊戲端照這個範圍畫）
+// 遊戲端每 10 秒（js/social.js 的 PARTY_STATE_MS）送一次；比 MT_STATE_MIN_MS 還快的直接丟掉。這個房間不寫儲存
+const MT_NEAR = 200, MT_STATE_MIN_MS = 5000;
 // 心跳：要跟 js/social.js 的 PING／PONG 一字不差。房間用 setWebSocketAutoResponse 直接回 PONG，不叫醒房間、不算錢
 const PING = JSON.stringify({ type: 'ping' }), PONG = JSON.stringify({ type: 'pong' });
 
@@ -422,9 +425,14 @@ export default {
         if (room.startsWith('party:')) {
           // 隊伍房間（party:隊伍代號）：只有這支隊伍的人進得來
           if (!await env.DB.prepare('SELECT 1 FROM team_members WHERE player = ? AND team = ?').bind(me.id, room.slice(6)).first()) return E(env, req, 'forbidden', 403);
+        } else if (room.startsWith('mt:')) {
+          // 同山遇見山友（mt:山 id）：在登山畫面的人都能進；只轉暱稱、寵物和在這座山走到哪
+          if (!/^mt:[a-z0-9_]{1,24}$/.test(room)) return E(env, req, 'bad room');
         } else if (room !== 'lobby') return E(env, req, 'bad room');
         const qp = url.searchParams.get('pet'), pet = qp !== null ? (/^[a-z]{1,16}$/.test(qp) ? qp : null) : me.pet;   // 現在帶著的寵物（廣場上跟在身邊）
-        const fwd = () => { const f = new Request(req.url, req); f.headers.set('X-Player', JSON.stringify({ id: me.id, name: me.name, pet })); return f; };
+        // 房間種類（X-Kind）和廣場編號（X-Plaza）只由這裡給：遊戲端自己帶的同名標頭先拿掉
+        const kind = room.startsWith('mt:') ? 'mt' : room === 'lobby' ? 'lobby' : 'party';
+        const fwd = () => { const f = new Request(req.url, req); f.headers.set('X-Player', JSON.stringify({ id: me.id, name: me.name, pet })); f.headers.set('X-Kind', kind); f.headers.delete('X-Plaza'); return f; };
         if (room !== 'lobby') return env.ROOM.get(env.ROOM.idFromName(room)).fetch(fwd());
         // 登山口廣場：一個廣場最多 PLAZA_CAP 人，滿了就依序開到廣場 2、3…（房間自己判斷滿了沒，不會兩個人同時擠進最後一格）
         for (let n = 1; n <= PLAZA_MAX; n++) {
@@ -781,8 +789,11 @@ export default {
   }
 };
 
-// ───────── 即時房間：大廳聊天、一起爬的同步 ─────────
+// ───────── 即時房間：大廳聊天、一起爬的同步、同山遇見山友 ─────────
 // 用 WebSocket Hibernation，沒人說話時不計費。
+// 同山遇見山友（mt 房間）的額度估計：每人在登山畫面每 10 秒送一筆位置（WebSocket 收 20 筆算 1 次請求）＝每分鐘 0.3 次；
+// 轉給別人的訊息不算請求、不寫儲存、心跳自動回覆不叫醒房間；進房間 1 次。每天 1000 人各爬 10 分鐘 ≈ 1000 ×（3＋1）＝ 4000 次（免費每天 10 萬次）。
+// 時間（GB-s）：每筆只醒來幾毫秒，兩筆之間沒事做就能休眠，不算時間
 export class Room extends DurableObject {
   constructor(ctx, env){
     super(ctx, env);
@@ -790,14 +801,16 @@ export class Room extends DurableObject {
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
   }
   async fetch(req){
-    const who = JSON.parse(req.headers.get('X-Player') || '{}'), plaza = +req.headers.get('X-Plaza') || 0;
+    const who = JSON.parse(req.headers.get('X-Player') || '{}'), plaza = +req.headers.get('X-Plaza') || 0, mt = req.headers.get('X-Kind') === 'mt';
     // 廣場客滿（同一個人重連不算）：回 409，讓外面改試下一個廣場
     if (plaza) { const ppl = this.people(); if (ppl.length >= PLAZA_CAP && !ppl.some(p => p.id === who.id)) return new Response('full', { status: 409 }); }
     const pair = new WebSocketPair(), [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
     // 廣場上的起點：入口附近隨機一點（x 0～1 左右，y 0～1 遠到近）
     const pos = { x: 0.3 + Math.random() * 0.4, y: 0.72 + Math.random() * 0.2 };
-    server.serializeAttachment({ ...who, last: 0, lastMv: 0, lastEm: 0, state: null, pos, party: !plaza, saved: 0 });
+    server.serializeAttachment({ ...who, last: 0, lastMv: 0, lastEm: 0, state: null, pos, party: !plaza && !mt, mt, saved: 0 });
+    // 同山遇見山友：不給名單、不廣播誰進來（陌生人只看得到前後 MT_NEAR 公尺內的人，第一次回報位置時才收到附近名單）
+    if (mt) { server.send(JSON.stringify({ type: 'hello', you: who.id, mt: true, near: MT_NEAR, now: Date.now() })); return new Response(null, { status: 101, webSocket: client }); }
     const hist = plaza ? (await this.ctx.storage.get('hist')) || [] : [];
     // 一起爬：away＝存起來、現在沒連著的隊友最後進度（遊戲端照這個估計離線隊友走到哪）；now 給遊戲端對時
     const away = plaza ? undefined : await this.away();
@@ -828,19 +841,57 @@ export class Room extends DurableObject {
     const a = ws.deserializeAttachment() || {}; try { ws.close(); } catch (e) {}
     await this.keep(ws, a);
     const still = this.ctx.getWebSockets().some(x => x !== ws && (x.deserializeAttachment() || {}).id === a.id);
+    if (a.mt) { if (!still && a.state) this.nearSend({ type: 'leave', who: { id: a.id } }, ws, a.state.dist); return; }   // 同山：只告訴附近的人
     this.broadcast({ type: 'leave', who: { id: a.id, name: a.name }, ...(still ? { stay: true } : a.party && a.state ? { off: true, state: a.state, now: Date.now() } : {}) }, ws);
   }
   broadcast(msg, except){ const s = JSON.stringify(msg); for (const ws of this.ctx.getWebSockets()) if (ws !== except) { try { ws.send(s); } catch (e) {} } }
+  // 同山遇見山友：只送給在 d0（或 d1）前後 MT_NEAR 公尺內的人
+  nearSend(msg, except, d0, d1 = d0){
+    const s = JSON.stringify(msg);
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws === except) continue;
+      const b = ws.deserializeAttachment() || {};
+      if (b.state && (Math.abs(b.state.dist - d0) <= MT_NEAR || Math.abs(b.state.dist - d1) <= MT_NEAR)) { try { ws.send(s); } catch (e) {} }
+    }
+  }
+  // 同山遇見山友：收到位置（只有距離、休息中）→ 轉給前後 MT_NEAR 公尺內的人（新、舊位置附近都送，走遠的人那邊才知道他離開了）；
+  // 第一次回報時回給他一份附近的人，不用等別人的下一筆
+  mtState(ws, a, d){
+    const t = Date.now(), old = a.state;
+    if (old && t - old.t < MT_STATE_MIN_MS) return;
+    a.state = { dist: Math.max(0, Math.min(1e6, +d.dist || 0)), rest: !!d.rest, t };
+    ws.serializeAttachment(a);
+    const who = { id: a.id, name: a.name, pet: a.pet || null };
+    this.nearSend({ type: 'state', who, state: a.state }, ws, a.state.dist, old ? old.dist : a.state.dist);
+    if (old) return;
+    const near = [];
+    for (const x of this.ctx.getWebSockets()) {
+      const b = x === ws ? null : x.deserializeAttachment() || {};
+      if (b && b.id && b.id !== a.id && b.state && Math.abs(b.state.dist - a.state.dist) <= MT_NEAR) near.push({ who: { id: b.id, name: b.name, pet: b.pet || null }, state: b.state });
+    }
+    try { ws.send(JSON.stringify({ type: 'near', people: near })); } catch (e) {}
+  }
   async webSocketMessage(ws, raw){
     let d; try { d = JSON.parse(raw); } catch (e) { return; }
     const a = ws.deserializeAttachment() || {};
+    if (a.mt) {
+      // 同山遇見山友：只收位置和打招呼（打招呼只送給被點的那個人），不聊天、不寫儲存
+      if (d.type === 'state') this.mtState(ws, a, d);
+      else if (d.type === 'emote') {
+        const t = Date.now(), k = String(d.k || ''), to = String(d.to || ''); if (t - (a.lastEm || 0) < 800 || !/^[a-z]{1,10}$/.test(k) || !to) return;
+        a.lastEm = t; ws.serializeAttachment(a);
+        const s = JSON.stringify({ type: 'emote', who: { id: a.id, name: a.name }, k });
+        for (const x of this.ctx.getWebSockets()) if ((x.deserializeAttachment() || {}).id === to) { try { x.send(s); } catch (e) {} }
+      } else if (d.type === 'ping') ws.send(PONG);
+      return;
+    }
     if (d.type === 'chat') {
+      // 廣場和隊伍聊天（爬山聊天泡泡）同一套：每秒最多一句、最多 SAY_MAX 個字、cleanText 過濾；只有廣場存最近 60 句，隊伍聊天不寫儲存
       const t = Date.now(); if (t - (a.last || 0) < 900) return;   // 防洗版：每秒最多一句
       const text = cleanText(d.text).slice(0, SAY_MAX); if (!text) return;
       a.last = t; ws.serializeAttachment(a);
       const msg = { type: 'chat', id: rid(6), who: { id: a.id, name: a.name }, text, t };
-      const hist = (await this.ctx.storage.get('hist')) || []; hist.push(msg); while (hist.length > 60) hist.shift();
-      await this.ctx.storage.put('hist', hist);
+      if (!a.party) { const hist = (await this.ctx.storage.get('hist')) || []; hist.push(msg); while (hist.length > 60) hist.shift(); await this.ctx.storage.put('hist', hist); }
       this.broadcast(msg);
     } else if (d.type === 'state') {
       // 一起爬：回報自己的山、距離、體力、是否在休息、遊戲關著時走多快（pace）

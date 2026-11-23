@@ -244,25 +244,29 @@ function drawLabel(p, x, y, now){
     else { ctx.font = `20px ${FONT}`; ctx.fillText(p.emo.icon, ix, iy); }
     ctx.globalAlpha = 1;
   }
-  // 說的話：冒在頭上 5 秒，最後半秒淡出
-  const age = now - p.sayT;
-  if (p.say && age < SAY_MS) {
-    ctx.globalAlpha = Math.min(1, (SAY_MS - age) / 500, age / 120);
-    ctx.font = `14px ${FONT}`;
-    if (p._sayFor !== p.say) { p._sayFor = p.say; p._lines = wrap(p.say, 150); p._bw = Math.max(...p._lines.map(l => ctx.measureText(l).width)) + 18; }
-    const lines = p._lines, lh = 18, bw = p._bw, bh = lines.length * lh + 10;
-    const bx = clamp(x - bw / 2, 4, W - bw - 4), by = top - bh - 8;
-    ctx.fillStyle = mine ? '#eaf6d8' : '#fffdf4'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
-    rr(bx, by, bw, bh, 10); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x - 6, by + bh - 1); ctx.lineTo(x, by + bh + 7); ctx.lineTo(x + 6, by + bh - 1); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(x - 6, by + bh); ctx.lineTo(x, by + bh + 7); ctx.lineTo(x + 6, by + bh); ctx.stroke();
-    ctx.fillStyle = INK; lines.forEach((l, i) => ctx.fillText(l, bx + bw / 2, by + 5 + lh * i + lh / 2));
-    ctx.globalAlpha = 1;
-  }
+  if (p.say) P.bubble(ctx, p, p.say, now - p.sayT, x, top, mine, W);
 }
-function wrap(s, maxW){
+// ───────── 頭上冒字（廣場和登山畫面的爬山聊天泡泡共用這一份）─────────
+// 說的話冒在頭上 SAY_MS（5 秒），最後半秒淡出。c：畫筆（廣場的 Canvas 2D 或登山畫面的 WebGL 畫筆，只用兩邊都有的畫法）
+// o：記折好的行（文字變了才重量）；age：說完過了幾毫秒；x、top：頭頂中間、對話框尾巴尖端上方；w：畫面寬（對話框不超出左右）
+P.SAY_MS = SAY_MS;
+P.bubble = function(c, o, text, age, x, top, mine, w){
+  if (!text || !(age < SAY_MS)) return;
+  c.globalAlpha = Math.min(1, (SAY_MS - age) / 500, Math.max(0, age) / 120);
+  c.font = `14px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  if (o._sayFor !== text) { o._sayFor = text; o._lines = wrap(c, text, 150); o._bw = Math.max(...o._lines.map(l => c.measureText(l).width)) + 18; }
+  const lines = o._lines, lh = 18, bw = o._bw, bh = lines.length * lh + 10;
+  const bx = clamp(x - bw / 2, 4, w - bw - 4), by = top - bh - 8;
+  c.fillStyle = mine ? '#eaf6d8' : '#fffdf4'; c.strokeStyle = INK; c.lineWidth = 2;
+  c.beginPath(); if (c.roundRect) c.roundRect(bx, by, bw, bh, 10); else c.rect(bx, by, bw, bh); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(x - 6, by + bh - 1); c.lineTo(x, by + bh + 7); c.lineTo(x + 6, by + bh - 1); c.fill();
+  c.beginPath(); c.moveTo(x - 6, by + bh); c.lineTo(x, by + bh + 7); c.lineTo(x + 6, by + bh); c.stroke();
+  c.fillStyle = INK; lines.forEach((l, i) => c.fillText(l, bx + bw / 2, by + 5 + lh * i + lh / 2));
+  c.globalAlpha = 1;
+};
+function wrap(c, s, maxW){
   const out = []; let cur = '';
-  for (const ch of s) { if (ctx.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; }
+  for (const ch of s) { if (c.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; }
   if (cur) out.push(cur);
   return out;
 }
