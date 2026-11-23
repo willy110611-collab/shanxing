@@ -95,16 +95,17 @@ function prep(name, img){
     if (air) e.hk = fr[0].h / stand;   // 畫的時候給的高度是「人站直多高」：整格要再放大這麼多倍（多出來的是跳起來的空間）
   }
   e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => i < 0 ? Object.assign({}, fr[~i], { mx:true }) : fr[i]) : fr;
-  const m = RELIT.test(name.id) ? relit(px, c.width, c.height, fr) : null;
+  const m = RELIT.test(name.id) ? relit(c, px, c.width, c.height, fr) : null;
   return Promise.all([toBitmap(c), m && toBitmap(m)]).then(([b, bm]) => { e.img = b; if (bm) e.imgM = bm; return e; });
 }
 // 鏡射畫的時候光要照樣從右上來：Gemini 的人物、寵物光都從右上照，背影右半邊比左半邊亮（約一成）。
 // 走路的左腳那步是右腳那步左右鏡射（STEP8、PET_ORDER 的 ~i），直接鏡射亮面就跑到左邊，每一步亮面左右換一次（晚上沒有輪廓光時最明顯）。
 // 這裡先做一份「左右鏡射時用」的圖：每一格量身體（外框 15%～65% 高）左右兩半的平均亮度，用一條平滑的左右漸層把亮暗對調，
 // 鏡射畫出來的左右平均亮度就跟原本那格一樣（只調明暗不改形狀）
-const RELIT = /^(hiker|pet)_/, RELIT_K = 1.45;   // RELIT_K：漸層加強倍數（身體中間的亮面、墨線會把平均拉平；量過 1.45 倍時走路、階梯、累了的鏡射步左右亮度差最接近原本那格）
-function relit(px, Wd, Hd, fr){
-  const d = new Uint8ClampedArray(px), seen = {};
+const RELIT = /^(hiker|pet)_/, RELIT_K = 1.25;   // RELIT_K：漸層加強倍數（身體中間的亮面、墨線會把平均拉平；量過 1.25 倍時走路、階梯、累了的鏡射步左右亮度差最接近原本那格）
+function relit(c, px, Wd, Hd, fr){
+  const m = document.createElement('canvas'); m.width = Wd; m.height = Hd; const g = m.getContext('2d'); g.drawImage(c, 0, 0);
+  const seen = {}, rgb = v => { const n = Math.round(Math.max(0, Math.min(255, v))); return 'rgb(' + n + ',' + n + ',' + n + ')'; };
   for (const f of fr) {
     const key = f.x + ',' + f.y; if (seen[key]) continue; seen[key] = 1;
     const ctr = f.cx == null ? f.x + f.w / 2 : f.cx, half = Math.max(1, Math.max(ctr - f.x, f.x + f.w - ctr));
@@ -114,18 +115,21 @@ function relit(px, Wd, Hd, fr){
       if (x < ctr) { L += v; nl++; } else { Rr += v; nr++; }
     }
     if (nl < 20 || nr < 20) continue;
-    const want = Math.max(0.67, Math.min(1.5, (L / nl) / (Rr / nr)));   // 右半邊要變成原本左半邊的亮度（倍數）
-
-    // 漸層 k(t) = want^t（t：中線 0、最右 1、最左 −1）；右半邊平均 (want − 1) / ln(want) 要等於 want：解 g 讓 (e^g − 1)/g = want（右半 k=e^{g t}）
-    let g = Math.log(want);
-    for (let it = 0; it < 30; it++) { const m = (Math.exp(g) - 1) / g; g += (Math.log(want) - Math.log(m)) ; }
-    if (!isFinite(g)) continue;
-    for (let x = f.x; x < f.x + f.w; x++) {
-      const t = Math.max(-1, Math.min(1, (x - ctr) / half)), k = Math.exp(g * RELIT_K * t);
-      for (let y = f.y; y < f.y + f.h; y++) { const i = (y * Wd + x) * 4; if (!d[i + 3]) continue; d[i] = px[i] * k; d[i + 1] = px[i + 1] * k; d[i + 2] = px[i + 2] * k; }
+    const want = Math.max(0.67, Math.min(1.5, (L / nl) / (Rr / nr))), avg = (L + Rr) / (nl + nr);
+    // 漸層 k(t) = e^(g·RELIT_K·t)（t：中線 0、最右 1、最左 −1）；解 g 讓右半邊平均 (e^g − 1)/g 等於 want
+    let gg = Math.log(want); for (let it = 0; it < 30; it++) gg += Math.log(want) - Math.log((Math.exp(gg) - 1) / gg);
+    if (!isFinite(gg) || Math.abs(gg) < 0.01) continue;
+    // 用畫布疊色調明暗（不逐點改像素）：變暗那邊「相乘」一層灰，變亮那邊「相加」一層灰（加的量照這格平均亮度估）
+    const gm = g.createLinearGradient(f.x, 0, f.x + f.w, 0), ga = g.createLinearGradient(f.x, 0, f.x + f.w, 0);
+    for (let s = 0; s <= 8; s++) {
+      const x = f.x + f.w * s / 8, t = Math.max(-1, Math.min(1, (x - ctr) / half)), k = Math.exp(gg * RELIT_K * t);
+      gm.addColorStop(s / 8, rgb(255 * Math.min(1, k))); ga.addColorStop(s / 8, rgb(avg * Math.max(0, k - 1)));
     }
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = gm; g.fillRect(f.x, f.y, f.w, f.h);
+    g.globalCompositeOperation = 'lighter'; g.fillStyle = ga; g.fillRect(f.x, f.y, f.w, f.h);
   }
-  const m = document.createElement('canvas'); m.width = Wd; m.height = Hd; m.getContext('2d').putImageData(new ImageData(d, Wd, Hd), 0, 0);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(c, 0, 0);   // 透明度照原圖（疊色時把透明處也塗到了）
+  g.globalCompositeOperation = 'source-over';
   return m;
 }
 // 一格裡身體的左右重心：只看外框高度 20%～55% 那一段（頭到腰，不含腳和登山杖尖），用不透明度加權
