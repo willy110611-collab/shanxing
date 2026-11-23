@@ -5,7 +5,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 const MAX_PHOTO = 450 * 1024;      // 單張照片上限（遊戲端已縮到 720px）
 const DAILY_PHOTOS = 20;           // 每人每天最多上傳幾張
-const ONLINE_MS = 3 * 60 * 1000;   // 多久內有動靜算「在線」
+const FRIEND_MAX = 999;            // 好友上限（唯一的定義；好友清單會把它一起回給遊戲端，遊戲端不另外寫死。測試時可用環境變數 FRIEND_MAX 改小）
 const PLAZA_CAP = 50;              // 一個登山口廣場最多幾人
 const PLAZA_MAX = 40;              // 最多開到第幾個廣場
 const SAY_MAX = 40;                // 廣場說話一次最多幾個字（頭上冒字用；hello 會告訴遊戲端，輸入框照這個限制）
@@ -95,8 +95,11 @@ async function auth(env, req, token){
 const isAdmin = (env, req) => env.ADMIN_KEY && (req.headers.get('X-Admin-Key') === env.ADMIN_KEY || new URL(req.url).searchParams.get('k') === env.ADMIN_KEY);
 // 台灣時間每週一 00:00 換週
 const weekNo = () => Math.floor((now() + 8 * 3600e3 - 4 * 864e5) / (7 * 864e5));
-const pub = p => ({ id: p.id, name: p.name, code: p.code, mountain: p.mountain, dist: p.dist, pet: p.pet, online: now() - p.seen < ONLINE_MS, seen: p.seen,
+const friendMax = env => +env.FRIEND_MAX > 0 ? +env.FRIEND_MAX : FRIEND_MAX;
+const pub = p => ({ id: p.id, name: p.name, code: p.code, mountain: p.mountain, dist: p.dist, pet: p.pet,
   walked: Math.round(p.walked || 0), summits: p.summits || 0, week: p.wk === weekNo() ? Math.max(0, Math.round((p.walked || 0) - (p.wk_base || 0))) : 0 });
+// 「多久以前在線」只給好友看：只有好友清單（friendPub）會帶 ago（距離上次動靜幾毫秒，由伺服器算，不受手機時鐘影響），其他地方（廣場、自己、陌生人）一律不帶
+const friendPub = p => ({ ...pub(p), ago: Math.max(0, now() - (p.seen || 0)) });
 const MAX_SAVE = 400 * 1024;
 
 // ───────── 推播通知 ─────────
@@ -317,7 +320,7 @@ export default {
       // 好友
       if (path === '/api/friends' && M === 'GET') {
         const r = await env.DB.prepare('SELECT p.* FROM friends f JOIN players p ON p.id = f.b WHERE f.a = ? AND p.banned = 0 ORDER BY p.seen DESC').bind(me.id).all();
-        return J(env, req, { friends: r.results.map(pub) });
+        return J(env, req, { friends: r.results.map(friendPub), max: friendMax(env) });
       }
       if (path === '/api/friends' && M === 'POST') {
         const b = await req.json().catch(() => ({}));
@@ -327,16 +330,23 @@ export default {
           : await env.DB.prepare('SELECT * FROM players WHERE code = ? AND banned = 0').bind(code).first();
         if (!f) return E(env, req, pid ? '找不到這位山友' : '找不到這個好友碼', 404);
         if (f.id === me.id) return E(env, req, '這是你自己的好友碼');
+        // 好友上限：已經是好友就不再算；兩邊（加的人、被加的人）都要沒滿
+        if (!await env.DB.prepare('SELECT 1 FROM friends WHERE a = ? AND b = ?').bind(me.id, f.id).first()) {
+          const cnt = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM friends WHERE a = ?) AS mine, (SELECT COUNT(*) FROM friends WHERE a = ?) AS theirs').bind(me.id, f.id).first();
+          if (cnt.mine >= friendMax(env) || cnt.theirs >= friendMax(env)) return E(env, req, `好友已經 ${friendMax(env)} 位了，先整理一下再加`, 409);
+        }
         await env.DB.batch([
           env.DB.prepare('INSERT OR IGNORE INTO friends (a, b, created) VALUES (?, ?, ?)').bind(me.id, f.id, now()),
           env.DB.prepare('INSERT OR IGNORE INTO friends (a, b, created) VALUES (?, ?, ?)').bind(f.id, me.id, now())
         ]);
-        return J(env, req, { friend: pub(f) });
+        return J(env, req, { friend: friendPub(f) });
       }
       if ((m = path.match(/^\/api\/friends\/([0-9a-f]+)$/)) && M === 'DELETE') {
+        // 移除好友：兩個方向一起刪；兩人之間還沒回覆的邀請一併取消。已經接受、正在一起爬的邀請不動（爬到一半隊伍不會散）
         await env.DB.batch([
           env.DB.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(me.id, m[1]),
-          env.DB.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(m[1], me.id)
+          env.DB.prepare('DELETE FROM friends WHERE a = ? AND b = ?').bind(m[1], me.id),
+          env.DB.prepare("DELETE FROM invites WHERE status = 'pending' AND ((host = ? AND guest = ?) OR (host = ? AND guest = ?))").bind(me.id, m[1], m[1], me.id)
         ]);
         return J(env, req, { ok: true });
       }
