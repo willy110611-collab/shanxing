@@ -1806,8 +1806,10 @@ function stepMates(dt){
   for (const mt of mates) {
     const aim = mt.target + mt.v * Math.min(now - mt.at, 15), gap = aim - mt.d;   // 估計他現在走到哪（最多往前估 15 秒，斷線時不會一直走下去）
     if (Math.abs(gap) > MATE_SNAP) {
-      if (!seen(mt.d) && !seen(aim)) { mt.d = aim; continue; }   // 兩邊都在畫面外：直接站過去，看不到跳
-      mt.d += gap > 0 ? MATE_FAST * (mt.v || hero.walkV || 0.5) * dt : 0; continue;   // 看得到：用最快步調走過去（他其實在後面就先站著等他追上）
+      if (!seen(mt.d) && (!seen(aim) || gap < 0)) { mt.d = aim; continue; }   // 他本來就不在畫面裡：直接換過去
+      if (gap < 0) continue;   // 看得到他、但他其實在後面：先站著等他追上，不往回走
+      if (!seen(mt.d)) mt.d = Math.max(mt.d, d0 - 5);   // 他在鏡頭後面很遠：從鏡頭後面走進來，不會憑空冒出來
+      mt.d += MATE_FAST * (mt.v || hero.walkV || 0.5) * dt; continue;   // 用最快步調走過去
     }
     if (!mt.v) { mt.d += Math.max(0, gap) * Math.min(1, dt / 2); continue; }   // 在休息：慢慢走到他停下的地方就站著
     mt.d += mt.v * clamp(1 + gap / (mt.v * MATE_CATCH), MATE_SLOW, MATE_FAST) * dt;   // 一直照他的步調走，只調快慢來追上（估過頭就走慢一點，不會停住再順移）
@@ -1836,7 +1838,8 @@ function drawMate(mt, j, f, t, fade){
     ctx.restore();
     [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S] = cols; Object.assign(hero, sv);
   }
-  // 名牌
+  // 名牌（離線隊友的名牌只淡一點，字要看得清楚）
+  if (mt.off) ctx.globalAlpha = fade / MATE_OFF_A * 0.85;
   const ty = Y - (mt.rest ? 118 : 182) * u - 6, fs = clamp(22 * u, 9, 14);
   ctx.font = `${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const tag = mt.off ? mt.name + '・離線' : mt.name, w = ctx.measureText(tag).width + 12;

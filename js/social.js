@@ -84,7 +84,9 @@
 
   // ───────── 即時房間（WebSocket，自動重連）─────────
   function room(name, on){
-    if (FAKE) { Promise.resolve().then(() => on({ type: 'hello', history: [], people: [], plaza: 1 })); return { send(){}, close(){}, open: true }; }   // 假伺服器：一個空的廣場
+    // 假伺服器：一個空的廣場；一起爬房間裡隊友都是離線的（一分鐘前在你前面一點，第二位在休息），看離線隊友長什麼樣子
+    const fakeAway = () => party && name === 'party:' + party.id ? party.mates.map((x, i) => ({ id: x.id, name: x.name, state: { mountain: party.mountain, dist: (G().st ? G().st.dist : 0) + 60 + i * 40, rest: i === 1, t: Date.now() - 60000 } })) : undefined;
+    if (FAKE) { Promise.resolve().then(() => on({ type: 'hello', history: [], people: [], plaza: 1, away: fakeAway(), now: Date.now() })); return { send(){}, close(){}, open: true }; }
     let ws = null, alive = true, tries = 0, ping = null;
     const R = { send: d => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(d)); }, close: () => { alive = false; clearInterval(ping); if (ws) try { ws.close(); } catch(e){} }, get open(){ return !!ws && ws.readyState === 1; } };
     const connect = () => {
@@ -353,7 +355,7 @@
     $('#pbName').textContent = `和 ${party.mates.map(x => x.name).join('、')} 一起爬`;
     $('#cheerBtn').textContent = many ? '幫大家加油' : '幫他加油';
     $('#pbInfo').textContent = !pRoom || !pRoom.open ? '連線中…' : !mate ? '等隊友上線…'
-      : mate.off ? `${lead.name} 離線中・${p >= M.dist ? '已經走到山頂了' : d == null ? km(p) : Math.abs(d) < MATE_NEAR ? '大約就在你附近' : `大約在你${d > 0 ? '前面' : '後面'} ${(Math.abs(d) / 1000).toFixed(1)} km`}${mate.rest ? '・休息中' : ''}`
+      : mate.off ? `${lead.name} 離線中・${p >= M.dist ? '已到山頂' : d == null ? km(p) : Math.abs(d) < MATE_NEAR ? '大約就在你附近' : `大約在你${d > 0 ? '前面' : '後面'} ${(Math.abs(d) / 1000).toFixed(1)} km`}${mate.rest ? '・休息中' : ''}`
       : `${many ? lead.name + ' ' : ''}${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}`;
     // 離線的隊友：畫半透明、名牌加「・離線」；v＝估計他一秒走多少（休息中、到山頂就是 0），登山畫面照這個步調走
     if (SX.scene && SX.scene.setMates) SX.scene.setMates(me ? on2.map(x => { const s = mates[x.id];
