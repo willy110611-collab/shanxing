@@ -256,7 +256,9 @@ function artSpr(id, hm){
 // 樹埋進土裡：Gemini 的樹圖底部畫了一整圈樹根，照圖底貼在地面上，樹根就整片浮在地表上。
 // 每張圖往下埋「圖高的幾成」（量的是樹幹和樹根交界往下多少，只留樹幹底和樹根最上面一點點）；沒列的圖不埋。
 // 程式畫的樹沒有樹根，只埋一點點（SINK_DEF），樹幹底才不會像切齊的紙片
-const SINK = { tree_pine:0.06, tree_pine_snow:0.06, tree_broad:0.13, tree_big:0.12, tree_sakura:0.065, wish_tree:0.03, bush_rhodo:0.03, rock_moss:0.03, trunk_close:0.01 };
+// 2026-11-24 玩家回報樹根整片露在地上：重新量每張圖底部每一列的寬度（裁掉透明邊後，從最下面往上每 2% 一列），
+// 樹根往外張開的那段到「寬度回到樹幹寬」為止：松樹約 7%、闊葉樹約 17%、大樹約 26%、櫻花約 9%、祈福樹約 5%；埋到只剩最上面一小截（約四分之一）
+const SINK = { tree_pine:0.07, tree_pine_snow:0.07, tree_broad:0.155, tree_big:0.215, tree_sakura:0.085, wish_tree:0.045, bush_rhodo:0.03, rock_moss:0.03, trunk_close:0.01 };
 const SINK_DEF = 0.03;
 const SINK_SOFT = 0.04;   // 切口往上這麼高（佔留下來的高度）慢慢變透明，像被土和草蓋住，不會有一條切齊的線
 // 把圖底部 s 那一截切掉（只做一次，存起來；原圖釋放），切口淡出
