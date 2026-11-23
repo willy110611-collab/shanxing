@@ -58,7 +58,7 @@ let PAL = null, tileSets = {}, palA = 'day', palB = 'day', palK = 0;
 let LUT = [], lutKey = -1, snowAmt = 0, snowFall = 0;   // snowAmt：地上積雪多少；snowFall：正在下的雪有多密（兩個都會慢慢變化）
 let fogD = 300, fogD0 = 36, raysA = 0.5, sunVis = 1, isNight = false, isRain = false, isFog = false, isCloudy = false, isSnow = false;
 const cSkyT = [0,0,0], cSkyB = [0,0,0], cGrade = [255,255,255], cSun = [0.8,0.12], cSunCol = [255,246,216];
-let SHADOW = null, CONTACT = null, CAST = null, CANOPY = [], DAPPLE = null, GLOW = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
+let SHADOW = null, CONTACT = null, CAST = null, CANOPY = [], DAPPLE = null, GLOW = null, SUNB = null, RAYS = null, FG = [], vig = null, stars = [], WARM = null;
 const SHOW_FG = false;   // 畫面上下兩端的前景花草（frame_top／frame_bottom）：玩家意見先拿掉，想恢復改成 true
 const WARM_A = 0.5;     // 午後暖光濾鏡強度（soft-light，再乘上太陽可見度）
 const RIM_A = 0.75;     // 前景框（杜鵑、蕨葉）輪廓光強度
@@ -1293,6 +1293,14 @@ function buildStatic(){
   DAPPLE = mk(32, 32); g = DAPPLE.getContext('2d');
   gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,236,170,0.9)'); gr.addColorStop(0.45, 'rgba(255,226,150,0.5)'); gr.addColorStop(1, 'rgba(255,220,140,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  // 陽光光束（LOOK.sun）：一條直的暖光，左右邊緣很柔、上面淡入、往下慢慢淡掉；畫的時候斜放、拉長（每格只貼這張圖，不另外算）
+  const B = LOOK.sun.col;
+  SUNB = mk(32, 128); g = SUNB.getContext('2d');
+  gr = g.createLinearGradient(0, 0, 32, 0); gr.addColorStop(0, rgba(B, 0)); gr.addColorStop(0.5, rgba(B, 1)); gr.addColorStop(1, rgba(B, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 128);
+  g.globalCompositeOperation = 'destination-in';
+  gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.18, 'rgba(0,0,0,1)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 128);
   GLOW = mk(48, 48); g = GLOW.getContext('2d');
   gr = g.createRadialGradient(24, 24, 0, 24, 24, 24); gr.addColorStop(0, 'rgba(255,244,200,1)'); gr.addColorStop(0.25, 'rgba(255,222,140,0.7)'); gr.addColorStop(1, 'rgba(255,200,90,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 48, 48);
@@ -2136,6 +2144,15 @@ function groundLight(i, j, t, fq, a){
       const ph = Hh(i, 426 + q) * TAU, x = gx + ((Hh(i, 424 + q) - 0.5) * 1.8 * rwAt(i) + Math.sin(t * 0.35 + ph) * 0.14) * gs, r = (0.22 + 0.2 * Hh(i, 428 + q)) * gs, fl = Math.min(1, CAMH / gz);   // 平躺在地上：越遠越扁
       ctx.globalAlpha = da * (0.16 + 0.1 * Math.sin(t * 0.8 + ph)); ctx.drawImage(DAPPLE, x - r, gy - r * fl, r * 2, r * 2 * fl);
     }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // 陽光灑在路上的一小片暖光（LOOK.sun.pool）：森林裡明顯、空曠稜線上淡；位置只跟這是第幾段有關，慢慢呼吸
+  const P = LOOK.sun.pool, pa = A * SUN.pool * farA(j, P.j, 8);
+  if (pa > 0.01 && Hh(i, 430) < P.p) {
+    proj(j, Hh(i, 431), false);
+    const fl = Math.min(1, CAMH / gz) * P.flat, ln = lerp(P.len[0], P.len[1], Hh(i, 432)) * gs, wd = lerp(P.wid[0], P.wid[1], Hh(i, 433)) * rwAt(i) * gs, x = gx + (Hh(i, 434) - 0.5) * 0.8 * rwAt(i) * gs;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = pa * (0.85 + 0.15 * Math.sin(t * 0.5 + Hh(i, 435) * TAU));
+    ctx.drawImage(DAPPLE, x - wd, gy - ln * fl * 0.5, wd * 2, ln * fl);
     ctx.globalCompositeOperation = 'source-over';
   }
   ctx.globalAlpha = a;
@@ -3029,8 +3046,41 @@ function drawFlyers(t, dt, sp){
     if (rx > 3) { ctx.strokeStyle = INK; ctx.lineWidth = 0.8; ctx.stroke(); }
   }
 }
+// 陽光灑落（LOOK.sun）：這一格光束、路上暖光多亮。看時間（晚上一定 0）、太陽看得到多少（陰天雨天變淡）、霧、
+// 腳下是森林還是空曠稜線（森林裡最明顯）、自動畫質那一級開不開（開關跟著畫質慢慢淡入淡出）
+const SUN = { k:0, pool:0, mote:0, q:1, qm:1, f:-1 };
+function sunUpd(dt){
+  const L = LOOK.sun, Q = LOOK.q, lv = qs.lvl, e = Math.min(1, dt * QUAL.ease), si = Math.floor(((curS && curS.dist) || 0) / SEG);
+  const f = clamp(wallAt(si), 0, 1) * (TH.alpine ? L.alpine : 1);
+  SUN.f = SUN.f < 0 || !(dt > 0) ? f : SUN.f + (f - SUN.f) * e;
+  SUN.q += (Q.shaft[lv] - SUN.q) * (dt > 0 ? e : 1); SUN.qm += (Q.mote[lv] - SUN.qm) * (dt > 0 ? e : 1);
+  const base = isNight || isRain || isSnow ? 0 : lookT(L.a) * clamp((sunVis - 0.3) / 0.7, 0, 1) * (isFog ? L.fog : 1) * lerp(L.open, 1, SUN.f);
+  SUN.k = base * SUN.q; SUN.mote = base * SUN.qm; SUN.pool = Q.pool[lv] ? base * L.pool.a : 0;   // 路上暖光另外有畫質第 4 級起的淡出（groundLight 的 qs.light）
+}
+S.sun = function(){ return { k:SUN.k, pool:SUN.pool, mote:SUN.mote, forest:SUN.f }; };   // 測試用：這一格陽光光束、路上暖光、小光點多亮，腳下多像森林
+// 光束：從右上方太陽那邊斜斜照下來，幾條寬窄不同、慢慢左右飄、輕輕呼吸；裡面幾顆金色小光點慢慢往下飄
+function drawSun(t){
+  const L = LOOK.sun, n = L.n, M = L.mote;
+  if (SUN.k < 0.01 && SUN.mote < 0.01) return;
+  for (let i = 0; i < n; i++) {
+    const u = (i + 0.5) / n, ph = i * 2.39, ang = L.tilt + (u - 0.5) * L.spread + Math.sin(t * 0.07 + ph) * 0.02;
+    const x0 = W * (L.x[0] + (L.x[1] - L.x[0]) * u + Math.sin(t * L.drift + ph) * 0.04), y0 = -H * 0.04, len = H * L.len, w = W * lerp(L.w[0], L.w[1], (Math.sin(ph * 3.1) + 1) / 2);
+    const c = Math.cos(ang), s = Math.sin(ang);   // 光束方向：往下、往左斜 ang
+    if (SUN.k >= 0.01) {
+      ctx.globalAlpha = clamp(SUN.k * (0.7 + 0.3 * Math.sin(t * 0.31 + ph * 1.7)), 0, 1);
+      ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.drawImage(SUNB, -w / 2, 0, w, len); ctx.restore();
+    }
+    if (SUN.mote < 0.01) continue;
+    for (let q = 0; q < M.n; q++) {
+      const p = (t * M.v + q / M.n + i * 0.37) % 1, d = len * (0.15 + 0.6 * p), side = Math.sin(t * 0.6 + q * 2 + ph) * w * 0.25, r = lerp(M.r[0], M.r[1], (q + i) % 3 / 2) * U;
+      ctx.globalAlpha = clamp(SUN.mote * M.a * Math.sin(p * Math.PI) * (0.6 + 0.4 * Math.sin(t * 2.3 + q + ph)), 0, 1);
+      ctx.drawImage(GLOW, x0 - s * d + c * side - r, y0 + c * d + s * side - r, r * 2, r * 2);
+    }
+  }
+}
 function drawLights(t){
   ctx.globalCompositeOperation = 'lighter';
+  drawSun(t);
   if (!isNight && sunVis > 0 && raysA > 0.01) { const sx = cSun[0] * W, sy = cSun[1] * H, R = 170 * U; ctx.globalAlpha = clamp(0.2 * sunVis * (0.6 + raysA * 0.5), 0, 1); ctx.drawImage(GLOW, sx - R, sy - R, R * 2, R * 2); }   // 太陽光暈
   if (raysA > 0.01 && RAYS) {                 // 右上方斜射的神光，輕輕搖曳
     ctx.save(); ctx.globalAlpha = clamp(raysA * (0.8 + 0.2 * Math.sin(t * 0.6)), 0, 1); ctx.translate(W, 0); ctx.rotate(Math.sin(t * 0.23) * 0.03); ctx.drawImage(RAYS, -W, 0, W, H); ctx.restore();
@@ -3228,7 +3278,7 @@ S.render = function(s){
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
   if (s.dt > 0) qualTick(s.fps, dt); else qs.last = 0;   // 拍照時重畫那一格（dt = 0）不算，下一格也不拿來比
-  updPalette(wx, frac, dt); litUpd(); shdUpd(); updHero(s, t, dt, dist, sp); stepMates(dt);
+  updPalette(wx, frac, dt); litUpd(); shdUpd(); sunUpd(s.dt); updHero(s, t, dt, dist, sp); stepMates(dt);
   if (ctx.gpu) ctx.begin();
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = ctx.lineCap = 'round';
   // 鏡頭：在登山客後上方，x 對準登山客所在深度的路中心
