@@ -2885,23 +2885,42 @@ function grassVisT(nS){
 }
 // 坡面帶子的近端（tY1）往下多畫了 SEAM_Y 像素（yb：底色跟前一段之間不留縫）；半透明的貼圖、陰影照這個畫會跟前一段疊兩次，每段交界一條橫線，畫的時候扣回來
 const SEAM_Y = 1.5;   // 以前 0.7：2D 畫布有貼圖的那段遠端往內縮 1 像素（gIn），0.7 蓋不滿，每段交界留 0.3 像素的縫透出後面（2026-11-24 掃描）
-// 坡面底色、土坎切面（不透明、負責蓋滿）的近端：不是一律往下多蓋 SEAM_Y，而是往「前一段（更近的那段）的近端」那個方向多蓋（往下至少 SEAM_Y 像素，最多伸出 SEAM_EXT 像素、不超過前一段）。
+// 坡面底色、土坎切面（不透明、負責蓋滿）的近端：不是一律往下多蓋 SEAM_Y，而是往「前一段（更近的那段）的近端」那個方向多蓋（離這段近端那條線至少 SEAM_Y 像素、不超過前一段）。
 // 急轉彎時遠處的路橫著走，一段一段的坡面在畫面上是往旁邊排、交界是斜的陡線：一律往下推等於往這段自己裡面縮，每段交界留一條斜縫透出後面的天空，
 // 遠處山坡一條條斜紋（2026-11-24 轉彎巡檢：玉山 3091、9199、10119，玉山前峰 851，玉山西峰 4525…）。用前一段真正的位置定方向：橫著走、翻過坡頂摺回來都蓋得到。
-// 前面幾段路中心沒有高度（y1 - y2 不到 0.2，整段不畫，連坡面也沒畫）時：近端一路伸到再往近處第一段真的有畫的那段的近端，把中間沒畫的那幾段一起蓋住。
+// 前面幾段路中心沒有高度（y1 - y2 不到 0.2，整段不畫，連坡面也沒畫）時：近端一路伸到再往近處第一段真的有畫的那段的近端，把中間沒畫的那幾段一起蓋住；連著兩段以上時，每一點只蓋中間那幾段都朝著鏡頭的（三叉山 2588 翻過坡頂那一面不蓋）。
 // 彎道裡翻過一個小坡頂，路中心連著好幾段沒有高度、兩旁的坡面卻還看得到（2026-11-24 轉彎巡檢：玉山東峰 857、3933，玉山 3523，玉山北峰 6643 公尺）
 // tX1、tY1 本身不動（貼圖、陰影、霧照舊扣掉 SEAM_Y 用真正的邊）
-const SEAM_EXT = 3, EX1 = new Float64Array(16), EY1 = new Float64Array(16), tXP = new Float64Array(16), tYP = new Float64Array(16), tDP = new Float64Array(16), tHP = new Float64Array(16);
+const EX1 = new Float64Array(16), EY1 = new Float64Array(16), tXP = new Float64Array(16), tYP = new Float64Array(16), tDP = new Float64Array(16), tHP = new Float64Array(16);
+const tXQ = new Float64Array(16), tYQ = new Float64Array(16), tDQ = new Float64Array(16), tHQ = new Float64Array(16), tFF = new Uint8Array(16), tLY = new Float64Array(16);   // nearExt 檢查中間沒畫的那幾段用
 const gSkip = q => q >= 0 && !(pY[q] - pY[q + 1] > 0.2);   // 第 q 段的地面因為路中心沒有高度整段不畫
 // jp、ip：前一段近端是第幾段（畫面上）、哪一段的地形（-1＝沒有前一段，照舊往下）
 function nearExt(nS, side, DS, jp, ip){
-  let span = false;
-  while (gSkip(jp)) { span = true; jp--; ip--; }   // 一路往近處找到第一段真的有畫的（找不到 jp 變 -1，照舊往下）
+  const j0 = jp, i0 = ip; let span = 0;
+  while (gSkip(jp)) { span++; jp--; ip--; }   // 一路往近處找到第一段真的有畫的（找不到 jp 變 -1，照舊往下）
   if (jp >= 0) bandEnd(ip, side, DS, nS, rwAt(ip) - RW, gwAt(pZ[jp]), DS === TDN ? tdMorph(pZ[jp]) : 0, pX[jp], pY[jp], pS[jp], tXP, tYP, tDP, tHP);
+  if (span > 1) {   // 連著好幾段沒畫：每一點只在中間那幾段都朝著鏡頭（越近的邊在畫面上越低）時才蓋過去；翻過坡頂背著鏡頭的那一面不蓋（不然遠處坡面接著坡頂浮在天空）
+    for (let k = 0; k < nS; k++) { tFF[k] = 1; tLY[k] = tY1[k]; }
+    for (let q = j0, iq = i0; q >= jp && q >= 0; q--, iq--) {
+      if (q === jp) { for (let k = 0; k < nS; k++) if (tYP[k] < tLY[k] - 0.2) tFF[k] = 0; break; }
+      bandEnd(iq, side, DS, nS, rwAt(iq) - RW, gwAt(pZ[q]), DS === TDN ? tdMorph(pZ[q]) : 0, pX[q], pY[q], pS[q], tXQ, tYQ, tDQ, tHQ);
+      for (let k = 0; k < nS; k++) { if (tYQ[k] < tLY[k] - 0.2) tFF[k] = 0; tLY[k] = tYQ[k]; }
+    }
+  }
   for (let k = 0; k < nS; k++) {
     const x = tX1[k], y = tY1[k] - SEAM_Y, vx = jp >= 0 ? tXP[k] - x : 0, vy = jp >= 0 ? tYP[k] - y : 1, L = Math.hypot(vx, vy);
-    if (jp < 0 || L < 0.05) { EX1[k] = tX1[k]; EY1[k] = tY1[k]; continue; }
-    const f = span ? 1 : Math.min(SEAM_Y / Math.max(Math.abs(vy), 1e-3), SEAM_EXT / L, 1);
+    if (jp < 0 || L < 0.05 || (span > 1 && !tFF[k])) { EX1[k] = tX1[k]; EY1[k] = tY1[k]; continue; }
+    // 往前一段的方向伸到離左右兩條邊（這段近端那條線）都至少 SEAM_Y 像素：只看往下幾像素不夠，順便往旁邊移的那幾像素在斜的邊上會把邊抬回去，
+    // 寬平台上前一段的點往旁邊散得很開時每段交界一條細縫（雪山 7302）；前後段往旁邊排（急轉彎）時邊是陡線，這樣量也只伸 SEAM_Y 左右
+    let need = 0;
+    for (let m = k - 1; m <= k + 1; m += 2) {
+      if (m < 0 || m >= nS) continue;
+      const ex = tX1[m] - tX1[k], ey = tY1[m] - tY1[k], el = Math.hypot(ex, ey);
+      if (el < 0.05) continue;
+      const vn = Math.abs(ex * vy - ey * vx) / el;   // 往前一段那個方向每走一單位，離這條邊多遠
+      need = Math.max(need, SEAM_Y / Math.max(vn, 1e-3));
+    }
+    const f = span ? 1 : Math.min(need || SEAM_Y / Math.max(Math.abs(vy), 1e-3), 1);
     EX1[k] = x + vx * f; EY1[k] = y + vy * f;
   }
 }
