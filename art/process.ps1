@@ -48,7 +48,10 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
     $out = Join-Path $here "$name.jpg"; $tmp = Join-Path $tmpDir "$name.jpg"
     # 長邊不超過 $max（直式的地圖以高度算）
     $max = if ($name -like 'ground_*') { 768 } elseif ($name -like 'map_*') { 2048 } elseif ($name -like 'enc_*') { 960 } else { 1600 }   # 奇遇插圖在卡片上只有約 300 像素寬
-    ffmpeg -v error -y -i $_.FullName -vf "scale='min(iw,$max)':'min(ih,$max)':force_original_aspect_ratio=decrease" -q:v 4 $tmp
+    # 出發前的小山讀取圖：左半線稿、右半上色要對齊（art 的 loadreg.js 找出兩半差幾像素、把右半挪回去；對不上就停下來請重畫）
+    $src = $_.FullName
+    if ($name -like 'load_*') { $src = Join-Path $tmpDir "$name.reg.png"; & $node (Join-Path $here 'loadreg.js') $_.FullName $src | Write-Host; if ($LASTEXITCODE) { throw "小山讀取圖左右兩半對不上：$($_.Name)" } }
+    ffmpeg -v error -y -i $src -vf "scale='min(iw,$max)':'min(ih,$max)':force_original_aspect_ratio=decrease" -q:v 4 $tmp
   } else {
     # 透明圖存 WebP（同畫質比 png 小十倍左右）
     $out = Join-Path $here "$name.webp"; $tmp = Join-Path $tmpDir "$name.webp"

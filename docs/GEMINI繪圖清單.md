@@ -608,3 +608,31 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 ```
 Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn16. The backpack must wear the SAME dark-green rain cover in ALL 16 frames, both rows: the cover hides the side bottle pockets and mesh, only the orange sleeping mat shows on top. Do not draw any frame without the rain cover. Plain flat magenta background only, no shadows, boxes or color patches behind the figures.
 ```
+
+## 第 26 批：出發前的小山載入畫面（放進 `02.素材`，2:1，不用洋紅底，米色紙底）
+
+每座山一張：左半只有墨線、右半上好色，兩半構圖一模一樣；遊戲把兩半疊起來，顏色從山腳像水位一樣往上漲。完整提示詞和每座山的山形在 `_交付/小山載入繪圖包/提示詞.md`。沒有圖的山先用程式照真實輪廓畫。
+
+| 檔名 | 比例 |
+|---|---|
+| `load_xiangshan` | 2:1 |
+| `load_qixing` | 2:1 |
+| `load_guanyin` | 2:1 |
+| `load_matcha` | 2:1 |
+| `load_alishan` | 2:1 |
+| `load_taiping` | 2:1 |
+| `load_hehuan` | 2:1 |
+| `load_hh_shimen` | 2:1 |
+| `load_hh_east` | 2:1 |
+| `load_hh_north` | 2:1 |
+| `load_hh_west` | 2:1 |
+| `load_jiaming` | 2:1 |
+| `load_xiangyang` | 2:1 |
+| `load_sancha` | 2:1 |
+| `load_xueshan` | 2:1 |
+| `load_xueshan_east` | 2:1 |
+| `load_yushan` | 2:1 |
+| `load_yushan_front` | 2:1 |
+| `load_yushan_west` | 2:1 |
+| `load_yushan_north` | 2:1 |
+| `load_yushan_east` | 2:1 |
