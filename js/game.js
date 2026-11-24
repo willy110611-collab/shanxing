@@ -1090,6 +1090,9 @@
   // ───────── 拍立得與山友照片牆 ─────────
   // 山友照片依「離登山口幾公尺」歸到下一個 500 公尺點：0–500 的照片在 500 那一站看，最後一段在山頂看
   const bandOf = m => Math.ceil(Math.max(1, m) / 500) * 500;
+  // 照片牆的名字：走到哪個路標（離登山口幾公里）的照片牆，跟步道上的「0.5 公里路標」同一種說法；最後一段叫山頂
+  // 2026-11-24 回報照片牆數字錯：以前寫「1,234 m・1500 m照片牆」，前面是海拔、後面是離登山口的距離，都寫 m，看起來像海拔算錯（象山最高 183 m 卻寫 500 m 照片牆）
+  const wallName = (mt, m) => mt && bandOf(m) >= mt.dist ? '山頂' : `${+(bandOf(m) / 1000).toFixed(1)} 公里路標`;
   // 看大圖用的說明（data-pv-t 標題、data-pv-s 日期・距離・海拔）和「我喜歡」的代號（data-like，記在 SV.likes，只存在這支手機的存檔裡）
   const attr = s => String(s == null ? '' : s).replace(/[&"<>]/g, c => ({ '&':'&amp;', '"':'&quot;', '<':'&lt;', '>':'&gt;' }[c]));
   const pvAttrs = (t, s, like, extra) => ` data-pv-t="${attr(t)}" data-pv-s="${attr(s)}" data-like="${attr(like)}"${extra || ''}`;
@@ -1097,7 +1100,7 @@
   // 自己拍的拍立得沒有編號：用山、位置、日期和圖檔長度組一個（同一張照片永遠一樣）
   const photoKey = p => `p:${p.id}:${p.m}:${p.date}:${p.img ? p.img.length : 0}`;
   const photoAttrs = p => pvAttrs(p.cap, [p.date, /km/.test(p.cap || '') ? '' : '離登山口 ' + kmOf(p.m), p.alt != null ? `海拔 ${Math.round(p.alt).toLocaleString('en-US')} m` : '', p.wx].filter(Boolean).join('・'), photoKey(p));
-  const upAttrs = p => { const m = SX.M[p.mountainId]; return pvAttrs(`${m ? m.name : ''}・${m && bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m '}照片牆`, [p.by && p.by !== '我' ? p.by : '', p.date, '離登山口 ' + kmOf(p.m), `海拔 ${Math.round(p.alt).toLocaleString('en-US')} m`].filter(Boolean).join('・'), 'u:' + p.id, p.by === '我' ? ` data-up="${attr(p.id)}"` : ''); };
+  const upAttrs = p => { const m = SX.M[p.mountainId]; return pvAttrs(`${m ? m.name : ''}・${wallName(m, p.m)}的照片牆`, [p.by && p.by !== '我' ? p.by : '', p.date, '離登山口 ' + kmOf(p.m), `海拔 ${Math.round(p.alt).toLocaleString('en-US')} m`].filter(Boolean).join('・'), 'u:' + p.id, p.by === '我' ? ` data-up="${attr(p.id)}"` : ''); };
   function wallHtml(list){
     if (!list.length) return '<p class="summitBig">這一段還沒有山友照片，休息時上傳一張吧。</p>';
     return '<div class="grid">' + list.map((p, i) => `<div class="pol${SV.likes['u:' + p.id] ? ' liked' : ''}"${upAttrs(p)} style="margin:4px 0 12px;transform:rotate(${(i % 3 - 1) * 1.5}deg)"><img src="${p.img}"><p>${p.by}・${Math.round(p.alt).toLocaleString('en-US')} m</p></div>`).join('') + '</div>';
@@ -1123,7 +1126,7 @@
     const wall = mark ? SV.userPhotos.filter(p => p.mountainId === M.id && bandOf(p.m) === mark) : null;
     modal(`<h3>${mark ? `走了 ${(mark/1000).toFixed(1)} 公里，拍一張！` : '喀嚓！'}</h3>
       ${img ? `<div class="pol"${photoAttrs(SV.photos[SV.photos.length - 1])}><img src="${img}"><p>${cap}・${wt}</p></div>` : ''}
-      ${wall ? `<h3>山友照片牆・${mark - 500}–${mark} m</h3>${wallHtml(wall)}` : ''}
+      ${wall ? `<h3>山友照片牆・${wallName(M, mark)}</h3>${wallHtml(wall)}` : ''}
       <div class="mBtns"><button class="cbtn go" id="pOk">${img ? '收進相簿' : '繼續走'}</button></div>`);
     $('#pOk').onclick = () => { A.pop(); closeModal(); if (mark) say(pick(SX.LINES.walk)); };
     if (mark && SX.social) SX.social.fillWall(M.id, mark, $('#mCard'));
@@ -1152,7 +1155,7 @@
       imgDirty = true; save(); A.shutter();
       daily('photo');
       if (SX.social) SX.social.uploadPhoto(c, rec);   // 有山友帳號就同時分享到伺服器（審核後公開）
-      toast(bandOf(m) >= mt.dist ? `上傳好了，會出現在${mt.name}山頂的照片牆` : `上傳好了，會出現在 ${bandOf(m)} m 的照片牆`, 3000);
+      toast(`上傳好了，會出現在${mt.name}${wallName(mt, m)}的照片牆`, 3000);
       MO.done(btn).then(() => { if (screen === 'album') renderAlbum(); });
     };
     im.onerror = () => { URL.revokeObjectURL(url); MO.idle(btn); toast('這張照片讀不出來'); };
@@ -1794,14 +1797,14 @@
         <div><label>拍照地點的海拔（公尺）</label><input type="number" id="upAlt" inputmode="numeric"></div>
         <div><span class="alt500" id="upBand"></span></div>
         <button class="cbtn go" id="upGo">選一張照片上傳</button>
-        <p>照片依海拔歸到下一個 500 公尺點，走到那裡的山友才看得到，步道不會被照片塞滿。</p></div>`;
+        <p>照片依拍照地點歸到前面最近的公里路標（每 0.5 公里一個），山友走到那裡才看得到，步道不會被照片塞滿。</p></div>`;
       SX.MOUNTAINS.forEach(m => { const ps = SV.userPhotos.filter(p => p.mountainId === m.id).sort((a, b) => a.m - b.m); if (!ps.length) return;
-        html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol${SV.likes['u:' + p.id] ? ' liked' : ''}"${upAttrs(p)} style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>${Math.round(p.alt).toLocaleString('en-US')} m・${bandOf(p.m) >= m.dist ? '山頂' : bandOf(p.m) + ' m'}照片牆</p></div>`).join('') + '</div>'; });
+        html += `<div class="grp">${m.name}</div><div class="grid">` + ps.map((p, i) => `<div class="pol${SV.likes['u:' + p.id] ? ' liked' : ''}"${upAttrs(p)} style="--rot:${(i%3-1)*1.5}deg;transform:rotate(var(--rot))"><img src="${p.img}"><p>海拔 ${Math.round(p.alt).toLocaleString('en-US')} m・${wallName(m, p.m)}</p></div>`).join('') + '</div>'; });
       if (!SV.userPhotos.length) html += '<div class="empty" style="padding:30px 20px">還沒有上傳過照片。</div>';
       body.innerHTML = html;
       const selM = $('#upM'), inAlt = $('#upAlt');
       const mOf = () => { const m = SX.M[selM.value], a = clamp(+inAlt.value || m.startAlt, m.startAlt, m.alt); return Math.round((a - m.startAlt) / Math.max(1, m.alt - m.startAlt) * m.dist); };
-      const upd = () => { const m = SX.M[selM.value], d = mOf(); $('#upBand').textContent = `${m.name} ${m.startAlt}–${m.alt} m・會出現在${bandOf(d) >= m.dist ? '山頂' : ' ' + bandOf(d) + ' m '}的照片牆`; };
+      const upd = () => { const m = SX.M[selM.value], d = mOf(); $('#upBand').textContent = `海拔 ${m.startAlt}–${m.alt} m・會出現在${wallName(m, d)}的照片牆`; };
       const reset = () => { const m = SX.M[selM.value]; inAlt.min = m.startAlt; inAlt.max = m.alt; inAlt.value = Math.round(st && M === m && !st.fin ? altAt(m, st.dist / m.dist) : (m.startAlt + m.alt) / 2); upd(); };
       selM.onchange = reset; inAlt.oninput = upd; reset();
       $('#upGo').onclick = e => { A.pop(); pickUpload(selM.value, mOf(), e.currentTarget); };
