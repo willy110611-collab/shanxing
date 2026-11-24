@@ -447,7 +447,14 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .tgl::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--leaf);box-shadow:inset 0 2px 4px rgba(0,0,0,.25);opacity:0;transition:opacity var(--t) var(--ease)}
 .tgl.on::before{opacity:1}
 .tgl::after{z-index:1;transition:transform .36s var(--spring)}
+/* 封面：淡入、「輕點畫面，進入山林」慢慢呼吸、點下去淡出 */
+.cover.on{animation:cvIn .6s var(--ease) backwards}
+@keyframes cvIn{from{opacity:0}}
+.cover.off{opacity:0;transition:opacity .6s var(--ease);pointer-events:none}
+.cvTap{animation:cvBreath 3.6s ease-in-out infinite}
+@keyframes cvBreath{0%,100%{opacity:.5;transform:scale(.97)}50%{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){
+  .cvTap{animation:none}
   @keyframes mFade{from{opacity:0}}
   @keyframes mFadeOut{to{opacity:0}}
   @keyframes mPulse{from{opacity:.35}}
@@ -799,6 +806,16 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .ldSlow p{margin:0 0 12px;font-size:14px;line-height:1.6}
 .ldBtns{display:flex;gap:10px;justify-content:center}
 .ldBtns .cbtn{white-space:nowrap}
+/* 封面（讀取畫面跑完後，輕點進入）：美術圖 cover_portrait 鋪滿；沒有圖時是紙墨風的暫代封面。動態（淡入、字的呼吸、淡出）在「動態效果」段落 */
+.cover{position:fixed;inset:0;z-index:101;display:none;overflow:hidden;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent;background:radial-gradient(ellipse at 70% 20%,#fff4d6 0%,#f3dcae 45%,#d9b47c 100%)}
+.cover.on{display:block}
+.cvArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 50%;pointer-events:none}   /* 窄手機左右會裁掉一點：多裁左邊，登山客（在右邊）和睡墊才完整 */
+.cover.art .cvPh{display:none}
+.cvPh{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:calc(24vh + env(safe-area-inset-top))}
+.cvTitle{font-family:var(--fontT);font-size:64px;letter-spacing:14px;padding-left:14px;color:#5a3a22;text-shadow:0 2px 0 rgba(255,250,235,.8)}
+.cvMt{position:absolute;left:-2%;bottom:calc(10vh + env(safe-area-inset-bottom) - 3px);width:104%;height:auto}
+.cvGd{position:absolute;left:0;right:0;bottom:0;height:calc(10vh + env(safe-area-inset-bottom));background:#8fae78}
+.cvTap{position:absolute;left:0;right:0;bottom:calc(max(4vh,22px) + env(safe-area-inset-bottom));text-align:center;font-size:17px;letter-spacing:3px;color:#fff7e4;text-shadow:var(--txo);pointer-events:none;white-space:nowrap}
 
 /* 新手教學：地圖選單最上面的「?」、設定頁「看新手教學」 */
 .tutL li span b{display:block;font-weight:normal;font-family:var(--fontT);font-size:15.5px;margin-bottom:1px}

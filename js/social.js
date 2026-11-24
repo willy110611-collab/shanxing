@@ -185,7 +185,7 @@
     $('#rcSave').onclick = () => saveCode();
     $('#rcOk').onclick = () => $('#modal').classList.remove('on');
   }
-  const CODE_TITLE = '山行小日子 復原碼';
+  const CODE_TITLE = '森呼吸 復原碼';
   const codeText = () => `${CODE_TITLE}\n${acct.token}\n換手機時到「山友大廳」貼上這組碼，就能找回帳號。不要給別人。`;
   function copyCode(){ navigator.clipboard && navigator.clipboard.writeText(acct.token).then(() => toast('已複製'), () => toast('請長按文字複製')); }
   // 復原碼畫成一張小卡（羊皮紙底），存進手機相簿最不會弄丟
@@ -207,7 +207,7 @@
   }
   // 「存到手機」：能分享圖片就分享（iPhone 可以直接「儲存影像」到相簿）→ 只能分享文字就分享文字 → 都不行就複製＋下載小卡
   async function saveCode(){
-    const c = codeCard(), name = '山行小日子-復原碼.png';
+    const c = codeCard(), name = '森呼吸-復原碼.png';
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     const file = blob && typeof File === 'function' ? new File([blob], name, { type: 'image/png' }) : null;
     try {
@@ -969,7 +969,7 @@
   const b64u8 = s => { const b = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); };
   // 通知被拒絕時，怎麼到手機設定重新打開
   const PUSH_DENIED_HELP = (ios, home) => ios
-    ? '通知被關掉了，手機不會再問。要打開：iPhone「設定」→「通知」→ 找到「山行小日子」→ 允許通知，再回來打開這個開關'
+    ? '通知被關掉了，手機不會再問。要打開：iPhone「設定」→「通知」→ 找到「森呼吸」→ 允許通知，再回來打開這個開關'
     : '通知被封鎖了，手機不會再問。要打開：點網址列左邊的鎖頭（或「⋮」→ 網站設定）→ 通知 → 允許，再回來打開這個開關';
   // 允許視窗被關掉、沒有選（permission 還是 default）：手機下次還會再問，不是被封鎖
   const PUSH_DISMISSED = '這次沒有允許，下次打開開關時還會再問一次';
