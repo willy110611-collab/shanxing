@@ -453,10 +453,32 @@ function grassTex(){
       const q = clamp((pn(n3, L1, x, y) - 0.38) / 0.28, 0, 1) * 0.9;   // 鏡射那張混進來多少
       for (let c = 0; c < 3; c++) { const v = d[p + c] + (e[p + c] - d[p + c]) * m; d[p + c] = (v + (fM[p + c] - v) * q) * k; }
     }
+    grassDestreak(d, W2);
     ga.putImageData(A, 0, 0); free(b);
     return { w:W2, c:a, lv:{} };
   });
   return T ? { T:T, w:T.w, m:8, c:T.c, lv:T.lv } : null;
+}
+// 草地大圖裡「橫向很長、上下很窄」的明暗條紋拿掉（只做一次）：遠處山坡的貼圖上下壓扁十幾倍、左右只壓幾倍，原圖裡一排草叢、一條稍暗的橫帶
+// 壓扁以後就是畫面上一條細細的橫線（2026-11-24 掃描：合歡山 900、香山 400、七星山 1100…，每段貼圖接得起來以後一條線一路橫過整片坡）。
+// 做法：每一列先左右平均（GRASS_STREAK.w 像素，循環），再上下平均（h 像素），兩者的差就是橫條紋，每個顏色各自減掉；草葉、花這種上下長或一小點的細節不動
+const GRASS_STREAK = { w:128, h:64 };
+function grassDestreak(d, S){
+  const w = GRASS_STREAK.w, h = GRASS_STREAK.h, m = S - 1, R = new Float32Array(S * S), V = new Float32Array(S * S), acc = new Float32Array(S);   // S 是 2 的次方：循環用 & m
+  for (let c = 0; c < 3; c++) {
+    for (let p = 0, q = c; p < S * S; p++, q += 4) V[p] = d[q];
+    for (let y = 0; y < S; y++) {   // 左右平均（循環）
+      const o = y * S; let s = 0;
+      for (let x = -w / 2; x < w / 2; x++) s += V[o + (x & m)];
+      for (let x = 0; x < S; x++) { R[o + x] = s / w; s += V[o + ((x + w / 2) & m)] - V[o + ((x - w / 2) & m)]; }
+    }
+    acc.fill(0);   // 再上下平均（循環，一整列一起算），減掉兩者的差
+    for (let y = -h / 2; y < h / 2; y++) { const o = (y & m) * S; for (let x = 0; x < S; x++) acc[x] += R[o + x]; }
+    for (let y = 0; y < S; y++) {
+      const o = y * S, a = ((y + h / 2) & m) * S, b = ((y - h / 2) & m) * S;
+      for (let x = 0; x < S; x++) { const p = o + x; d[p * 4 + c] = V[p] - R[p] + acc[x] / h; acc[x] += R[a + x] - R[b + x]; }
+    }
+  }
 }
 // 大範圍的草色起伏（2026-11-24 玩家意見：草地不要看得出重複的方塊）：一張 64×64 的柔和雜訊（代表 GMAC.m 公尺，跟草地貼圖的 8 公尺不成倍數，
 // 兩張疊起來要好幾百公尺才重複一次），一片偏暖金（午後的光）、一片偏深綠（背光的草）、中間透明，疊在草地貼圖上。第一次用到時做一次存起來，每格只貼
