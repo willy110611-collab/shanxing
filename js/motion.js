@@ -350,5 +350,21 @@
   // 換到另一張以後（減少動態時沒有滑動），新的那張淡入
   function viewSwap(el){ return calm() ? run(el, [{ opacity:0 }, { opacity:1 }], { duration:160 }) : Promise.resolve(null); }
 
-  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager };
+  // ───── 地圖選單：一疊木牌往上展開（最下面那顆先出來，一顆接一顆從「選單」往上彈）、收起時由上往下收回 ─────
+  // list 的子元素由上到下排；open 時加 .on（看得到、按得到），收完才拿掉。減少動態時整疊一起淡入淡出
+  function fan(list, open){
+    if (!list) return;
+    const els = [...list.children].reverse(), n = els.length, c = calm();
+    list._fan = (list._fan || 0) + 1; const my = list._fan;
+    els.forEach(el => { if (el._mFan) el._mFan.cancel(); });
+    if (open) list.classList.add('on');
+    const ps = els.map((el, i) => {
+      const k = c ? [{ opacity:0 }, { opacity:1 }] : [{ opacity:0, transform:`translateY(${14 + i * 4}px) scale(.9)` }, { opacity:1, transform:'none' }];
+      const a = el.animate(open ? k : k.slice().reverse(), { duration:c ? 160 : open ? 300 : 170, delay:c ? 0 : (open ? i : n - 1 - i) * (open ? 32 : 18), easing:c || !open ? EASE : SPRING, fill:'both' });
+      el._mFan = a; return a.finished.catch(() => {});
+    });
+    return Promise.all(ps).then(() => { if (list._fan !== my) return; if (!open) list.classList.remove('on'); els.forEach(el => { if (el._mFan) { el._mFan.cancel(); el._mFan = null; } }); });
+  }
+
+  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager, fan };
 })();

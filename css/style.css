@@ -30,8 +30,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .woodPanel,.sheet,.mCard,.logo,.dock,.infoCard,.hudP{
   background:var(--woodBg);border:2.5px solid var(--ink);border-radius:var(--irr);box-shadow:var(--woodSh);position:relative;color:#fff7e4;text-shadow:var(--txo)}
 /* 釘子：左上、右下 (右上、左下可加 <i class="nailTR"></i><i class="nailBL"></i>) */
-.woodPanel::before,.sheet::before,.mCard::before,.hudP::before,.infoCard::before,#restSheet::before{content:"";position:absolute;left:6px;top:6px;width:7px;height:7px;border-radius:50%;background:var(--nail);pointer-events:none;z-index:2}
-.woodPanel::after,.sheet::after,.mCard::after,.hudP::after,.infoCard::after,#restSheet::after{content:"";position:absolute;right:6px;bottom:6px;width:7px;height:7px;border-radius:50%;background:var(--nail);pointer-events:none;z-index:2}
+.woodPanel::before,.sheet::before,.mCard::before,.hudP::before,.infoCard::before,#restSheet::before,#frSheet::before{content:"";position:absolute;left:6px;top:6px;width:7px;height:7px;border-radius:50%;background:var(--nail);pointer-events:none;z-index:2}
+.woodPanel::after,.sheet::after,.mCard::after,.hudP::after,.infoCard::after,#restSheet::after,#frSheet::after{content:"";position:absolute;right:6px;bottom:6px;width:7px;height:7px;border-radius:50%;background:var(--nail);pointer-events:none;z-index:2}
 .nailTR,.nailBL{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--nail);pointer-events:none;z-index:2}
 .nailTR{right:6px;top:6px}.nailBL{left:6px;bottom:6px}
 .paper,.paperIn{background:var(--paperBg);border:2px solid var(--ink);border-radius:var(--irrS);color:var(--ink);text-shadow:none;
@@ -57,17 +57,34 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 @keyframes seaMove{to{background-position:90px 46px}}
 .mapTop{position:relative;z-index:4;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 12px 0}
 .logo{padding:5px 16px 7px;display:flex;align-items:baseline;gap:6px}
-.logo span{font-size:24px;color:#fff7e4;letter-spacing:2px}
+.logo span{font-size:26px;color:#fff7e4;letter-spacing:2px}
 .logo small{font-size:14px;color:#ffe3a8}
 .logo.artLogo{padding:0;background:none;border:0;box-shadow:none}
-.logo.artLogo img{height:46px;width:auto;display:block;filter:drop-shadow(0 2px 2px rgba(58,42,32,.35))}
-.topBtns{display:flex;gap:8px}
+.logo.artLogo img{height:54px;width:auto;display:block;filter:drop-shadow(0 2px 2px rgba(58,42,32,.35))}   /* 頂部只剩標題：比以前（46）大一點 */
 /* 操作提示放在地圖最下面（海面上，不會蓋到山的木牌）；第一次摸地圖之後就收起來 */
 .mapHint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));z-index:4;font-size:13px;color:#fff7e4;text-shadow:var(--txo);pointer-events:none;white-space:nowrap;transition:opacity .4s}
 .mapHint.off{opacity:0}
-/* 找山：地圖右下角一顆木頭小鈕（跟上排按鈕同材質）；卡片用山群卡片同一套木框與清單 */
-.findBtn{position:absolute;right:14px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:4px;padding:6px 12px;font-size:14px;white-space:nowrap}
-.findBtn svg{width:18px;height:18px;flex:none}
+/* 我的位置：地圖左下圓形木牌＋墨線準星（icon_locate 美術圖到了，game.js 換成那張圖） */
+.locBtn{position:absolute;left:14px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:5;width:50px;height:50px;padding:0;display:grid;place-items:center;border-radius:50%;border:2.5px solid var(--ink);
+  background:var(--grain),radial-gradient(circle at 36% 30%,#dcaa70 0,#b5824f 55%,#8a5a33 100%);box-shadow:0 3px 0 var(--ink),0 5px 8px rgba(58,30,10,.28),inset 0 0 0 3px rgba(255,232,190,.28);transition:transform .08s}
+.locBtn:active{transform:translateY(2px) scale(.95)}
+.locBtn svg{width:32px;height:32px}
+/* 地圖選單：右下一顆「選單」木牌，點了往上展開一疊木牌（動態在 js/motion.js fan）；點外面（mnShade）或再點一次收起 */
+.mapMenu{position:absolute;right:14px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:7;display:flex;flex-direction:column;align-items:flex-end}
+.mnList{position:absolute;right:0;bottom:calc(100% + 10px);display:flex;flex-direction:column;align-items:flex-end;gap:9px;visibility:hidden;pointer-events:none}
+.mnList.on{visibility:visible;pointer-events:auto}
+.mnList .cbtn{width:72px;display:flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap}
+.mnList .qBtn{font-weight:bold;font-size:16px}
+.mnList svg{width:16px;height:16px;flex:none}
+.mnBtnW{position:relative}
+.mnBtn{padding:7px 14px;font-size:15px;white-space:nowrap}
+.mnShade{position:absolute;inset:0;z-index:6;display:none}
+.mnShade.on{display:block}
+/* 選單裡任何一顆有紅點（每日獎勵沒領、有邀請…）：「選單」右上亮一顆會呼吸的暖黃小燈（紅點本身由各按鈕的 data-badge 決定，這裡只看有沒有） */
+.mnGlow{position:absolute;right:-5px;top:-5px;width:14px;height:14px;border-radius:50%;pointer-events:none;opacity:0;
+  background:radial-gradient(circle at 40% 35%,#fffbe0 0 22%,#ffd25a 45%,#f0a030 100%);border:1.5px solid var(--ink);box-shadow:0 0 6px 3px rgba(255,205,90,.75)}
+#mapMenu:has(.mnList [data-badge]:not([data-badge=""])) .mnGlow{opacity:1;animation:mnGlow 1.8s ease-in-out infinite}
+@keyframes mnGlow{50%{transform:scale(.82);opacity:.7}}
 .findQ{margin:6px 0 8px}
 .findTabs{display:flex;gap:6px;flex-wrap:nowrap;margin-bottom:4px}
 .findTabs .chip{flex:1;padding:4px 0;font-size:13px;white-space:nowrap;opacity:.7}
@@ -195,6 +212,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .i-map{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'%3E%3Cpath d='M3 5l8-2.5 8 3 8-2.5v18l-8 2.5-8-3-8 2.5z' fill='%23f4e3b8' stroke='%233a2a20' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M11 2.5v18M19 5.5v18' stroke='%233a2a20' stroke-width='1.4'/%3E%3Cpath d='M7 14l3-3 3 4 3-5 4 5' fill='none' stroke='%237dbb63' stroke-width='1.8'/%3E%3C/svg%3E")}
 .i-tent{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'%3E%3Cpath d='M15 3L3 23h24z' fill='%23f0a444' stroke='%233a2a20' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M15 9l-4 14h8z' fill='%23ffe1a0' stroke='%233a2a20' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E")}
 .i-photo{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'%3E%3Crect x='5' y='3' width='20' height='21' rx='2' fill='%23fff' stroke='%233a2a20' stroke-width='2' transform='rotate(-6 15 13)'/%3E%3Crect x='8' y='6' width='14' height='11' fill='%2398cfe6' transform='rotate(-6 15 13)'/%3E%3Cpath d='M8 17l5-6 4 4 2-2 3 4z' fill='%237dbb63' transform='rotate(-6 15 13)'/%3E%3C/svg%3E")}
+/* 好友（登山畫面下方選單）：兩個登山客的頭（程式畫） */
+.i-friend{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'%3E%3Cpath d='M2.5 25c0-6 4-9 8.5-9s8.5 3 8.5 9z' fill='%239ac46a' stroke='%233a2a20' stroke-width='1.8' stroke-linejoin='round'/%3E%3Ccircle cx='11' cy='10.5' r='5' fill='%23f6cba6' stroke='%233a2a20' stroke-width='1.8'/%3E%3Cpath d='M5.5 9q5.5-6.5 11 0z' fill='%23f2c94c' stroke='%233a2a20' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M10.5 25c0-6.5 4.2-10 9-10s9 3.5 9 10z' fill='%235f9fd6' stroke='%233a2a20' stroke-width='1.8' stroke-linejoin='round'/%3E%3Ccircle cx='19.5' cy='9.5' r='5.5' fill='%23f6cba6' stroke='%233a2a20' stroke-width='1.8'/%3E%3Cpath d='M13.5 8q6-7.5 12 0z' fill='%23e88f6a' stroke='%233a2a20' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E")}
 .i-gear{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 26'%3E%3Cg stroke='%233a2a20' stroke-width='3.2' stroke-linecap='round'%3E%3Cpath d='M15 2v3M15 21v3M4 13h3M23 13h3M7 5l2 2M21 19l2 2M7 21l2-2M21 7l2-2'/%3E%3C/g%3E%3Ccircle cx='15' cy='13' r='8' fill='%23d8c3a0' stroke='%233a2a20' stroke-width='2'/%3E%3Ccircle cx='15' cy='13' r='3' fill='%23fff' stroke='%233a2a20' stroke-width='1.6'/%3E%3C/svg%3E")}
 
 /* 長椅／觀景點浮動木牌 .tag：position:absolute 於 climb 畫面，用 left/top 定位於物件上方 */
@@ -208,6 +227,20 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 #restSheet{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:8;padding:16px 14px 14px;transform:translateY(135%);transition:transform var(--t) var(--ease);
   background:var(--woodBg);border:2.5px solid var(--ink);border-radius:var(--irr);box-shadow:var(--woodSh);color:#fff7e4;text-shadow:var(--txo)}
 #restSheet.on{transform:none;transition:transform var(--t-sheet) var(--spring)}
+/* 好友視窗（登山畫面「好友」）：跟休息抽屜一樣從下面彈上來的木框，最高到畫面六成五，裡面的紙卡跟大廳好友分頁同一套（.setRow、.frRow）；
+   點旁邊（frShade，透明不變暗，登山客照樣看得到）或左上「← 返回」收起 */
+.frShade{position:absolute;inset:0;z-index:8;display:none}
+.frShade.on{display:block}
+.frSheet{position:absolute;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:9;max-height:min(65%,560px);display:flex;flex-direction:column;padding:10px 10px 0;
+  transform:translateY(calc(100% + 30px));transition:transform var(--t) var(--ease);
+  background:var(--woodBg);border:2.5px solid var(--ink);border-radius:var(--irr);box-shadow:var(--woodSh);color:#fff7e4;text-shadow:var(--txo)}
+.frSheet.on{transform:none;transition:transform var(--t-sheet) var(--spring)}
+.frHead{display:grid;grid-template-columns:84px 1fr 84px;align-items:center;padding:0 0 8px}
+.frHead .cbtn{justify-self:start;white-space:nowrap}
+.frHead b{text-align:center;font-size:18px;font-weight:normal;font-family:var(--fontT)}
+.frBody{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 10px;overscroll-behavior:contain}
+.frBody .setRow{margin-bottom:10px;padding:11px 12px}
+.frBody .setRow:last-child{margin-bottom:0}
 /* 休息選單要矮：坐著的登山客在畫面下半部，選單只蓋住底部選單那一條，一排四個小按鈕（圖示在上、字在下），坐著的人整個看得到 */
 #restSheet{padding:10px 10px 10px}
 #restSheet h4{font-weight:normal;font-size:15px;line-height:1.2;text-align:center;margin-bottom:6px}
@@ -424,12 +457,13 @@ input[type=range]{width:100%;accent-color:#6fb257}
   .likeHeart{animation:mFadeOut .6s linear forwards}
   .mSpin i{animation:mPulse .8s ease-in-out infinite alternate}
   .skel::after{animation:none;opacity:0}
-  .sheet,#restSheet{transition:opacity .2s linear,transform 0s .2s!important}
-  .sheet:not(.on),#restSheet:not(.on){opacity:0}
-  .sheet.on,#restSheet.on{transition:opacity .2s linear!important}
+  .sheet,#restSheet,.frSheet{transition:opacity .2s linear,transform 0s .2s!important}
+  .sheet:not(.on),#restSheet:not(.on),.frSheet:not(.on){opacity:0}
+  .sheet.on,#restSheet.on,.frSheet.on{transition:opacity .2s linear!important}
   .toast,.toast.on{transition:opacity .2s linear}
   .fl>span,.tgl::after{transition:none}
   .tag,.tapHint,.awI.big{animation:none}
+  #mapMenu .mnGlow{animation:none!important}
   @keyframes bpOutC{to{opacity:0}}
   .badgePop{animation:mFade .2s linear,bpOutC .3s linear 4.6s forwards}
 }
@@ -553,17 +587,6 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .rankRow span{color:var(--ink2)}
 .rankRow.me b{color:#3f7a45}
 
-/* 地圖頂列：按鈕變多，窄螢幕縮小 logo 與間距、按鈕不換行
-   寬版按鈕整排要 439px 才放得下（logo 103＋五顆 56＋間距＋左右留白），所以 460 以下都用窄版（430 的大 iPhone 也是） */
-.topBtns .cbtn{white-space:nowrap}
-@media (max-width:460px){
-  .mapTop{padding-left:8px;padding-right:8px;gap:6px}
-  .logo{padding:4px 10px 6px}
-  .logo span{font-size:20px;letter-spacing:1px}
-  .logo small{display:none}
-  .topBtns{gap:5px}
-  .topBtns .cbtn.sm{padding-left:8px;padding-right:8px;font-size:13px}
-}
 
 /* ───── 寶物放大卡（背包裡點寶物）───── */
 .tzWrap{display:grid;place-items:center;padding:6px 0 10px;touch-action:none;perspective:700px}
@@ -777,16 +800,7 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .ldBtns{display:flex;gap:10px;justify-content:center}
 .ldBtns .cbtn{white-space:nowrap}
 
-/* 新手教學：地圖頂列設定旁的小「?」木牌（只有一個字，比其他按鈕窄）、登山畫面下方選單的「教學」圓圈、教學視窗的翻頁圓點 */
-.topBtns .cbtn.qBtn{min-width:0;padding-left:4px;padding-right:4px;font-weight:bold;font-size:16px}
-/* 375 寬要多放這顆：logo 縮小一點、按鈕間距 3px、「?」木牌左右框窄一點（logo 103＋五顆 46＋「?」23＋間距，剛好放得下不換行） */
-@media (max-width:460px){
-  .mapTop{padding-left:6px;padding-right:6px}
-  .logo.artLogo img{height:38px}
-  .topBtns{gap:3px}
-  .topBtns .cbtn.sm.qBtn{padding-left:3px;padding-right:3px;font-size:15px;border-width:8px 7px!important;border-image-width:8px 7px!important}
-}
-.dbtn i.i-help{width:24px;height:24px;margin:1px 0;border:2px solid var(--ink);border-radius:50%;background:#fff3d0;color:var(--ink);font-style:normal;font-weight:bold;font-size:15px;line-height:20px;text-align:center;text-shadow:none;filter:none}
+/* 新手教學：地圖選單最上面的「?」、設定頁「看新手教學」 */
 .tutL li span b{display:block;font-weight:normal;font-family:var(--fontT);font-size:15.5px;margin-bottom:1px}
 .setRow [data-go="help"]{margin-top:8px}
 .srcList{list-style:none;margin:8px 0 0;padding:0}

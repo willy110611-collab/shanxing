@@ -2068,6 +2068,13 @@ const MATE_SLOW = 0.4, MATE_FAST = 2.5;
 const MATE_SNAP = 150;    // 差這麼多公尺（剛重連、隊友長按加速很久）就直接站過去；但只要他或要去的地方在畫面裡就不跳，用最快步調走過去
 const MATE_OFF_A = 0.5;   // 離線隊友畫多透明（位置是估的）
 const STRANGER_A = 0.55;  // 同山遇見的山友（不是隊友）畫多透明
+// 隊伍出發站位：自己站在路中間（鏡頭跟著自己），隊友照入隊先後站好（social.js 給 slot 1～5；沒有 slot 的照舊）
+// FORM[slot]＝[左右（-1 左、+1 右、0 正中間）, 前後幾公尺（+ 前、- 後）]：1 左前、2 右前、3 左後、4 右後、5 正後方
+// 鏡頭在自己後面 HZ 公尺：後排只退一點點（不然站到鏡頭旁邊就淡掉、看不到），正後方那位再退一點
+// 左右一直保持（路窄、階梯時往中間收，離路緣至少 FORM_EDGE，不站到草裡）；前後只在出發的前 FORM_FADE 公尺慢慢收掉，之後就是他真正走到哪（SX.mateGuess／回報的距離）
+const FORM = [null, [-1, 1.6], [1, 1.6], [-1, -0.35], [1, -0.35], [0, -0.7]];
+const FORM_LAT = 0.42, FORM_FADE = 30, FORM_EDGE = 0.3, FORM_STAIR = 0.75, FORM_BLOCK_A = 0.42;   // FORM_BLOCK_A：後面的隊友整個擋在自己身上時畫多淡
+const formLon = mt => { const s = FORM[mt.slot], k = clamp(1 - mt.d / FORM_FADE, 0, 1); return s ? s[1] * k * k * (3 - 2 * k) : 0; };   // 前後差幾公尺（照他走了多遠平滑收掉）
 let mates = [];
 // list：[{ id, dist, name, rest, off, v, pet, ghost }]；pet＝隊友的寵物（好友好感 Lv3 以上才帶，跟著他走）；off＝離線（dist 是遊戲端估的位置、v 是估計的步調，每秒更新一次）
 // ghost＝同山遇見的山友（半透明、只有名牌，點得到）；id 給聊天泡泡、打招呼、點人用
@@ -2075,7 +2082,7 @@ S.setMates = function(list){
   const now = performance.now() / 1000;
   mates = (list || []).map(m => {
     const key = m.id || m.name, old = mates.find(o => o.key === key), tg = Math.max(0, +m.dist || 0), rest = !!m.rest, off = !!m.off;
-    const mt = { key, id: m.id || null, ghost: !!m.ghost, name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now, pet: PET_H[m.pet] ? m.pet : null, seen: old ? old.seen : 0, sx: old ? old.sx : 0, sy: old ? old.sy : 0, ty: old ? old.ty : 0, u: old ? old.u : 0 };
+    const mt = { key, id: m.id || null, ghost: !!m.ghost, slot: FORM[m.slot] ? m.slot : 0, name: String(m.name || '山友').slice(0, 12), target: tg, d: old ? old.d : tg, rest, off, v: old ? old.v : 0, at: old ? old.at : now, pet: PET_H[m.pet] ? m.pet : null, seen: old ? old.seen : 0, sx: old ? old.sx : 0, sy: old ? old.sy : 0, ty: old ? old.ty : 0, u: old ? old.u : 0 };
     if (off) { mt.v = Math.max(0, +m.v || 0); mt.at = now; }   // 離線：步調由遊戲端估好（休息中、到山頂是 0）
     else if (old && old.off) { mt.v = old.v || hero.walkV; mt.at = now; }   // 剛上線：先照離線時的步調走，等下一筆回報再算他真正的步調，不會一上線就衝過去
     else {
@@ -2099,14 +2106,24 @@ function stepMates(dt){
     if (!mt.v) { mt.d += Math.max(0, gap) * Math.min(1, dt / 2); continue; }   // 在休息：慢慢走到他停下的地方就站著
     mt.d += mt.v * clamp(1 + gap / (mt.v * MATE_CATCH), MATE_SLOW, MATE_FAST) * dt;   // 一直照他的步調走，只調快慢來追上（估過頭就走慢一點，不會停住再順移）
   }
+  for (const mt of mates) mt.fd = mt.d + formLon(mt);   // 畫在哪：出發站位的前後差（前 FORM_FADE 公尺；登山口後面也有路，站得下）
+}
+// 隊友畫在他那一段的最後（比同一段的植物、道具近）；但跟自己同一段、又在自己前面的，要在畫自己之前先畫掉（pre＝這一格已經畫過）
+function mateAhead(t){
+  const z0 = (bG + jhG) * SEG;
+  for (const mt of mates) { const fd = mt.fd != null ? mt.fd : mt.d, f = (fd - z0) / SEG; if (f > fhG && f < 1 && mt.seen !== talkF) { drawMate(mt, jhG, f, t, 1); mt.pre = talkF; } }   // seen：這一格已經在段落裡畫過（自己最後才畫的時候）就不再畫
 }
 function drawMate(mt, j, f, t, fade){
-  const d0 = curS ? curS.dist || 0 : 0, near = Math.abs(mt.d - d0) < 1.6;
+  const fd = mt.fd != null ? mt.fd : mt.d, d0 = curS ? curS.dist || 0 : 0, near = Math.abs(fd - d0) < 1.6;
   proj(j, f, false);
-  const ms = Math.floor(mt.d / SEG), mf = mt.d / SEG - ms, rw = rwF(ms, mf), onSt = sAt(ms) === 1;   // 隊友腳下這段的路半寬、是不是階梯
-  const X = gx + (near ? 0.5 : -0.25) * rw * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
+  const ms = Math.floor(fd / SEG), mf = fd / SEG - ms, rw = rwF(ms, mf), onSt = sAt(ms) === 1;   // 隊友腳下這段的路半寬、是不是階梯
+  // 站在路的哪裡（公尺）：隊友照出發站位左右站開，路窄、階梯往中間收；正後方那位出發站位收完（前 FORM_FADE 公尺之後）又走到自己旁邊時才讓到右邊；同山的山友照舊
+  const fl = FORM[mt.slot], lim = Math.max(0, rw - FORM_EDGE) * (onSt ? FORM_STAIR : 1);
+  const lat = !fl ? (near ? 0.5 : -0.25) * rw : fl[0] ? clamp(fl[0] * FORM_LAT, -lim, lim) : near && mt.d >= FORM_FADE ? Math.min(0.5 * rw, lim) : 0;
+  const X = gx + lat * gs, Y = gy, u = gs / 100, na = clamp((gz - 1.2) / 1.6, 0, 1) * clamp((u - 0.06) / 0.04, 0, 1);   // 走到鏡頭旁邊、或遠到很小的時候慢慢淡掉，不會突然不見
   if (Y - 200 * u > H || na <= 0) return;   // 整個人（含名牌）都在畫面下緣以外才不畫
   fade *= na * (mt.off ? MATE_OFF_A : mt.ghost ? STRANGER_A : 1);   // 離線的隊友、同山遇見的山友半透明（名牌也是）
+  if (fd < d0 && !mt.ghost) fade *= lerp(FORM_BLOCK_A, 1, clamp(Math.abs(X - hero.sx) / (60 * u), 0, 1));   // 站在自己後面（離鏡頭近）又擋到自己的隊友畫淡一點（跟擋在登山客前面的樹叢變透明一樣），自己一直看得到
   const sv = { ph:hero.ph, mv:hero.mv, lean:hero.lean, py:hero.py, mga:hero.mga };
   const cols = [JK_L, JK_S, BAG_L, BAG_S, LID_L, LID_S, HAT_L, HAT_S];
   JK_L = '#5f9fd6'; JK_S = '#3c6f9e'; BAG_L = '#9ac46a'; BAG_S = '#6a9446'; LID_L = '#86b45a'; LID_S = '#5c8a3e'; HAT_L = '#f2c94c'; HAT_S = '#c49a34';
@@ -2302,6 +2319,7 @@ let benchO = null;
 // bx、by、bs：坐在長椅上時，椅面中間的畫面位置和那裡的比例（每公尺幾像素）；沒給就站在路中間
 // bart：坐長椅的美術圖（hiker_bench：長椅、背包、登山杖都在圖裡），(bx, by) 是長椅腳底；沒有 bart 時 (bx, by) 是椅面（舊的長椅圖＋坐著的人）
 function drawHero(s, t, bx, by, bs, bart){
+  mateAhead(t);   // 跟自己同一段、站在自己前面一點的隊友（出發站位的前排）先畫，不會蓋到自己
   proj(jhG, fhG, false);
   const onB = bx != null, sit = s.rest || s.sleep, rock = s.rest && !s.sleep && !onB, tn = onB || sit ? 0 : hero.turn;   // tn：轉彎時腳往內側偏（坐著不偏）；rock：坐在路邊石頭上
   const X = onB ? bx : rock ? gx + REST.side * (rwF(bG + jhG, fhG) - REST.in) * gs : gx + tn * TURN_X * gs, Y = onB ? by : HOR - (heroGround() - camY) * gs, u = (onB ? bs : gs) / 100;     // 角色座標單位：公分
@@ -3935,7 +3953,7 @@ function drawWorld(b, t, jHi, jLo, far){
     // 互動道具與路標
     while (pi >= 0 && AP[pi].m >= z0) { const o = AP[pi--]; if (o.m < z0 + SEG) drawProp(o, i, j, (o.m - z0) / SEG, fq, t, fade); }
     // 一起爬的隊友（在自己這一段畫）
-    for (k = 0; k < mates.length; k++) { const mt = mates[k]; if (mt.d >= z0 && mt.d < z0 + SEG) drawMate(mt, j, (mt.d - z0) / SEG, t, fade); }
+    for (k = 0; k < mates.length; k++) { const mt = mates[k], fd = mt.fd != null ? mt.fd : mt.d; if (fd >= z0 && fd < z0 + SEG && mt.pre !== talkF) drawMate(mt, j, (fd - z0) / SEG, t, fade); }
   }
   if (!heroDone) { drawHero(s, t); heroDone = true; }
   castFlush(-Infinity);   // 還沒輪到的投影（伸到畫面最下面那段之外）全部畫掉

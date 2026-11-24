@@ -638,3 +638,12 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | `load_yushan_west` | 2:1 |
 | `load_yushan_north` | 2:1 |
 | `load_yushan_east` | 2:1 |
+
+## 第 27 批：地圖「我的位置」按鈕（放進 `06.介面`，1:1、洋紅底）
+
+地圖左下角一顆圓形木牌，點了地圖滑到正在爬（或上次爬）的山。現在是程式畫的木頭圓牌＋墨線準星，這張到了自動換上（跟 `icon_map`、`icon_bag` 那組小圓圖示同一個畫法）。
+提示詞：先貼「共通規則」，再貼表格裡的英文，最後加「去背規則」那句。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `icon_locate` | 1:1 | 洋紅底。A small round wooden badge icon in the same style as the other round game icons (icon_map, icon_bag, icon_settings): a thick disc of warm honey-brown wood with visible wood grain and a slightly darker carved rim, delicate thin dark-brown ink outline, soft cel shading lit from the upper right. In the center, a hand-inked locate symbol: a cream-white circle drawn in dark-brown ink with four short crosshair ticks pointing up, down, left and right, and a small red-orange dot in the very middle, like a compass sight on an old trail map. Flat front view, simple and readable at 50 pixels, no text, no letters, no arrow, no map pin. |

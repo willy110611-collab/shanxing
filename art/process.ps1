@@ -18,6 +18,7 @@ $opaque = '^(sky_|ground_|enc_|scene_|plaza_|load_|ui_page$|summit_(' + ($mts -j
 # 2026-11-24 iPhone「重複發生問題」：開遊戲時把所有圖都解開放在記憶體（約 540 MB）整頁當掉。這些圖改成用到才下載、由網頁自己顯示，
 # 透明邊在轉檔時就裁掉（art\trim.js），遊戲不再先解成畫布再裁。
 # 要畫在畫布上的圖不能放進來（tools/check.js 會擋）：face_ 狀態臉、wx_ 右上天氣、emo_ 廣場頭上的表情、map_ 地圖、icon_lock 地圖木牌上的鎖
+# icon_locate（地圖左下「我的位置」圓木牌，第 27 批）是網頁按鈕的背景圖：照 icon_ 這組走（只在網頁上、用到才下載、讀取畫面先下載），去洋紅底存透明 webp
 $htmlOnly = '^(t_|stamp_|ui_|icon_(?!lock$)|rarity_|badge_|title_logo$|encounter_frame$)'
 # 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖＋出發前的小山讀取圖（load_<山>，按下出發才下載那一座的，js/mtload.js）
 $lazy = '^(enc_|scene_|load_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
