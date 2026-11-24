@@ -640,3 +640,24 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | `load_yushan_west` | 2:1 |
 | `load_yushan_north` | 2:1 |
 | `load_yushan_east` | 2:1 |
+
+## 第 27 批：地圖「我的位置」按鈕（放進 `06.介面`，1:1、洋紅底）
+
+地圖左下角一顆圓形木牌，點了地圖滑到正在爬（或上次爬）的山。現在是程式畫的木頭圓牌＋墨線準星，這張到了自動換上（跟 `icon_map`、`icon_bag` 那組小圓圖示同一個畫法）。
+提示詞：先貼「共通規則」，再貼表格裡的英文，最後加「去背規則」那句。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `icon_locate` | 1:1 | 洋紅底。A small round wooden badge icon in the same style as the other round game icons (icon_map, icon_bag, icon_settings): a thick disc of warm honey-brown wood with visible wood grain and a slightly darker carved rim, delicate thin dark-brown ink outline, soft cel shading lit from the upper right. In the center, a hand-inked locate symbol: a cream-white circle drawn in dark-brown ink with four short crosshair ticks pointing up, down, left and right, and a small red-orange dot in the very middle, like a compass sight on an old trail map. Flat front view, simple and readable at 50 pixels, no text, no letters, no arrow, no map pin. |
+
+## 第 28 批：山腰步道兩種（泥土小徑、碎石路＋石壁；放進 `02.素材`）
+
+一邊約 45 度陡降、看得到山谷遠山，另一邊約 40 度陡升。路面貼圖整張是路面、不用洋紅底；其他三張洋紅底，左右要能無縫接續。完整提示詞在 `_交付/山腰土徑繪圖包/提示詞.md`。
+
+| 檔名 | 比例 | 底 |
+|---|---|---|
+| `ground_dirt_leaf` | 1:1 | 整張路面 |
+| `ground_gravel` | 1:1 | 整張路面 |
+| `grass_tall_slope` | 16:9 | 洋紅 |
+| `canopy_branch` | 16:9 | 洋紅 |
+| `rock_wall_slope` | 16:9 | 洋紅 |

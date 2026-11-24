@@ -3,6 +3,7 @@ window.SX = window.SX || {};
 
 // 每座山：經緯度（畫地圖用）、海拔、遊戲距離（公尺）、難度（飯糰數）、外觀主題
 // theme.wall：[登山口, 山頂] 步道兩側被植物包住的程度（1＝森林綠色隧道、0.3＝高山稜線只剩矮箭竹）
+// theme.contour：這座山有幾段「山腰步道」（一邊陡降看得到山谷、一邊陡升），兩種的比例：dirt 泥土小徑（上坡有樹枝伸到路上）、gravel 碎石路＋石壁；位置由 trail.js buildContour 照真實路線挑
 // themeOver：同一山群的山沒寫 theme 時用主峰的，只想改幾項就寫在這裡（例如向陽山、三叉山看不到嘉明湖：{ lake:false }），在下面跟主峰的合併
 SX.MOUNTAINS = [
   { id:'xiangshan', range:'north', name:'象山', area:'台北', lon:121.576, lat:25.027, startAlt:40, alt:183, dist:1500, diff:1,
@@ -10,19 +11,19 @@ SX.MOUNTAINS = [
     theme:{ sky:['#9fd3ee','#fbe7c6'], far:'#8fb3a8', mid:'#6fa86a', near:'#86c06a', trail:'stairs', wall:[1,0.85], tower:true, rocks:true } },
   { id:'qixing', range:'north', name:'七星山', area:'陽明山', lon:121.555, lat:25.172, startAlt:780, alt:1120, dist:1650, diff:2,
     feat:'硫磺噴氣孔、整片芒草、火山口', end:'山頂三角點',
-    theme:{ sky:['#a9d6e8','#f6e9cf'], far:'#9aae95', mid:'#8aa86a', near:'#b5c46e', trail:'dirt', wall:[0.9,0.35], steam:true, grass:true } },
+    theme:{ sky:['#a9d6e8','#f6e9cf'], far:'#9aae95', mid:'#8aa86a', near:'#b5c46e', trail:'dirt', wall:[0.9,0.35], steam:true, grass:true, contour:{ dirt:1, gravel:3 } } },
   { id:'guanyin', range:'north', name:'觀音山', area:'新北', lon:121.42, lat:25.135, startAlt:120, alt:616, dist:1563, diff:2,
     feat:'淡水河口夕陽、長長石階', end:'硬漢嶺觀景台',
-    theme:{ sky:['#f3b98e','#fbe3c0'], far:'#9e9db8', mid:'#71a06a', near:'#8cbc6a', trail:'stairs', wall:[1,0.75], sunset:true } },
+    theme:{ sky:['#f3b98e','#fbe3c0'], far:'#9e9db8', mid:'#71a06a', near:'#8cbc6a', trail:'stairs', wall:[1,0.75], sunset:true, contour:{ dirt:3, gravel:1 } } },
   { id:'matcha', range:'xueshan', name:'抹茶山', area:'宜蘭', lon:121.80, lat:24.84, startAlt:120, alt:720, dist:6000, diff:3,
     feat:'抹茶色草坡、雲霧繚繞、木棧道', end:'山頂草坡觀景處',
-    theme:{ sky:['#bfe0e6','#eef2df'], far:'#9fbfae', mid:'#7fb874', near:'#a8d46e', trail:'wood', wall:[0.9,0.3], fog:true, grass:true } },
+    theme:{ sky:['#bfe0e6','#eef2df'], far:'#9fbfae', mid:'#7fb874', near:'#a8d46e', trail:'wood', wall:[0.9,0.3], fog:true, grass:true, contour:{ dirt:3, gravel:1 } } },
   { id:'alishan', range:'alishan', name:'阿里山', area:'嘉義', lon:120.80, lat:23.51, startAlt:2150, alt:2489, dist:4000, diff:2,
     feat:'千年神木、小火車、日出雲海、櫻花', end:'祝山觀日平台',
     theme:{ sky:['#b4d8ee','#fde8d4'], far:'#8aa7a5', mid:'#4f8a62', near:'#6fae68', trail:'wood', wall:[1,1], bigtree:true, sakura:true } },
   { id:'taiping', range:'xueshan', name:'太平山', area:'宜蘭', lon:121.53, lat:24.50, startAlt:1890, alt:2000, dist:2200, diff:2,
     feat:'觀雲棧道、見晴懷古步道的舊運材鐵軌、檜木林和雲霧', end:'見晴懷古步道終點',
-    theme:{ sky:['#b5d4e0','#eef0e0'], far:'#8faaa3', mid:'#4b7f5d', near:'#6aa665', trail:'wood', wall:[1,1], fog:true, bigtree:true } },
+    theme:{ sky:['#b5d4e0','#eef0e0'], far:'#8faaa3', mid:'#4b7f5d', near:'#6aa665', trail:'wood', wall:[1,1], fog:true, bigtree:true, contour:{ dirt:3, gravel:1 } } },
   // 合歡群峰：group 是山群代號（地圖上合成一根旗子，見 SX.GROUPS）；baiyue:true 是百岳，海拔和排名從百岳帳拿（見 SX.BAIYUE）
   // 同一山群沒寫 theme 的山，步道外觀用山群主峰的（在下面 SX.MOUNTAINS.forEach 補上，不另外抄一份）
   { id:'hehuan', name:'合歡主峰', group:'hehuan', baiyue:true, area:'南投', lon:121.27, lat:24.14, startAlt:3150, dist:1795, diff:3,
@@ -109,7 +110,7 @@ SX.LINES = {
   seg:['到了！這一小段走得很棒','打個勾，下一站也慢慢走','原來走到這裡只要一下下','停一下看看，風景剛剛好','小小的一步，也是往山頂的一步'],   // 抵達「這次的小目標」時說的話
 };
 
-// 新手教學（地圖右上、登山畫面下方的「?」）：一頁一個主題，每條一兩行；icon 是美術圖名字
+// 新手教學（地圖「選單」最上面的「?」、設定頁「看新手教學」）：一頁一個主題，每條一兩行；icon 是美術圖名字
 // intro:true 的那幾條也是第一次出發的玩法小卡、設定頁「操作小抄」的內容（只寫在這裡）
 SX.TUTORIAL = [
   { title:'出發', items:[

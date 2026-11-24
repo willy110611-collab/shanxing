@@ -849,6 +849,7 @@ SX.worldmap = {
   onSelect(fn){ S.cb = fn; },
   onBackground(fn){ S.bgCb = fn; },       // 點到空白處（game.js 用來收起資訊卡）
   focus(id){ S.sel = id; S.rev++; S.input = performance.now(); focus(id); },
+  locate(id){ S.input = performance.now(); focus(id); },   // 「我的位置」：鏡頭滑過去拉近，不選山（木牌不放大、不開卡片）
   reset(){ S.sel = null; S.rev++; S.input = performance.now(); reset(); },
   clearSelection(){ S.sel = null; S.rev++; S.input = performance.now(); },   // 路標縮回原大小的動畫要用滿格速度畫
   start(){

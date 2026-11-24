@@ -59,7 +59,11 @@
     if (p.startsWith('/friends/') && opt.method === 'DELETE') { fakeGone.push(p.slice(9)); return { ok: true }; }
     if (p === '/friends') return { friend: { name: '新朋友' } };
     if (p === '/invites') return { invites: [] };
-    if (p.startsWith('/team')) return { team: null, invites: [], max: 6, now: Date.now() };   // 假伺服器：沒有隊伍（隊伍要用本機的真伺服器測）
+    // 假伺服器：沒有隊伍（隊伍要用本機的真伺服器測）。網址再加 &faketeam=1：我是隊長、帶著阿山和雲雀（還沒選山），另外小溪邀我跟隨，看好友視窗和好友分頁的隊伍、邀請長什麼樣子
+    const fakeTeam = /[?&]faketeam=1\b/.test(location.search);
+    if (fakeTeam && (p.startsWith('/team') || p.startsWith('/invites/'))) return { max: 6, now: Date.now(), invites: [{ id: 'i1', host: 'f2', host_name: '小溪' }],
+      team: { id: 'tdev', leader: acct.id, trip: 0, trips: [], pick: { ok: SX.MOUNTAINS.map(m => m.id), lack: {} }, members: [{ id: acct.id, name: acct.name }, { id: 'f1', name: '阿山' }, { id: 'f3', name: '雲雀' }] } };
+    if (p.startsWith('/team')) return { team: null, invites: [], max: 6, now: Date.now() };
     if (p.startsWith('/affinity')) return { ok: true };
     if (p === '/me') return opt.body ? { week: 3400 + fakeN * 50, name: acct.name } : acct;
     const b = opt.body ? JSON.parse(opt.body) : {};
@@ -265,14 +269,14 @@
       const [f] = await Promise.all([api('/friends'), teamFetch(true)]);
       friends = f.friends || []; friendMax = f.max || 0; friendsAt = Date.now(); affRule = f.aff || affRule;
       affSync();
-      if (tab === 'friends') renderFriends();
+      renderFriends();
       updateBadge();
     } catch(e){ if (tab !== 'plaza') toast(e.message, 3000); }
-    if (!netReady) { netReady = true; if (tab === 'friends') renderFriends(); }
+    if (!netReady) { netReady = true; renderFriends(); }
   }
   function updateBadge(){
     const n = invites.length;   // 隊伍資料回來的 invites 都是別人邀我、還沒回覆的
-    $$('[data-go="lobby"]').forEach(b => b.dataset.badge = n ? String(n) : '');
+    $$('[data-go="lobby"],#frBtn').forEach(b => b.dataset.badge = n ? String(n) : '');   // 大廳（地圖選單裡）和登山畫面的「好友」
   }
   function render(){
     $$('#scrLobby .tab').forEach(b => { b.classList.toggle('on', b.dataset.lt === tab); b.onclick = () => { if (A().pop) A().pop(); tab = b.dataset.lt; render(); if (tab === 'friends') refresh(); }; });
@@ -355,35 +359,67 @@
       } catch(e){ toast(e.message, 3000); $('#rmOk').disabled = false; }
     };
   }
-  function renderFriends(){
-    const body = $('#lobbyBody'); if (!body) return;
-    if (!netReady) { body.innerHTML = `<div class="setRow">${MO.skeleton(1, 40)}</div><div class="setRow">${MO.skeleton(3, 34)}</div>`; return; }
+  // 好友名單畫成網頁：山友大廳的「好友」分頁、登山畫面的「好友」視窗都用這一份（不要另外再寫一套）
+  // full＝大廳好友分頁（多了從山的卡片來的提醒、好友碼、本週誰走最多、刪除好友）；登山畫面的好友視窗只放我的隊伍、收到的邀請、好友清單，
+  // 邀請下面多一句「加入後等隊長選山」
+  function friendsHtml(full){
+    if (!netReady) return `<div class="setRow">${MO.skeleton(1, 40)}</div><div class="setRow">${MO.skeleton(3, 34)}</div>`;
     const canInv = !team || team.leader === acct.id, mateOf = id => team && team.members.some(x => x.id === id);
-    body.innerHTML = `${invMt && canInv ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁按「邀請跟隨」，對方接受就加入你的隊伍；人到齊了，在「我的隊伍」選這座山，全隊一起出發。</p></div>` : ''}
+    return `${full && invMt && canInv ? `<div class="setRow"><h4>邀山友一起爬${esc(mName(invMt))}</h4><p>在下面的好友旁按「邀請跟隨」，對方接受就加入你的隊伍；人到齊了，在「我的隊伍」選這座山，全隊一起出發。</p></div>` : ''}
       ${invites.length ? `<div class="setRow"><h4>收到的邀請</h4>${invites.map(v => `<div class="frRow"><span><b>${esc(v.host_name)}</b> 邀你跟隨</span>
-        <span><button class="cbtn go sm" data-acc="${v.id}">加入</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}</div>` : ''}
+        <span><button class="cbtn go sm" data-acc="${v.id}">加入</button><button class="cbtn sm" data-dec="${v.id}">下次</button></span></div>`).join('')}${full ? '' : '<p class="tiny">加入後，等隊長選好山，全隊一起出發。</p>'}</div>` : ''}
       ${teamHtml()}
-      <div class="setRow"><h4>我的好友碼 <span class="codeTag">${esc(acct.code)}</span></h4>
+      ${full ? `<div class="setRow"><h4>我的好友碼 <span class="codeTag">${esc(acct.code)}</span></h4>
         <p>把好友碼給朋友，對方輸入後就成為好友。</p>
-        <form class="pw" id="addF"><input id="fcIn" maxlength="8" placeholder="輸入朋友的好友碼" autocapitalize="characters"><button class="cbtn sm">加好友</button></form></div>
-      ${friends.length ? `<div class="setRow"><h4>本週誰走最多</h4>${[{ id: acct.id, name: acct.name + '（我）', week: myWeek }, ...friends].sort((a, b) => (b.week || 0) - (a.week || 0)).slice(0, 10)
+        <form class="pw" data-addf><input data-fc maxlength="8" placeholder="輸入朋友的好友碼" autocapitalize="characters"><button class="cbtn sm">加好友</button></form></div>` : ''}
+      ${full && friends.length ? `<div class="setRow"><h4>本週誰走最多</h4>${[{ id: acct.id, name: acct.name + '（我）', week: myWeek }, ...friends].sort((a, b) => (b.week || 0) - (a.week || 0)).slice(0, 10)
         .map((p, i) => `<div class="rankRow${p.id === acct.id ? ' me' : ''}"><i>${i + 1}</i><b>${esc(p.name)}</b><span>${((p.week || 0) / 1000).toFixed(1)} km</span></div>`).join('')}
         <p class="tiny">每週一凌晨重新計算。</p></div>` : ''}
       <div class="setRow"><h4>好友（${friends.length}${friendMax ? ` / ${friendMax}` : ''}）</h4>
         ${friends.length ? [...friends].sort((a, b) => agoOf(a) - agoOf(b)).map(f => { const on = agoOf(f) < ONLINE_AGO; return `<div class="frRow"><span><i class="dot${on ? ' on' : ''}"></i><b>${esc(f.name)}</b>${affTag(f)}
-          <small>${on && f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : agoText(agoOf(f))}<button class="frDel" data-del="${f.id}">刪除</button></small></span>
+          <small>${on && f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : agoText(agoOf(f))}${full ? `<button class="frDel" data-del="${f.id}">刪除</button>` : ''}</small></span>
           <span>${mateOf(f.id) ? '<i class="tmTag">隊友</i>' : canInv ? `<button class="cbtn sm" data-inv="${f.id}">邀請跟隨</button>` : ''}</span></div>`; }).join('')
-        : '<p>還沒有好友，先把好友碼傳給朋友吧。</p>'}</div>`;
-    $('#addF').onsubmit = async e => { e.preventDefault(); const v = $('#fcIn').value.trim(); if (!v) return;
-      try { const d = await api('/friends', { json: { code: v } }); toast(`和 ${d.friend.name} 成為好友了！`); if (A().sparkle) A().sparkle(); refresh(); } catch(err){ toast(err.message, 3000); } };
-    $$('[data-inv]').forEach(b => b.onclick = () => teamInvite(b.dataset.inv));
-    $$('[data-del]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.del); if (f) removeCard(f); });
-    $$('[data-aff]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.aff); if (f) affCard(f); });
-    $$('[data-acc]').forEach(b => b.onclick = () => answer(b.dataset.acc, true));
-    $$('[data-dec]').forEach(b => b.onclick = () => answer(b.dataset.dec, false));
-    if ($('#tmPick')) $('#tmPick').onclick = () => { if (A().pop) A().pop(); teamPicker(); };
-    if ($('#tmEnd')) $('#tmEnd').onclick = () => { if (A().pop) A().pop(); teamQuit(team.leader === acct.id); };
+        : `<p>${full ? '還沒有好友，先把好友碼傳給朋友吧。' : '還沒有好友。到山友大廳的「好友」，把好友碼傳給朋友吧。'}</p>`}</div>`;
   }
+  // 好友名單上的按鈕（只找 root 裡面的，大廳和登山畫面的視窗同時在網頁裡也不會綁錯）
+  function friendsBind(root){
+    const q = s => [...root.querySelectorAll(s)], f1 = root.querySelector('[data-addf]');
+    if (f1) f1.onsubmit = async e => { e.preventDefault(); const v = f1.querySelector('[data-fc]').value.trim(); if (!v) return;
+      try { const d = await api('/friends', { json: { code: v } }); toast(`和 ${d.friend.name} 成為好友了！`); if (A().sparkle) A().sparkle(); refresh(); } catch(err){ toast(err.message, 3000); } };
+    q('[data-inv]').forEach(b => b.onclick = () => teamInvite(b.dataset.inv));
+    q('[data-del]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.del); if (f) removeCard(f); });
+    q('[data-aff]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.aff); if (f) affCard(f); });
+    q('[data-acc]').forEach(b => b.onclick = () => answer(b.dataset.acc, true));
+    q('[data-dec]').forEach(b => b.onclick = () => answer(b.dataset.dec, false));
+    q('[data-tm="pick"]').forEach(b => b.onclick = () => { if (A().pop) A().pop(); teamPicker(); });
+    q('[data-tm="end"]').forEach(b => b.onclick = () => { if (A().pop) A().pop(); teamQuit(team.leader === acct.id); });
+  }
+  // 好友名單有變（拿到新的好友、隊伍、邀請，或按了加入、刪除）：大廳在好友分頁就重畫，登山畫面的好友視窗開著也重畫
+  function renderFriends(){
+    const body = $('#lobbyBody');
+    if (body && acct && tab === 'friends') { body.innerHTML = friendsHtml(true); friendsBind(body); }
+    frRender();
+  }
+
+  // ───────── 登山畫面的「好友」視窗（不離開登山畫面，從下面滑上來；登山客照樣走）─────────
+  // 內容跟大廳好友分頁同一份（friendsHtml）；沒有暱稱時放一顆「去取暱稱」到大廳取
+  let frOn = false;
+  function frRender(){
+    const b = $('#frBody'); if (!frOn || !b) return;
+    if (!acct) { b.innerHTML = '<div class="setRow"><h4>還沒有暱稱</h4><p>取個暱稱，就能加好友、一起爬山。</p><div class="mBtns"><button class="cbtn go sm" data-go="lobby">去取暱稱</button></div></div>'; return; }
+    b.innerHTML = friendsHtml(false); friendsBind(b);
+  }
+  function frOpen(){
+    const s = $('#frSheet'); if (!s || frOn) return;
+    frOn = true; s.classList.add('on'); $('#frShade').classList.add('on'); $('#frBody').scrollTop = 0;
+    frRender(); if (acct) refresh();
+  }
+  function frClose(){ const s = $('#frSheet'); if (!s || !frOn) return; frOn = false; s.classList.remove('on'); $('#frShade').classList.remove('on'); }
+  { const fb = $('#frBtn'); if (fb) fb.onclick = () => { if (A().unlock) A().unlock(); if (A().pop) A().pop(); frOn ? frClose() : frOpen(); }; }
+  { const x = $('#frX'); if (x) x.onclick = () => { if (A().pop) A().pop(); frClose(); }; }
+  { const sh = $('#frShade'); if (sh) sh.addEventListener('pointerdown', frClose); }
+  document.addEventListener('click', e => { if (e.target.closest('[data-go],[data-back]')) frClose(); });   // 換到別的畫面（含「去取暱稱」）就收起來
+
 
   // ───────── 好友跟隨（隊伍）─────────
   // 規格：docs/好友跟隨與好感度.md 第二節。人數上限、能選哪幾座山（交集）、隊長交接都由伺服器算；這裡只畫、只送玩家按的動作
@@ -429,7 +465,7 @@
         started: x.started - skew, members: x.members, current: x.trip === T.trip, summited: x.mine && x.mine.summited ? x.mine.summited - skew : 0 })) : [], lead);
     }
     seedMates(); updateBadge();
-    if (tab === 'friends' && $('#scrLobby.on')) renderFriends();
+    if ((tab === 'friends' && $('#scrLobby.on')) || frOn) renderFriends();
   }
   // 離線、還沒連進隊伍房間的隊友：先照伺服器的這一趟進度（最後回報的距離、預估登頂時間）放在登山畫面上，房間連上後換成即時的
   function seedMates(){
@@ -462,7 +498,7 @@
     const L = [...T.members].sort((a, b) => (b.id === T.leader) - (a.id === T.leader));
     return `<div class="setRow tmCard"><h4>我的隊伍（${T.members.length}／${teamMax}）</h4><p>${esc(head)}</p>
       ${L.map(x => `<div class="frRow"><span><b>${x.id === T.leader ? '👑 ' : ''}${esc(x.name)}</b>${x.id === acct.id ? '（我）' : ''}<small>${esc(memberLine(x))}</small></span></div>`).join('')}
-      <div class="mBtns tmBtns">${lead && T.pick ? `<button class="cbtn go sm" id="tmPick">${tr ? '選下一座山' : '選山出發'}</button>` : ''}<button class="cbtn sm${lead ? ' red' : ''}" id="tmEnd">${lead ? '解散隊伍' : '離開隊伍'}</button></div></div>`;
+      <div class="mBtns tmBtns">${lead && T.pick ? `<button class="cbtn go sm" data-tm="pick">${tr ? '選下一座山' : '選山出發'}</button>` : ''}<button class="cbtn sm${lead ? ' red' : ''}" data-tm="end">${lead ? '解散隊伍' : '離開隊伍'}</button></div></div>`;
   }
   // 隊長選山：每一座列出來，大家都能爬的才能按；不能選的寫原因（誰還沒解鎖、雪季要幾人以上組隊）
   function teamPicker(){
@@ -598,9 +634,11 @@
       : mate.off ? `${lead.name} 離線中・${p >= M.dist ? '已到山頂' : d == null ? km(p) : Math.abs(d) < MATE_NEAR ? '大約就在你附近' : `大約在你${d > 0 ? '前面' : '後面'} ${(Math.abs(d) / 1000).toFixed(1)} km`}${mate.rest ? '・休息中' : ''}`
       : `${many ? lead.name + ' ' : ''}${km(mate.dist)}・${d > 5 ? `領先你 ${Math.round(d)} m` : d < -5 ? `落後你 ${Math.round(-d)} m` : '就在你旁邊'}${mate.rest ? '・休息中' : ''}`;
     // 離線的隊友：畫半透明、名牌加「・離線」；v＝估計他一秒走多少（休息中、到山頂就是 0），登山畫面照這個步調走
+    // slot：出發站位（trail.js FORM），照入隊先後（伺服器 team.members 依加入時間排）算，自己不佔位：第 1 位左前、2 右前、3 左後、4 右後、5 正後方
+    const order = team ? team.members.map(y => y.id).filter(id => id !== acct.id) : [];
     teamDraw = me ? on2.map(x => { const s = mates[x.id];
       const af = affOf(x.id);
-      return { id: x.id, dist: pos[x.id], name: x.name, rest: !!s.rest, off: !!s.off, v: s.off ? SX.mateGuess(M, s, T + 1000) - pos[x.id] : undefined, pet: af && SX.affHas(af.lv, 'pet') ? af.pet : null }; }) : [];
+      return { id: x.id, dist: pos[x.id], name: x.name, rest: !!s.rest, off: !!s.off, v: s.off ? SX.mateGuess(M, s, T + 1000) - pos[x.id] : undefined, pet: af && SX.affHas(af.lv, 'pet') ? af.pet : null, slot: order.indexOf(x.id) + 1 }; }) : [];
     drawMates(); chatUi(true);
   }
   // 登山畫面上畫的人：隊友（teamDraw，partyBox 算）＋同山遇見的山友（strangerDraw 算），一起交給 trail.js（每秒一次）
