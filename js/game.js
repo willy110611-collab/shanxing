@@ -27,7 +27,7 @@
     gifts:{},   // 新手禮物送過了沒：{ 代號: 日期 }（代號見 FIRST_GIFTS）
     likes:{},   // 看大圖時按了「我喜歡」的照片：{ 照片代號: 時間 }（自己的記號：不會告訴拍照的人、別人看不到；有帳號時只跟著自己的雲端存檔備份）
     stats:{ walked:0, withFriends:0, notes:0, rests:0, cairns:0, fog:0, night:0, rain:0, nofast:0, away:0, deer:0, magpie:{}, fogTop:0, snowTop:0, bestStreak:0, walkSec:0 },   // walkSec：真的在走的秒數（個人紀錄用）
-    set:{ sound:true, vol:0.5, gps:false, dev:false, devOn:false, fast:false, clean:false, hudFull:false } });   // hudFull：登山狀態面板展開成完整的（平常精簡一排）
+    set:{ sound:true, vol:0.5, gps:false, eco:false, dev:false, devOn:false, fast:false, clean:false, hudFull:false } });   // hudFull：登山狀態面板展開成完整的（平常精簡一排）
   let SV = blank();
   // 新手禮物：第一次登頂（summit）、第一次領每日獎勵（daily）、第一次連續上山 3 天簽到（streak3），各保證一件還沒有的寶物，值是稀有度
   const FIRST_GIFTS = { summit:'稀有', daily:'普通', streak3:'稀有' };
@@ -1634,12 +1634,12 @@
 
   // ───────── 主迴圈 ─────────
   // 每秒最多畫幾格：走路 60；休息、睡覺、暫停、開著視窗、到山頂 30（畫面幾乎不動，省電、手機不會熱）。120 Hz 的手機也最多 60 格
-  const FPS = { walk:60, idle:30 };
+  const FPS = { walk:60, idle:30 }, ECO_K = 0.5;   // ECO_K：省電模式（設定）每秒畫的次數乘多少，畫質、美術圖不變（2026-11-24 加）
   let lastT = performance.now(), hudT = 0, wxT = 0, ftNow = 0, fpsNow = FPS.walk;
   function loop(now){
     requestAnimationFrame(loop);
     if (SX.maintOn) return;   // 山屋整修中（js/maint.js）：整個遊戲停住；整修完重新打開時照離開的時間補走（跟關掉遊戲一樣）
-    fpsNow = !st || paused || arrived || st.rest || st.sleep ? FPS.idle : FPS.walk;
+    fpsNow = (!st || paused || arrived || st.rest || st.sleep ? FPS.idle : FPS.walk) * (SV.set.eco ? ECO_K : 1);
     if (now - lastT < 1000 / fpsNow - 3) return;   // 還沒到下一格：這次跳過（差 3 毫秒內就畫，螢幕每格的時間本來就有一點誤差）
     ftNow = now - lastT;
     const dt = Math.min(0.05, Math.max(0, ftNow / 1000)); lastT = now;
@@ -2020,6 +2020,8 @@
     $('#setBody').innerHTML = `
       <div class="setRow"><h4>音效<button class="tgl ${s.sound ? 'on' : ''}" id="sSound"></button></h4>
         <input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.vol}"><p>腳步聲、鳥叫和雨聲。</p></div>
+      <div class="setRow"><h4>省電模式<button class="tgl ${s.eco ? 'on' : ''}" id="sEco"></button></h4>
+        <p>畫面每秒畫的次數減半，手機比較不會熱、比較省電；畫面一樣漂亮，走路動作會稍微沒那麼順。</p></div>
       <div class="setRow"><h4>人在山上，定位加速<button class="tgl ${s.gps ? 'on' : ''}" id="sGps"></button></h4>
         <p>開啟後用手機定位：人在這座山附近（約 3 公里內）時，真的走一公尺，步道上就多走三公尺。不在山上沒有作用；只在畫面開著時計算，比較耗電。</p></div>
       <div class="setRow"><h4>通知<button class="tgl ${SX.social && SX.social.pushOn ? 'on' : ''}" id="sPush"></button></h4>
@@ -2048,6 +2050,7 @@
     $('#sSound').onclick = e => { s.sound = !s.sound; A.setOn(s.sound); save(); MO.toggle(e.currentTarget, s.sound); if (s.sound) { A.unlock(); A.pop(); } };
     $('#sVol').oninput = e => { s.vol = +e.target.value; A.setVol(s.vol); save(); };
     $('#sVol').onchange = () => { A.unlock(); A.pop(); };
+    $('#sEco').onclick = e => { s.eco = !s.eco; save(); MO.toggle(e.currentTarget, s.eco); };
     $('#sGps').onclick = e => { s.gps = !s.gps; save(); MO.toggle(e.currentTarget, s.gps); setGps(s.gps); };
     $('#sPush').onclick = async () => {
       if (!SX.social) return; const want = !SX.social.pushOn; $('#sPush').disabled = true;
