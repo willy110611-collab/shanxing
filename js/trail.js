@@ -2390,6 +2390,7 @@ const STEP_SH = { len:0.32, col:'rgba(30,20,14,0.42)' };
 const CHEEK = { j:40, out:0.07 };
 const STAIR_BANK = 0.2, STAIR_LIP = 0.55;
 const STAIR_TUCK = 0.07;   // 階梯（立面、踏面底下的土、土切面）兩端往外多伸幾公尺，塞進土坎底下
+const NQ_V = 11, NQ = { a:new Float32Array(NQ_V * 8), n:0 };   // 這段木頭階梯每一階：近端 x、y、半寬、右端往下、比例、兩端接觸陰影伸到哪，遠端 x、y、半寬、右端往下、接觸陰影伸到哪（像素）
 const STEP_END = { col:'rgb(40,28,18)', a:0.38 };   // 木頭階梯兩端貼著土坎的深褐接觸陰影
 // 彎道上的階梯（2026-11-24 回報每一階都是水平的一條，沒有跟著路轉）：每一階跟路的方向垂直，右端離鏡頭近一點／遠一點 → 畫面上低／高幾像素（左端相反）
 // h 這條邊的高度、s 這裡每公尺幾像素、w 路半寬（公尺）、dc 路對鏡頭每往前一公尺往右偏幾公尺；回傳右端往下幾像素
@@ -3517,21 +3518,31 @@ function drawWorld(b, t, jHi, jLo, far){
         const sd = farA(j, 70, 10);   // 遠處只剩幾像素的階梯：每塊深淺、陰影這些細節慢慢淡掉、最後不畫（省效能），階梯本身照畫
         const seA = stoneSE() ? fade * farA(j, SE_J, 8) * (1 - snowAmt) : 0;   // 石階嵌進土裡的邊（近處才畫）
         const dc = (pC[j + 1] - pC[j]) / SEG, stPrev = sAt(i - 1) === 1, stNext = sAt(i + 1) === 1, cka = fade * farA(j, CHEEK.j, 8), stk = lerp(0.35, 1, clamp((stairB[clamp(i, 0, N + 1)] - 0.4) / 0.6, 0, 1));   // stk：一段階梯的頭兩段壓暗、影子慢慢加深（2026-11-24 回報土路接階梯的地方路面一下子換顏色，一條硬的接縫）；dc：路對鏡頭的方向（彎道上每一階跟著路轉）；cka：每階兩側土切面
+        const wEnd = cka > 0.01 && seA <= 0.01 && !isWood;   // 木棧道是架在地上的，兩邊沒有土坎可以塞，不墊土   // 木頭（土路、木棧道）階梯：兩端墊土、接觸陰影、前緣橫木切面整段每種一筆畫完（每階各畫一筆太多筆）
+        if (wEnd) {
+          // 階梯兩端的土（立面、踏面之前先墊）：從踏面邊往裡 STAIR_TUCK、往外兩倍，從每一階踏面一直墊到立面頂（下一階踏面的前緣），
+          // 立面和踏面再蓋上去：階梯兩端跟土坎之間不管怎麼斜都不會露出後面的天空或一個亮的小三角形
+          ctx.globalAlpha = cka; ctx.fillStyle = LUT[MOSS_SHADE * FOGN + fi]; ctx.beginPath();
+          for (let q = 0; q < n; q++) {
+            const fa = q / n, fb = (q + 1) / n, h0 = pW[j] + rise * fa * tm, h1 = q === n - 1 ? pW[j] + rise : pW[j] + rise * fb * tm;
+            const sa = stepS(j, fa), xa = stepX(j, fa, sa), sb = stepS(j, fb), xb = stepX(j, fb, sb), ya = (q === 0 ? yb : HOR - (h0 - camY) * sa), yr = HOR - (h1 - camY) * sb;
+            const Ma = STAIR_TUCK * sa, Mb = STAIR_TUCK * sb, wa = rwF(i, fa) * sa, wb = rwF(i, fb) * sb, W4 = wb * 1.04 + Mb;
+            const ka = q === 0 && !stPrev ? 0 : stairTilt(h0, sa, rwF(i, fa), dc), kr = q === n - 1 && !stNext ? 0 : stairTilt(h1, sb, rwF(i, fb), dc);
+            for (let side = -1; side <= 1; side += 2) {
+              ctx.moveTo(xa + side * (wa - Ma), ya + side * ka + 0.7); ctx.lineTo(xa + side * (wa + Ma * 2), ya + side * ka + 0.7); ctx.lineTo(xb + side * (W4 + Mb), yr + side * kr); ctx.lineTo(xb + side * (wb - Mb), yr + side * kr); ctx.closePath();
+            }
+          }
+          ctx.fill(); ctx.globalAlpha = fade;
+        }
         for (let q = n - 1; q >= 0; q--) {
           const fa = q / n, fb = (q + 1) / n, h0 = pW[j] + rise * fa * tm, h1 = q === n - 1 ? pW[j] + rise : pW[j] + rise * fb * tm, mid = q < n - 1 ? tm : 1;   // mid：中間那幾階的細節（墨線、壓暗）跟著高度一起淡出
           const sa = stepS(j, fa), xa = stepX(j, fa, sa), sb = stepS(j, fb), xb = stepX(j, fb, sb);
           const ya = (q === 0 ? yb : HOR - (h0 - camY) * sa), yt = HOR - (h0 - camY) * sb, yr = HOR - (h1 - camY) * sb;
-          const Ma = STAIR_TUCK * sa, Mb = STAIR_TUCK * sb;   // 階梯兩端往外多伸 STAIR_TUCK 公尺（乘這裡的比例，遠近一樣是幾公分），塞進土坎底下：兩端跟土坎之間不會露出一個小三角形的縫
+          const tk = isWood ? 0 : STAIR_TUCK, Ma = tk * sa, Mb = tk * sb;   // 階梯兩端往外多伸 STAIR_TUCK 公尺（乘這裡的比例，遠近一樣是幾公分），塞進土坎底下：兩端跟土坎之間不會露出一個小三角形的縫
           const wa = rwF(i, fa) * sa, wb = rwF(i, fb) * sb, W4 = wb * 1.04 + Mb;
           // 每條邊右端往下（左端往上）幾像素：跟這段平路接的那條邊不斜（平路的邊是水平的，斜了會露縫）
           const ka = q === 0 && !stPrev ? 0 : stairTilt(h0, sa, rwF(i, fa), dc), kt = stairTilt(h0, sb, rwF(i, fb), dc), kr = q === n - 1 && !stNext ? 0 : stairTilt(h1, sb, rwF(i, fb), dc);
           if (seA > 0.01) { const o = q * SEQ_N; SEQ[o] = xa; SEQ[o + 1] = ya; SEQ[o + 2] = wa; SEQ[o + 3] = sa; SEQ[o + 4] = xb; SEQ[o + 5] = yt; SEQ[o + 6] = yr; SEQ[o + 7] = wb; SEQ[o + 8] = sb; SEQ[o + 9] = ka; SEQ[o + 10] = kt; SEQ[o + 11] = kr; }
-          // 階梯兩端的土（立面、踏面之前先墊）：從踏面邊往裡 STAIR_TUCK、往外兩倍，從這一階踏面一直墊到立面頂（下一階踏面的前緣），
-          // 立面和踏面再蓋上去：階梯兩端跟土坎之間不管怎麼斜都不會露出後面的天空或一個亮的小三角形
-          if (cka > 0.01 && seA <= 0.01) for (let side = -1; side <= 1; side += 2) {
-            ctx.globalAlpha = cka; ctx.fillStyle = LUT[MOSS_SHADE * FOGN + fi];   // 深褐綠的土（石階邊那種土色的背光一階）
-            quad(xa + side * (wa - Ma), ya + side * ka + 0.7, xa + side * (wa + Ma * 2), ya + side * ka + 0.7, xb + side * (W4 + Mb), yr + side * kr, xb + side * (wb - Mb), yr + side * kr);
-          }
           ctx.globalAlpha = fade;
           // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊
           ctx.fillStyle = LUT[16 * FOGN + fi]; quadE(xb, yr, W4, kr, xb, yt + 0.7, W4, kt);
@@ -3551,10 +3562,7 @@ function drawWorld(b, t, jHi, jLo, far){
           if (cka > 0.01 && yt - yr > 1) for (let side = -1; side <= 1; side += 2) {
             const xe = xb + side * W4, yB = yt + side * kt + 0.7, yC = yr + side * kr, xo = xe + side * CHEEK.out * sb;
             // 土切面：從伸出去的踏面近端角到立面端頭（伸進土坎的那一截）整塊蓋滿，用背光的深褐土色（以前用受光那邊的淺土色，跟土坎之間像一個亮的小三角形）
-            ctx.globalAlpha = cka; ctx.fillStyle = LUT[(seA > 0.01 ? 21 + (side < 0 ? 2 : 0) : MOSS_SHADE) * FOGN + fi]; quad(xa + side * (wa + Ma), ya + side * ka, xe, yB, xe, yC, xa + side * (wa + Ma), ya + side * ka - 0.7);
-            if (seA > 0.01) continue;
-            // 階梯兩端嵌進土裡：沿著踏面邊緣往外一條深褐的接觸陰影（土坎咬進階梯）
-            ctx.fillStyle = STEP_END.col; ctx.globalAlpha = cka * STEP_END.a; quad(xa + side * wa, ya + side * ka, xa + side * (wa + Ma * 1.6), ya + side * ka, xb + side * (wb + Mb * 1.6), yt + side * kt, xb + side * wb, yt + side * kt);
+            if (seA > 0.01) { ctx.globalAlpha = cka; ctx.fillStyle = LUT[(21 + (side < 0 ? 2 : 0)) * FOGN + fi]; quad(xa + side * wa, ya + side * ka, xe, yB, xe, yC, xe, yC); continue; }   // 石階：三角形的土切面（木頭階梯的已經在前面墊的土裡）
             ctx.globalAlpha = cka;
             ctx.fillStyle = LUT[16 * FOGN + fi]; quad(xe, yC, xo, lerp(yC, yB, 0.3), xo - side * CHEEK.out * 0.3 * sb, yB, xe, yB);
             ctx.globalAlpha = cka * RISER_DK; ctx.fillStyle = '#2a1e22'; quad(xe, yC, xo, lerp(yC, yB, 0.3), xo - side * CHEEK.out * 0.3 * sb, yB, xe, yB);
@@ -3576,15 +3584,29 @@ function drawWorld(b, t, jHi, jLo, far){
           const a = farA(j, 52, 52);
           if (a > 0) {
             const nh = Math.max(1, sa * NOSE.h);
-            if (woodSE()) {   // 木頭階梯：前緣一條橫木的深褐切面（上緣一絲暖光）、底下一條接觸陰影
-              const wh = Math.max(1, sa * NOSE_W.h), sh2 = Math.max(1, sa * NOSE_W.sh), na = fade * a * (q ? tm : 1);
-              ctx.globalAlpha = na * NOSE_W.a; ctx.fillStyle = NOSE_W.col; quadE(xa, ya - wh, wa, ka, xa, ya, wa, ka);
-              ctx.globalAlpha = na; ctx.fillStyle = NOSE_W.lit; quadE(xa, ya - wh, wa, ka, xa, ya - wh * 0.7, wa, ka);
-              ctx.fillStyle = NOSE_W.shCol; quadE(xa, ya, wa, ka, xa, ya + sh2, wa, ka);
-            } else { ctx.globalAlpha = fade * a * NOSE.a * (q ? tm : 1); ctx.fillStyle = NOSE.col; quadE(xa, ya - nh, wa, ka, xa, ya, wa, ka); }   // 石階：踏面前緣受光（一條亮的邊，階梯才讀得出一階一階）
+            if (woodSE()) { if (q === 0 || tm > 0.5) { const o = NQ.n++ * NQ_V, A = NQ.a; A[o] = xa; A[o + 1] = ya; A[o + 2] = wa; A[o + 3] = ka; A[o + 4] = sa; A[o + 5] = wa + Ma * 1.6; A[o + 6] = xb; A[o + 7] = yt; A[o + 8] = wb; A[o + 9] = kt; A[o + 10] = wb + Mb * 1.6; } }   // 木頭階梯的前緣、兩端接觸陰影：記下來，整段一起畫（見迴圈後）
+            else { ctx.globalAlpha = fade * a * NOSE.a * (q ? tm : 1); ctx.fillStyle = NOSE.col; quadE(xa, ya - nh, wa, ka, xa, ya, wa, ka); }   // 石階：踏面前緣受光（一條亮的邊，階梯才讀得出一階一階）
             ctx.globalAlpha = fade * a * mid * (woodSE() ? NOSE_W.ink : 1); ctx.strokeStyle = INK; ctx.lineWidth = clamp(sb * 0.02, 0.5, 2.2);
             ctx.beginPath(); ctx.moveTo(xb - W4, yr - kr); ctx.lineTo(xb + W4, yr + kr); ctx.moveTo(xb - W4, yt - kt); ctx.lineTo(xb + W4, yt + kt); ctx.stroke(); ctx.globalAlpha = fade;
           }
+        }
+        if (NQ.n) {   // 木頭階梯：前緣一條橫木的深褐切面（上緣一絲暖光）、底下一條接觸陰影，兩端貼著土坎一條深褐的接觸陰影（土坎咬進階梯）；整段每種一筆
+          const A = NQ.a, na = fade * farA(j, 52, 52);
+          for (let pass = 0; pass < 4; pass++) {
+            ctx.beginPath();
+            for (let r = 0; r < NQ.n; r++) {
+              const o = r * NQ_V, xa = A[o], ya = A[o + 1], wa = A[o + 2], ka = A[o + 3], wh = Math.max(1, A[o + 4] * NOSE_W.h), sh2 = Math.max(1, A[o + 4] * NOSE_W.sh);
+              if (pass === 0) { ctx.moveTo(xa - wa, ya - wh - ka); ctx.lineTo(xa + wa, ya - wh + ka); ctx.lineTo(xa + wa, ya + ka); ctx.lineTo(xa - wa, ya - ka); ctx.closePath(); }
+              else if (pass === 1) { ctx.moveTo(xa - wa, ya - wh - ka); ctx.lineTo(xa + wa, ya - wh + ka); ctx.lineTo(xa + wa, ya - wh * 0.7 + ka); ctx.lineTo(xa - wa, ya - wh * 0.7 - ka); ctx.closePath(); }
+              else if (pass === 2) { ctx.moveTo(xa - wa, ya - ka); ctx.lineTo(xa + wa, ya + ka); ctx.lineTo(xa + wa, ya + sh2 + ka); ctx.lineTo(xa - wa, ya + sh2 - ka); ctx.closePath(); }
+              else for (let side = -1; side <= 1; side += 2) {   // 這一階踏面兩端（近端到遠端）往外一條
+                const xb = A[o + 6], yt = A[o + 7], wb = A[o + 8], kt = A[o + 9];
+                ctx.moveTo(xa + side * wa, ya + side * ka); ctx.lineTo(xa + side * A[o + 5], ya + side * ka); ctx.lineTo(xb + side * A[o + 10], yt + side * kt); ctx.lineTo(xb + side * wb, yt + side * kt); ctx.closePath();
+              }
+            }
+            ctx.globalAlpha = pass === 3 ? cka * STEP_END.a : pass === 0 ? na * NOSE_W.a : na; ctx.fillStyle = pass === 0 ? NOSE_W.col : pass === 1 ? NOSE_W.lit : pass === 2 ? NOSE_W.shCol : STEP_END.col; ctx.fill();
+          }
+          NQ.n = 0; ctx.globalAlpha = fade;
         }
         if (seA > 0.01) { SEG_G[0] = x1; SEG_G[1] = y1; SEG_G[2] = s1; SEG_G[3] = x2; SEG_G[4] = y2; SEG_G[5] = s2; SEG_G[6] = zA; stoneEdges(i, j, n, fi, seA, seA * farA(j, SE_ROCK_J, 4), SEG_G, ta * seA / fade, fq); }   // 每一階左右兩端嵌進土裡（土邊、接觸陰影、石頭側面），所有階一起畫
       } else {
@@ -3724,7 +3746,7 @@ function drawWorld(b, t, jHi, jLo, far){
       const n = stairN(j), shrink = lerp(1, SE_FAR, clamp(pZ[j] / (SE_PLANT_J * SEG), 0, 1));
       for (let q = 0; q < n; q++) for (let side = -1; side <= 1; side += 2) {
         const id = i * 8 + q, h = side < 0 ? 0 : 6;
-        if (Hh(id, 730 + h) > SE_PLANT_P || clrAt(i, side)) continue;
+        if (Hh(id, 730 + h) > (stoneSE() ? SE_PLANT_P : SE_PLANT_P * 0.6) || clrAt(i, side)) continue;   // 木頭階梯兩端少一點（省效能，也不會每階都一叢）
         const arr = pick(stairTab, Hh(id, 731 + h)), sp = arr[(Hh(id, 732 + h) * arr.length) | 0], f = (q + 0.55 + 0.4 * Hh(id, 733 + h)) / n;
         const m = (0.9 + 0.6 * Hh(id, 734 + h)) * shrink, rw = rwF(i, f), xo = rw + sp.w * m * (0.5 - (0.15 + 0.1 * Hh(id, 735 + h)));
         if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
