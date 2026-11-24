@@ -3430,7 +3430,9 @@ function drawWorld(b, t, jHi, jLo, far){
     // 整段地面都在畫面下緣以外：不畫地面，但路旁的樹、草叢照畫（高的樹根部在畫面外、樹冠還看得到），讓它們自己滑出畫面邊緣
     const y2 = pY[j + 1], below = y2 - 0.6 * pS[j + 1] > H + 80;   // 遠端往上 0.6 公尺（路邊的草叢、土坎）也在畫面下緣以外才算
     if (!heroDone && !benchO && j < jhG) { drawHero(s, t); heroDone = true; }
-    const i = b + j, y1 = pY[j], s1 = pS[j], s2 = pS[j + 1], x1 = pX[j], x2 = pX[j + 1], z0 = i * SEG, zj = pZ[j] / SEG, rw = rwAt(i), dW1 = rw - RW, dW2 = rwAt(i + 1) - RW;   // zj：這段離鏡頭幾段（連續的，給淡入淡出用）
+    const i = b + j, y1 = pY[j], s1 = pS[j], s2 = pS[j + 1], x1 = pX[j], x2 = pX[j + 1], z0 = i * SEG, zj = pZ[j] / SEG, rw = rwAt(i), iN = lod ? i - 1 : i, dW1 = rwAt(iN) - RW, dW2 = rwAt(i + 1) - RW;   // zj：這段離鏡頭幾段（連續的，給淡入淡出用）
+    // iN：近端那條邊是哪一段的地形。遠處兩段合成一段畫（lod）時，近端那條邊已經換成前一段的位置（lodSave），地形高度、路寬也要用前一段的，
+    // 不然兩邊山坡的帶子跟更近那段的遠端對不起來，地平線附近的坡上多一條亮的細縫（2026-11-24 掃描抓到，玉山西峰、三叉山、合歡西峰）
     // 最遠那 FAR_FADE 段（畫到哪裡為止的前面）：先變成霧的顏色、再慢慢變透明（平滑曲線）。以前只有透明度從 1 降到 0：
     // 遠處的地面帶子、土坎、路面各自半透明疊在一起，看起來是一塊一塊半透明的板子，而且每走一段就多冒出一塊
     const fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A);
@@ -3446,7 +3448,7 @@ function drawWorld(b, t, jHi, jLo, far){
       const mo1 = DS === TDN ? tdMorph(pZ[j]) : 0, mo2 = DS === TDN ? tdMorph(pZ[j + 1]) : 0;   // 快換成遠處切法的那幾段：多出來的帶子慢慢壓平（不會一段一段突然換形狀）
       for (let side = -1; side <= 1; side += 2) {
         const lvS = side < 0 ? lvL : lvR;
-        bandEnd(i, side, DS, nS, dW1, gw1, mo1, x1, yb, s1, tX1, tY1, tD1, tH1);   // 路寬每段不一樣：帶子從這段的路緣量起
+        bandEnd(iN, side, DS, nS, dW1, gw1, mo1, x1, yb, s1, tX1, tY1, tD1, tH1);   // 路寬每段不一樣：帶子從這段的路緣量起
         bandEnd(i + 1, side, DS, nS, dW2, gw2, mo2, x2, y2, s2, tX2, tY2, tD2, tH2);
         for (k = 0; k < nS - 1; k++) {           // 坡向：往外升高的那一面朝向哪裡（tSh 連續，地面明暗不分階；tLvS 只給草叢挑顏色）
           const g = tG[k] = (tH1[k + 1] - tH1[k]) / Math.max(0.3, tD1[k + 1] - tD1[k]);
