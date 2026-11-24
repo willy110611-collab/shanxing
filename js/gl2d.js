@@ -20,6 +20,11 @@ const SLOTS = 16;                // 一批最多同時用幾張貼圖（WebGL2 �
 const CAP = 1 << 16;             // 一批最多幾個頂點（滿了先送出去）
 const STRIDE = 24;               // 每個頂點：x y u v（4 個 float）＋ 顏色 RGBA（4 byte）＋ 第幾張貼圖（1 byte，255＝純色）
 const SOLID = 255;
+// 小張的圖（寬高都不超過 256：遠處植物的縮小版、接觸陰影、小光斑…）拼進共用的大圖（圖集），一批能畫的圖就多很多（一批只能同時用 16 張）。
+// 每張放在一格裡、四周 AT_G 像素照邊緣像素往外延伸（跟單獨一張「超出邊緣取最邊那一排」一樣），格子對齊 16 像素，顯示卡的縮小版不會混到隔壁格
+const AT_G = 8, AT_CLS = [32, 64, 128, 256], AT_PAGE = { 32:256, 64:512, 128:1024, 256:1024 };   // 每一級的格子放在多大的一頁（小格子用小頁，少佔記憶體）
+// 多久沒畫到的貼圖就從顯示卡卸下（要用時再傳上去）；每隔 TRIM_EVERY 毫秒檢查一次
+const TRIM_MS = 30000, TRIM_EVERY = 2000;
 
 const VS = `#version 300 es
 in vec2 aP; in vec2 aT; in vec4 aC; in float aS;
@@ -109,8 +114,8 @@ G.create = function(host){
 function Ctx(canvas, gl){
   this.canvas = canvas; this.gl = gl; this.gpu = true; this.lost = false;
   this.buf = new ArrayBuffer(CAP * STRIDE); this.f32 = new Float32Array(this.buf); this.u32 = new Uint32Array(this.buf); this.u8 = new Uint8Array(this.buf);
-  this.n = 0; this.slots = []; this.mode = 'source-over';
-  this.texs = new WeakMap(); this.grads = new Map(); this.texts = new Map(); this.list = new Set();
+  this.n = 0; this.slots = []; this.mode = 'source-over'; this.bound = []; this.now = 0; this.trimT = 0; this.bytes = 0;
+  this.texs = new WeakMap(); this.grads = new Map(); this.texts = new Map(); this.list = new Set(); this.pages = []; this.pageOf = new Map();
   this.m = [1, 0, 0, 1, 0, 0]; this.stack = []; this.sp = 0;
   this.globalAlpha = 1; this.globalCompositeOperation = 'source-over'; this.fillStyle = '#000'; this.strokeStyle = '#000';
   this.lineWidth = 1; this.lineCap = 'butt'; this.lineJoin = 'miter'; this.font = '10px sans-serif'; this.textAlign = 'start'; this.textBaseline = 'alphabetic';
@@ -121,7 +126,7 @@ function Ctx(canvas, gl){
   this.onLost = null; this.onRestored = null;
   const self = this;
   canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); self.lost = true; if (self.onLost) self.onLost(); });
-  canvas.addEventListener('webglcontextrestored', function(){ self.lost = false; self.texs = new WeakMap(); self.grads.clear(); self.texts.clear(); self.list.clear(); self.slots = []; self.n = 0; self.scr = null; if (self.init() && self.onRestored) self.onRestored(); });
+  canvas.addEventListener('webglcontextrestored', function(){ self.lost = false; self.texs = new WeakMap(); self.grads.clear(); self.texts.clear(); self.list.clear(); self.slots = []; self.n = 0; self.scr = null; self.bound = []; self.pages = []; self.pageOf.clear(); self.bytes = 0; if (self.init() && self.onRestored) self.onRestored(); });
 }
 const P = Ctx.prototype;
 
@@ -179,16 +184,23 @@ P.upload = function(img, kind){
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mipm ? (rep ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR_MIPMAP_NEAREST) : gl.LINEAR);
   if (mipm) gl.generateMipmap(gl.TEXTURE_2D);
   this.st.uploads++;
-  this.slots.length = 0;   // 綁定換過了：下一批重新綁
+  this.slots.length = 0; this.bound[0] = null;   // 綁定換過了：下一批重新綁
   return t;
 };
-// 拿到某張圖的貼圖（沒有就傳上去）；圖的寬或高是 0（已經釋放）回 null
+const texBytes = (img, kind) => img ? img.width * img.height * 4 * (kind === 's' || kind === 'p' ? 4 / 3 : 1) : 4;
+// 拿到某張圖的貼圖（沒有就傳上去）；圖的寬或高是 0（已經釋放）回 null。小張的一般圖放進圖集（e.at：在圖集裡的位置）
 P.tex = function(img, kind){
   if (this.lost || !img || !img.width || !img.height) return null;
   let e = this.texs.get(img);
   if (!e) { e = {}; this.texs.set(img, e); }
+  e.used = this.now;
   let t = e[kind];
-  if (!t) { if (this.n) this.flush(); t = e[kind] = this.upload(img, kind); e.w = img.width; e.h = img.height; this.list.add(img); }
+  if (!t) {
+    if (this.n) this.flush();
+    if (kind === 's' && !img.noAtlas && img.width <= AT_CLS[AT_CLS.length - 1] && img.height <= AT_CLS[AT_CLS.length - 1]) { e.at = this.atPut(img); t = e.s = e.at.pg.t; }
+    else { t = e[kind] = this.upload(img, kind); e['b' + kind] = texBytes(img, kind); this.bytes += e['b' + kind]; }
+    e.w = img.width; e.h = img.height; this.list.add(img);
+  }
   return t;
 };
 // 預先傳上去（trail.js 換山後每格花一點時間做，第一次看到時不會卡）
@@ -197,8 +209,48 @@ P.prep = function(img, rep){ this.tex(img, rep ? 'p' : 's'); };
 P.drop = function(img){
   const e = img && this.texs.get(img); if (!e) return;
   if (this.n) this.flush();
-  for (const k of ['s', 'p', 'g', 'u']) if (e[k]) this.gl.deleteTexture(e[k]);
+  if (e.at) { this.atFree(e.at); e.s = null; }
+  for (const k of ['s', 'p', 'g', 'u']) if (e[k]) { this.gl.deleteTexture(e[k]); this.bytes -= e['b' + k] || 0; }
   this.texs.delete(img); this.list.delete(img); this.slots.length = 0;
+};
+// 卸下 age 毫秒以上沒畫到的貼圖（畫布、美術圖本身留著，再用到時重新傳上去；畫面不變）
+P.trim = function(age){
+  for (const img of this.list) { const e = this.texs.get(img); if (!e || this.now - e.used > age) this.drop(img); }
+};
+// ───────── 圖集 ─────────
+// 一頁只放同一種大小的格子（格子 = 圖的大小級距 + 兩邊延伸），用完的格子放回去給下一張
+P.atPut = function(img){
+  const gl = this.gl, w = img.width, h = img.height, S = AT_CLS.find(s => w <= s && h <= s), C = S + AT_G * 2, PS = AT_PAGE[S], n = Math.floor(PS / C);
+  let pg = this.pages.find(p => p.S === S && p.free.length);
+  if (!pg) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, PS, PS, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+    pg = { t, S, C, P:PS, free:[], used:0, dirty:true };
+    for (let i = n * n - 1; i >= 0; i--) pg.free.push(i);
+    this.pages.push(pg); this.pageOf.set(t, pg); this.bytes += PS * PS * 4 * 4 / 3;
+  }
+  const i = pg.free.pop(), cx = (i % n) * C, cy = Math.floor(i / n) * C;
+  // 先在一張小畫布上排好：圖放在 (AT_G, AT_G)，四邊最外一排像素往外延伸到整格（不平滑，照原像素）
+  const st = this.stage || (this.stage = document.createElement('canvas'));
+  if (st.width !== C) { st.width = C; st.height = C; }
+  const g = st.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = false;   // 延伸的那幾條都畫在透明的地方：source-over 就是照原像素複製
+  g.clearRect(0, 0, C, C); g.drawImage(img, AT_G, AT_G);
+  g.drawImage(st, AT_G, AT_G, 1, h, 0, AT_G, AT_G, h);
+  g.drawImage(st, AT_G + w - 1, AT_G, 1, h, AT_G + w, AT_G, C - AT_G - w, h);
+  g.drawImage(st, 0, AT_G, C, 1, 0, 0, C, AT_G);
+  g.drawImage(st, 0, AT_G + h - 1, C, 1, 0, AT_G + h, C, C - AT_G - h);
+  gl.bindTexture(gl.TEXTURE_2D, pg.t);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, cx, cy, gl.RGBA, gl.UNSIGNED_BYTE, st);
+  pg.used++; pg.dirty = true; this.st.uploads++;
+  this.slots.length = 0; this.bound[0] = null;
+  return { pg, i, x:cx + AT_G, y:cy + AT_G };
+};
+P.atFree = function(a){
+  const pg = a.pg; pg.free.push(a.i); pg.used--;
+  if (!pg.used) { this.gl.deleteTexture(pg.t); this.pages.splice(this.pages.indexOf(pg), 1); this.pageOf.delete(pg.t); this.bytes -= pg.P * pg.P * 4 * 4 / 3; this.slots.length = 0; }
 };
 // 這一批裡第幾張（沒有空位就先送出去）
 P.slot = function(t){
@@ -217,6 +269,8 @@ P.begin = function(){
   gl.enable(gl.BLEND); this.setBlend('source-over');
   gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   this.n = 0; this.slots.length = 0; this.sp = 0;
+  this.now = performance.now();
+  if (this.now - this.trimT > TRIM_EVERY) { this.trimT = this.now; this.trim(TRIM_MS); }
   this.st.frameBatches = 0; this.st.frameCalls = 0; this.st.frameVerts = 0;
   this.setTransform(1, 0, 0, 1, 0, 0); this.globalAlpha = 1; this.globalCompositeOperation = 'source-over';
   return true;
@@ -231,9 +285,13 @@ P.flush = function(){
   const n = this.n; if (!n) return;
   this.n = 0;
   if (this.lost) { this.slots.length = 0; return; }
-  const gl = this.gl, s = this.slots;
-  for (let i = 0; i < s.length; i++) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, s[i]); }
-  gl.activeTexture(gl.TEXTURE0);
+  const gl = this.gl, s = this.slots, bd = this.bound;
+  // 圖集這一格以後有新圖放進去：重做縮小版（一頁一次）
+  for (let i = 0; i < s.length; i++) { const pg = this.pageOf.get(s[i]); if (pg && pg.dirty) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, pg.t); gl.generateMipmap(gl.TEXTURE_2D); pg.dirty = false; bd[0] = pg.t; } }
+  // 已經綁在那個位置的貼圖不重綁（驅動程式每次綁定都要花時間）
+  let act = -1;
+  for (let i = 0; i < s.length; i++) if (bd[i] !== s[i]) { gl.activeTexture(gl.TEXTURE0 + i); act = i; gl.bindTexture(gl.TEXTURE_2D, s[i]); bd[i] = s[i]; }
+  if (act) gl.activeTexture(gl.TEXTURE0);
   gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.u8, 0, n * STRIDE);
   gl.drawArrays(gl.TRIANGLES, 0, n);
@@ -247,7 +305,7 @@ P.blendFor = function(){
   if (m !== this.mode) { this.flush(); this.setBlend(m); }
   return g === 'lighter';
 };
-P.stats = function(){ const s = this.st; return { batches:s.frameBatches, calls:s.frameCalls, verts:s.frameVerts, textures:this.list.size, uploads:s.uploads }; };
+P.stats = function(){ const s = this.st; return { batches:s.frameBatches, calls:s.frameCalls, verts:s.frameVerts, textures:this.list.size, uploads:s.uploads, pages:this.pages.length, texMB:Math.round(this.bytes / 1048576) }; };
 
 // ───────── 頂點 ─────────
 // 顏色先乘上不透明度（premultiplied）；add：lighter（不透明度欄位給 0，混色時就變成直接加亮）
@@ -383,8 +441,10 @@ P.drawImage = function(img, a, b, c, d, e, f, g, h){
   if (!(this.globalAlpha > 0)) return;
   const add = this.blendFor(), t = this.tex(img, 's'); if (!t) return;
   if (this.n + 6 > CAP) this.flush();
-  const col = pack(1, 1, 1, this.globalAlpha, add), s = this.slot(t), m = this.m;
-  const u0 = sx / iw, v0 = sy / ih, u1 = (sx + sw) / iw, v1 = (sy + sh) / ih;
+  const col = pack(1, 1, 1, this.globalAlpha, add), s = this.slot(t), m = this.m, at = this.texs.get(img).at;
+  let u0, v0, u1, v1;
+  if (at) { const P = at.pg.P; u0 = (at.x + sx) / P; v0 = (at.y + sy) / P; u1 = (at.x + sx + sw) / P; v1 = (at.y + sy + sh) / P; }   // 圖集：換算成在整頁裡的位置
+  else { u0 = sx / iw; v0 = sy / ih; u1 = (sx + sw) / iw; v1 = (sy + sh) / ih; }
   const x0 = m[0] * dx + m[2] * dy + m[4], y0 = m[1] * dx + m[3] * dy + m[5], ax = m[0] * dw, ay = m[1] * dw, bx = m[2] * dh, by = m[3] * dh;
   this.v(x0, y0, u0, v0, col, s); this.v(x0 + ax, y0 + ay, u1, v0, col, s); this.v(x0 + ax + bx, y0 + ay + by, u1, v1, col, s);
   this.v(x0, y0, u0, v0, col, s); this.v(x0 + ax + bx, y0 + ay + by, u1, v1, col, s); this.v(x0 + bx, y0 + by, u0, v1, col, s);
@@ -498,7 +558,7 @@ P.text = function(s, x, y, stroke){
     const g = this.meas; g.font = this.font;
     const mt = g.measureText(s), pad = Math.ceil((stroke ? this.lineWidth : 0) + 2), asc = Math.ceil(mt.actualBoundingBoxAscent || 12), dsc = Math.ceil(mt.actualBoundingBoxDescent || 4);
     const L = Math.ceil(mt.actualBoundingBoxLeft || 0), R = Math.ceil(mt.actualBoundingBoxRight || mt.width);
-    const c = document.createElement('canvas'); c.width = Math.ceil((L + R + pad * 2) * k); c.height = Math.ceil((asc + dsc + pad * 2) * k);
+    const c = document.createElement('canvas'); c.noAtlas = true; c.width = Math.ceil((L + R + pad * 2) * k); c.height = Math.ceil((asc + dsc + pad * 2) * k);
     const cg = c.getContext('2d'); cg.scale(k, k); cg.font = this.font; cg.textAlign = 'left'; cg.textBaseline = 'alphabetic';
     if (stroke) { cg.lineWidth = this.lineWidth; cg.strokeStyle = style; cg.lineJoin = 'round'; cg.strokeText(s, L + pad, asc + pad); } else { cg.fillStyle = style; cg.fillText(s, L + pad, asc + pad); }
     e = { c:c, w:c.width / k, h:c.height / k, ox:L + pad, oy:asc + pad, mt:mt };
@@ -547,7 +607,7 @@ P.grade = function(mulC, fogA, fogC, warmA, warm, dpr, sat, con){
   gl.uniform2f(U.uSC, doSC ? sat : 1, doSC ? con : 1);
   if (doW) { const a = warm.a; gl.uniform3f(U.uWC, a[3] * k, a[4] * k, a[5] * k); }   // 漸層座標是 CSS 像素，乘上目前的解析度倍數
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  this.st.frameBatches++;
+  this.st.frameBatches++; this.bound[0] = this.bound[1] = null;
   gl.enable(gl.BLEND); gl.useProgram(this.prog); gl.bindVertexArray(this.vao); this.setBlend('source-over');
   this.slots.length = 0;
 };
