@@ -50,7 +50,7 @@ void main(){
   vec3 c = mix(g, r, w);
   c = mix(c, uSoil * (0.8 + 0.4 * r), e * 0.55);
   float rs = 1.0 - smoothstep(0.0, 0.0004 * vD, fwidth(vD));   // 階梯立面（整面同一個遠近）：比踏面暗
-  c *= vA.y * mix(1.0, 0.58, rs);
+  c *= vA.y * mix(1.0, 0.45, rs);
   float f = clamp((vD - uFD.x) / (uFD.y - uFD.x), 0.0, 1.0); f = f * (2.0 - f);
   c = mix(c, uFog.rgb, f * uFog.a);
   o = vec4(c * vA.z, vA.z);
