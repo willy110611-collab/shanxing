@@ -1767,8 +1767,8 @@ function drawFG(t){
 // 畫筆：能用 WebGL 就用（js/gl2d.js，一格幾十批送顯示卡），不支援或建立失敗就用 Canvas 2D（跟以前一樣）
 // 網址加 ?gl=0（或 localStorage sx_gl = '0'）強制用 Canvas 2D：開發者測試、比對兩邊畫面用，玩家看不到
 // 立體地面試作（方案 B）：網址加 ?g3d=1 才開，只在象山。地面（路、階梯、兩側山坡）改成一整片真正的 3D 網格，植物、人物、天空照舊
-const G3D_Q = /[?&]g3d=1\b/.test(location.search), G3D_IDS = ['xiangshan'];
-function g3On(){ return G3D_Q && ctx && ctx.gpu && ctx.hasDepth && M && G3D_IDS.indexOf(M.id) >= 0; }
+const G3D_Q = /[?&]g3d=(1|all)\b/.test(location.search), G3D_ALL = /[?&]g3d=all\b/.test(location.search), G3D_IDS = ['xiangshan'];   // g3d=all：測試用，每座山都用立體地面
+function g3On(){ return G3D_Q && ctx && ctx.gpu && ctx.hasDepth && M && (G3D_ALL || G3D_IDS.indexOf(M.id) >= 0); }
 const GL_OFF = /[?&]gl=0\b/.test(location.search) || (function(){ try { return localStorage.getItem('sx_gl') === '0'; } catch (e) { return false; } })();
 S.init = function(canvas){
   cv = canvas; if (!SHADOW) buildStatic();
