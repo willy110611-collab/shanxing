@@ -512,16 +512,54 @@ function macroTex(){
 // m：圖寬代表幾公尺（石頭一排約 0.25 公尺高，跟一階差不多）；rows：圖裡有幾排，每階隨機對齊其中一排
 const RISER_J = 22;
 const RISER = { stairs:{ id:'ground_riser_stone', m:2.2, rows:5 }, wood:{ id:'ground_riser_wood', m:2.6, rows:3, r:[0.16, 0.3, 0.86, 0.95], hx:2.2 } };
+// ───────── 地面貼圖打散重複（2026-11-24 核准，不用新圖）─────────
+// 路面每 2.6 公尺就是同一張圖，走路時看得出一格一格重複。換山時把這座山用到的路面貼圖各做一張「打散版」（只做一次，換山時放掉沒用到的）：
+// 底下照原圖鋪滿，上面蓋 VARY.n 片「同一張圖轉 180 度（俯視、方向不重要的再加轉 90 度）、左右鏡射、錯開位置」的版本，每片用一塊邊緣很柔、會繞回來的圓形遮罩混進來。
+// 原圖是無縫的，轉 90 度倍數、鏡射、平移以後還是同一個週期的無縫圖，遮罩也在整張上繞回來，所以打散版照樣無縫：texRun、texRunAB、texSide、grassUV 的貼圖座標算法都不變，
+// 只是一張代表的公尺數變成 grow 倍（768 像素的圖做成 2×2 張大、重複距離變兩倍；本來就很大的鏡射圖照原大小，只打散裡面）。大範圍明暗、色調起伏另外用 macroTex 蓋（路面也蓋）
+const VARY = { n:7, r:[0.16, 0.3], solid:0.42, big:768, road:0.5, roadJ:60 };   // solid：遮罩中心多大一圈是全蓋；big：寬不超過這麼多像素的圖做成 2×2；road：路面蓋 macroTex 的濃度（草地的幾成）
+let VT = {}, vtUsed = {};
+function varyTex(key, T, rot90){
+  if (!T || !T.c || !TEX_MTX) return T;
+  vtUsed[key] = 1;
+  let V = VT[key];
+  if (!V) {
+    const s = T.c.width, g2 = s <= VARY.big && T.c.height === s ? 2 : 1, S2 = s * g2, H2 = T.c.height * g2, c = mk(S2, H2), g = c.getContext('2d'), tmp = mk(S2, H2), gt = tmp.getContext('2d'), msk = mk(S2, H2), gm = msk.getContext('2d'), r = mkrng(hashStr(key));
+    const p0 = g.createPattern(T.c, 'repeat'); g.fillStyle = p0; g.fillRect(0, 0, S2, H2);
+    const sq = T.c.width === T.c.height;
+    for (let k = 0; k < VARY.n; k++) {
+      const rot = sq ? (rot90 ? (r() * 4) | 0 : (r() < 0.5 ? 0 : 2)) : (r() < 0.5 ? 0 : 2), flip = r() < 0.5, ox = r() * s, oy = r() * T.c.height, cx = r() * S2, cy = r() * H2, rad = lerp(VARY.r[0], VARY.r[1], r()) * Math.min(S2, H2);
+      const p = gt.createPattern(T.c, 'repeat'), M = new DOMMatrix().translateSelf(ox, oy).rotateSelf(rot * 90).scaleSelf(flip ? -1 : 1, 1);
+      p.setTransform(M); gt.globalCompositeOperation = 'copy'; gt.fillStyle = p; gt.fillRect(0, 0, S2, H2);
+      gm.globalCompositeOperation = 'copy'; gm.fillStyle = 'rgba(0,0,0,0)'; gm.fillRect(0, 0, S2, H2); gm.globalCompositeOperation = 'lighter';
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {   // 遮罩在整張上繞回來（跨過邊的那一片從對邊接回來）
+        const x = cx + dx * S2, y = cy + dy * H2; if (x + rad < 0 || x - rad > S2 || y + rad < 0 || y - rad > H2) continue;
+        const gr = gm.createRadialGradient(x, y, 0, x, y, rad);
+        for (let q = 0; q <= 6; q++) { const t = q / 6; gr.addColorStop(t, 'rgba(0,0,0,' + (t < VARY.solid ? 1 : ease01(1 - (t - VARY.solid) / (1 - VARY.solid))).toFixed(3) + ')'); }
+        gm.fillStyle = gr; gm.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      }
+      gt.globalCompositeOperation = 'destination-in'; gt.drawImage(msk, 0, 0);
+      g.drawImage(tmp, 0, 0);
+    }
+    free(tmp); free(msk);
+    V = VT[key] = { w:S2, c:c, lv:{}, g:g2 };
+  }
+  return { T:V, w:V.w, m:T.m * V.g, c:V.c, lv:V.lv };
+}
+// 換山時：這座山沒用到的打散版（和它的縮小版）放掉，iPhone 的畫布記憶體才不會一座山一座山累積
+function varyFree(){ for (const k in VT) if (!vtUsed[k]) { const V = VT[k]; for (const q in V.lv) free(V.lv[q].c); free(V.c); delete VT[k]; } }
 function buildTex(){
   const tr = TH.trail || 'dirt', rs = tr === 'stairs' ? RISER.stairs : tr === 'scree' ? null : RISER.wood;
-  TEX = { road:tr === 'scree' ? mirTex(TRAIL_TEX[tr], RW * 4, [0, 0, 1, 1], true, true, 768) : mkTex(TRAIL_TEX[tr], RW * 2),   // 碎石路那張上面亮、下面暗（上下緣差很多），每 2.4 公尺路面一條明暗分界：鏡射拼成無縫的一組
-    grass:grassTex(), snow:mirTex('ground_snow', RW * 4, [0, 0, 1, 1], true, true, 512),   // 雪地那張上下左右接不起來（每 2.6 公尺一條明暗分界），鏡射拼成無縫的一組
+  vtUsed = {};
+  TEX = { road:varyTex('road:' + tr, tr === 'scree' ? mirTex(TRAIL_TEX[tr], RW * 4, [0, 0, 1, 1], true, true, 768) : mkTex(TRAIL_TEX[tr], RW * 2), tr !== 'stairs'),   // 石板路有方向（石塊順著路排），只轉 180 度、鏡射；土路、碎石路再加轉 90 度   // 碎石路那張上面亮、下面暗（上下緣差很多），每 2.4 公尺路面一條明暗分界：鏡射拼成無縫的一組
+    grass:varyTex('grass', grassTex(), false), snow:TH.snow ? varyTex('snow', mirTex('ground_snow', RW * 4, [0, 0, 1, 1], true, true, 512), true) : mirTex('ground_snow', RW * 4, [0, 0, 1, 1], true, true, 512),   // 會下雪的山雪地也打散（只有那幾座做，省記憶體）   // 雪地那張上下左右接不起來（每 2.6 公尺一條明暗分界），鏡射拼成無縫的一組
     steps:tr === 'stairs' ? null : mkTex('ground_steps', RW * 2),   // 土路、碎石路偶爾一小段很陡的階梯：木頭階梯（石階步道照舊用石板）
     moss:tr === 'stairs' && !TH.alpine ? mirTex('ground_stone_moss', RW * 4.4, [0, 0, 1, 1], true, true, 512) : null,   // 鏡射拼成的一組 5.7 公尺寬：一半就比路寬，鏡射的對稱軸不會落在踏面中間   // 森林裡的石階：踏面一階石板、一階苔蘚石塊，才不會每階都同一種鋪面
     riser:rs ? (rs.r ? mirTex(rs.id, rs.m, rs.r, true, false, 640) : mkTex(rs.id, rs.m)) : null };
   if (TEX.riser) { TEX.riser.rows = rs.rows; TEX.riser.hx = rs.hx || 1; }   // hx：橫向拉長幾倍（木頭橫木左右鏡射拼成的圖，拉長後一階只露出其中一半，看不出左右對稱）
   RSH = roadShade();
-  if (TH.contour) TEX.ct = { road:[mkTex('ground_dirt_leaf', RW * 2), mkTex('ground_gravel', RW * 2)], rock:ctRockSpr(1), tall:ctTallSpr(CT.tallH), can:ctCanSpr(CT.canH, false), canM:ctCanSpr(CT.canH, true) };   // 山腰步道：兩種路面、石壁、陡降邊的高草、伸到路上的樹枝（左右各一張）
+  if (TH.contour) TEX.ct = { road:[varyTex('ct:dirt_leaf', mkTex('ground_dirt_leaf', RW * 2), true), varyTex('ct:gravel', mkTex('ground_gravel', RW * 2), true)], rock:ctRockSpr(1), tall:ctTallSpr(CT.tallH), can:ctCanSpr(CT.canH, false), canM:ctCanSpr(CT.canH, true) };   // 山腰步道：兩種路面、石壁、陡降邊的高草、伸到路上的樹枝（左右各一張）
+  varyFree();
   TEX.bank = tr === 'wood' && !TH.contour ? null : mirTex('trail_bank', BANK_M, [0.14, 0.32, 0.87, 0.68], true, true, 512);   // 上下也鏡射一份：山腰台階的高土坎比一張圖高時，往下接鏡射的那一份（無縫，不會把土層拉長）   // 路肩土坎切面：泥土、石頭、樹根（木棧道沒有土坎）
 }
 // 土坎切面貼圖：圖寬代表沿路 BANK_M 公尺、圖高代表 BANK_H 公尺（土坎約 0.05～0.13 公尺高：以前 0.12～0.28，路和草地之間那一面土坎在近處是一條很寬的直帶，看起來像兩層貼起來），BANK_J 段以內才貼（最後 6 段淡入）
@@ -3927,6 +3965,8 @@ function drawWorld(b, t, jHi, jLo, far){
         if (cA > 0.01) { ctx.globalAlpha = fade * cA; ctx.fillStyle = LUT[CT.lut[cV] * FOGN + fi]; quad(x1 - w1, yb, x1 + w1, yb, x2 + w2, y2 + SEAM_IN, x2 - w2, y2 + SEAM_IN); ctx.globalAlpha = fade; }   // 山腰步道的路面底色（頭尾慢慢蓋上去）
         if (RT && ta > 0.03 && cA < 0.99) { texRunAB(RT, ROAD_UC, x1, y1, s1, x2, y2, s2, zA, ta * (1 - cN), ta * (1 - cF), roadPath(x1, y1, s1, x2, y2, s2, rw, rwAt(i + 1))); ctx.globalAlpha = fade; }
         if (cA > 0.01 && TEX.ct && ta > 0.03) { texRunAB(TEX.ct.road[cV], ROAD_UC, x1, y1, s1, x2, y2, s2, zA, ta * cN, ta * cF, roadPath(x1, y1, s1, x2, y2, s2, rw, rwAt(i + 1))); ctx.globalAlpha = fade; }   // 落葉土路／碎石路貼圖：近端、遠端各自多濃，一段之內慢慢換（不會一段一段跳）
+        const rmA = ta * VARY.road * GMAC.a * (1 - snowAmt) * farA(j, VARY.roadJ, 10), RMT = rmA > 0.01 ? macroTex() : null;
+        if (RMT) { texRun(RMT, ROAD_UC, x1, y1, s1, x2, y2, s2, zA, rmA * (isNight ? 0.5 : 1), roadPath(x1, y1, s1, x2, y2, s2, rw, rwAt(i + 1)), GMAC.sub); ctx.globalAlpha = fade; }   // 路面也蓋大範圍的明暗、色調起伏（跟草地同一張 macroTex，比較淡）：重複的路面每幾公尺看起來不一樣
         const wA = isWood ? farA(j, 60, 10) * (1 - cA) : 0;
         if (wA > 0) for (k = 0; k < PLANKS; k++) {   // 木棧道：每片木板深淺不一，近處再加幾條木紋（遠處淡入）
           proj(j, k / PLANKS, false); const xa = gx, ya = k ? gy : yb, wa = rw * gs;
