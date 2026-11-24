@@ -1852,18 +1852,22 @@ function updGait(s, dt, dist){
   gaitMode(dt, dist, stam);
 }
 // 現在用哪一種走路圖：階梯 > 真的彎道 > 累了 > 一般。每種都有進出兩個門檻，換了以後至少用 GAIT.hold 秒
+const BEND_WIN = [-4, 0];   // 彎道判斷看哪幾段：腳下往回 4 段（約 6 公尺）到腳下
 function gaitMode(dt, dist, stam){
   const G = GAIT, walking = hero.mv > 0.6 && !gait.act;
   gait.modeT += dt;
   const stair = hero.stair > (gait.mode === 'stairs' ? G.stairOut : G.stairIn);
   gait.tired = stam < G.tired + (gait.tired ? G.tiredOut : 0);
   // 彎道：腳下往前 8 公尺的平均彎度（跟轉彎傾身同一段路），超過門檻而且連續走了 bendHold 秒才算；階梯段、系統設定減少動態都不算
-  const si = Math.floor(dist / SEG); let kc = 0; for (let q = 0; q < TURN_LOOK; q++) kc += cAt(si + q); kc /= TURN_LOOK;
+  // 看腳下和剛走過的幾段（BEND_WIN），不看前面：人真的走進彎道才換斜身圖（2026-11-24 回報還沒進彎就先斜了）
+  const si = Math.floor(dist / SEG); let kc = 0; for (let q = BEND_WIN[0]; q <= BEND_WIN[1]; q++) kc += cAt(si + q); kc /= BEND_WIN[1] - BEND_WIN[0] + 1;
   const bendOn = gait.mode === 'turn', ak = Math.abs(kc), flat = hero.stair < 0.1 && !(RMOT && RMOT.matches);
   if (walking && flat && ak > (bendOn ? G.bendOut : G.bendIn)) gait.bendT += dt; else if (!bendOn || ak < G.bendOut || !flat) gait.bendT = 0;
   const want = stair || (gait.mode === 'turn' && hero.stair >= 0.1) ? 'stairs' : gait.bendT >= G.bendHold ? 'turn' : gait.tired ? 'tired' : 'walk';
   // 走上階梯時轉身圖馬上換掉（階梯上不轉身）；轉身圖畫的是往右前方：左彎鏡射（換上的那一刻決定，彎完以前不會翻面）
   if (want !== gait.mode && (gait.modeT >= G.hold || (want === 'stairs' && gait.mode === 'turn'))) { gait.mode = want; gait.modeT = 0; gait.modeF = kc < 0; }
+  // S 形彎：還在彎道模式、但腳下已經是反方向的彎（超過 bendIn）就馬上換邊（交叉淡換），不會左彎之後的右彎還斜向左邊
+  else if (gait.mode === 'turn' && want === 'turn' && (kc < 0) !== gait.modeF && ak > G.bendIn) { gait.modeF = kc < 0; gait.modeT = 0; }
 }
 S.pace = function(){ return gait.pace; };
 // 測試用：這座山整條路因為上坡和爬階梯變慢，畫面開著時要多花幾 %（不算階梯、不算慢慢變的過渡）
@@ -1883,13 +1887,16 @@ function gaitSheet(){
   else gait.sid = walk;
 }
 // 某張圖現在畫第幾格、畫多高：走路類跟著步伐相位（換圖時步伐接得上），小跳照動作進度，單張動作只有一格
+// 斜身走路圖（hiker_turn16）每一排 8 格就已經是完整的左右兩步（量過每格兩腳張開的寬度：第 1、5、8 格最開），兩排幾乎一樣；
+// 照 16 格播等於腳步快一倍、跟身體前進對不上，看起來會閃（2026-11-24 回報），所以只播第一排 8 格當一個完整步伐循環
+const TURN_ROW = /_turn16$/;
 function gaitDraw(c, id, flip, fl){
   const e = ART.get(id); if (!e) return false;
   let i = 0, h = SCALE.hero * 100 * (GAIT_H[id] || 1), dy = 0;
   if (/_hop4$/.test(id)) { i = id === gait.act ? Math.min(3, Math.floor(gait.at / gait.dur * 4)) : 3; h *= e.frames[i].h / e.frames[3].h; }   // 跳起來那格的外框含離地空隙：照站著那格的比例畫，人不會忽大忽小
   else if (/_breath$/.test(id)) h = SCALE.heroBreath * 100;
   else if (e.frames.length === 1) h = SCALE.heroPose * 100;
-  else { i = walkFrame(e.frames.length); dy = -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv; }
+  else { i = walkFrame(TURN_ROW.test(id) ? 8 : e.frames.length); dy = -Math.abs(Math.sin(hero.ph)) * 1.5 * hero.mv; }
   return artFrame(c, id, i, 0, dy, h, flip, fl);
 }
 function heroGait(c, s, t, fl){
