@@ -271,6 +271,15 @@ async function auth(env, req, token){
   p.tokenHash = h;
   return p;
 }
+// 維修模式：資料庫 maint 只有一列（start 開始、eta 預計好）；整修中只放行 MAINT_OPEN 這幾條，其他一律 503，玩家的手機顯示「山屋整修中」
+// 每個請求都要知道現在是不是整修中：記在這支程式的記憶體裡 MAINT_TTL 毫秒，不用每次都查資料庫（開始、結束最多晚這麼久生效）
+const MAINT_TTL = 15000, MAINT_OPEN = /^\/api\/(maint$|admin\/|health$)/;
+let maintC = null, maintT = 0;
+async function maintGet(env, fresh){
+  if (!fresh && maintC !== null && now() - maintT < MAINT_TTL) return maintC;
+  const r = await env.DB.prepare('SELECT start, eta FROM maint WHERE id = 1').first().catch(() => null);
+  maintC = r ? { start: r.start, eta: r.eta } : false; maintT = now(); return maintC;
+}
 const isAdmin = (env, req) => env.ADMIN_KEY && (req.headers.get('X-Admin-Key') === env.ADMIN_KEY || new URL(req.url).searchParams.get('k') === env.ADMIN_KEY);
 // 台灣時間每週一 00:00 換週
 const weekNo = () => Math.floor((now() + 8 * 3600e3 - 4 * 864e5) / (7 * 864e5));
@@ -338,6 +347,9 @@ export default {
     const url = new URL(req.url), path = url.pathname.replace(/\/+$/, ''), M = req.method;
     try {
       if (path === '/api/health') return J(env, req, { ok: true, t: now() });
+      // 維修：誰都可以問現在有沒有預約／整修中（遊戲開著每分鐘問一次）；整修中其他請求一律擋下
+      if (path === '/api/maint' && M === 'GET') { const m = await maintGet(env); return J(env, req, m ? { start: m.start, eta: m.eta, now: now() } : { now: now() }); }
+      if (!MAINT_OPEN.test(path)) { const m = await maintGet(env); if (m && now() >= m.start) return J(env, req, { error: '山屋整修中，晚點再來', maint: true }, 503); }
 
       // 註冊：給一個暱稱，回傳 token（請存好，換手機用）
       if (path === '/api/register' && M === 'POST') {
@@ -387,6 +399,14 @@ export default {
       // 管理（照片審核）
       if (path.startsWith('/api/admin/')) {
         if (!isAdmin(env, req)) return E(env, req, 'forbidden', 403);
+        // 維修：預約／立刻開始（start、eta 毫秒時間，start 填現在就是立刻開始）、結束或取消（DELETE）
+        if (path === '/api/admin/maint' && M === 'POST') {
+          const b = await req.json().catch(() => ({})), st = Math.round(+b.start), eta = Math.round(+b.eta);
+          if (!(st > 0) || !(eta > st)) return E(env, req, '時間不對：預計好的時間要比開始晚');
+          await env.DB.prepare('INSERT INTO maint (id, start, eta) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET start = excluded.start, eta = excluded.eta').bind(st, eta).run();
+          return J(env, req, await maintGet(env, true));
+        }
+        if (path === '/api/admin/maint' && M === 'DELETE') { await env.DB.prepare('DELETE FROM maint WHERE id = 1').run(); await maintGet(env, true); return J(env, req, { ok: true }); }
         if (path === '/api/admin/photos' && M === 'GET') {
           const st = url.searchParams.get('status') || 'pending';
           const r = await env.DB.prepare('SELECT p.*, pl.name AS by FROM photos p LEFT JOIN players pl ON pl.id = p.owner WHERE p.status = ? OR (? = \'reported\' AND p.reports > 0 AND p.status = \'ok\') ORDER BY p.created DESC LIMIT 100').bind(st, st).all();

@@ -876,10 +876,27 @@
     } catch(e){ if (box.isConnected) box.innerHTML = ''; }
   }
 
+  // ───────── 管理金鑰（照片審核、山屋整修都用這一份）─────────
+  // 第一次用時問一次、存在這支手機；伺服器說不對就清掉。存了金鑰的手機＝開發者的手機（整修中不擋，見 js/maint.js）
+  function adminKey(){
+    let k = load(KEY_ADMIN, '');
+    if (!k) { k = (prompt('輸入管理金鑰（在 server\\.dev.vars 裡的 ADMIN_KEY）') || '').trim(); if (k) store(KEY_ADMIN, k); }
+    return k;
+  }
+  async function adminApi(path, opt = {}){
+    const k = adminKey(); if (!k) throw new Error('沒有輸入管理金鑰');
+    const h = { 'X-Admin-Key': k }; if (opt.json !== undefined) h['Content-Type'] = 'application/json';
+    const r = await fetch(API + '/admin' + path, { method: opt.method || (opt.json !== undefined ? 'POST' : 'GET'), headers: h, body: opt.json !== undefined ? JSON.stringify(opt.json) : undefined });
+    if (r.status === 403) { store(KEY_ADMIN, null); throw new Error('管理金鑰不對'); }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `沒成功（${r.status}）`);
+    return d;
+  }
+  const isAdminDevice = () => !!load(KEY_ADMIN, '');
+
   // ───────── 照片審核（開發者選項裡）─────────
   async function review(status = 'pending'){
-    let k = load(KEY_ADMIN, '');
-    if (!k) { k = prompt('輸入審核金鑰（在 server\\.dev.vars 裡的 ADMIN_KEY）') || ''; if (!k) return; store(KEY_ADMIN, k.trim()); k = k.trim(); }
+    const k = adminKey(); if (!k) return;
     const mc = $('#mCard'); $('#modal').classList.add('on'); mc.innerHTML = '<h3>照片審核</h3><p>讀取中…</p>';
     try {
       const r = await fetch(`${API}/admin/photos?status=${status}`, { headers: { 'X-Admin-Key': k } });
@@ -997,7 +1014,7 @@
   // 還沒有帳號的人要爬有名額的山：取個暱稱就好（跟大廳一樣的帳號）
   async function quickRegister(name){ return register(name); }
 
-  SX.social = { open, close, uploadPhoto, fillWall, review, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite,
+  SX.social = { open, close, uploadPhoto, fillWall, review, adminApi, isAdminDevice, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite,
     teamBlock, teamTop,   // 好友跟隨：在隊伍裡不能自己出發別座山的原因、登頂了告訴伺服器
     strangerCard,         // 同山遇見山友：登山畫面點了他
    

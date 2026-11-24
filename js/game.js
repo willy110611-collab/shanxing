@@ -1638,6 +1638,7 @@
   let lastT = performance.now(), hudT = 0, wxT = 0, ftNow = 0, fpsNow = FPS.walk;
   function loop(now){
     requestAnimationFrame(loop);
+    if (SX.maintOn) return;   // 山屋整修中（js/maint.js）：整個遊戲停住；整修完重新打開時照離開的時間補走（跟關掉遊戲一樣）
     fpsNow = !st || paused || arrived || st.rest || st.sleep ? FPS.idle : FPS.walk;
     if (now - lastT < 1000 / fpsNow - 3) return;   // 還沒到下一格：這次跳過（差 3 毫秒內就畫，螢幕每格的時間本來就有一點誤差）
     ftNow = now - lastT;
@@ -2037,6 +2038,7 @@
           <button class="cbtn sm" id="dUnlock">${SV.unlockAll ? '恢復解鎖規則' : '解鎖全部山'}</button>
           <button class="cbtn sm" id="dWx">換天氣</button>
           <button class="cbtn sm" id="dReview">照片審核</button>
+          <button class="cbtn sm" id="dMaint">山屋整修</button>
           <button class="cbtn sm" id="dReset">清除存檔</button>
           <button class="cbtn sm" id="dLock">鎖回去</button></div>`
         : `<div class="pw"><input id="pw" type="password" inputmode="numeric" placeholder="密碼"><button class="cbtn sm" id="pwOk">解鎖</button></div>`}
@@ -2063,6 +2065,7 @@
       $('#dUnlock').onclick = () => { SV.unlockAll = !SV.unlockAll; save(); renderSettings(); toast(SV.unlockAll ? '全部的山都開放了' : '恢復原本的解鎖規則'); };
       $('#dWx').onclick = () => cycleWx();
       $('#dReview').onclick = () => { if (SX.social) SX.social.review(); };
+      $('#dMaint').onclick = () => { if (SX.maint) SX.maint.panel(); };
       $('#dReset').onclick = () => { if (confirm('確定要清除所有存檔嗎？')) { resetting = true; localStorage.removeItem(KEY); localStorage.removeItem(KEY_IMG); location.reload(); } };
       $('#dLock').onclick = () => { s.dev = false; s.devOn = false; s.fast = false; save(); renderSettings(); };
     } else if (devPeek) {
