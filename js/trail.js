@@ -2589,6 +2589,19 @@ const SEAM_Y = 1.5;   // 以前 0.7：2D 畫布有貼圖的那段遠端往內縮
 function grassPath(a, b){
   if (a <= TR_A0 + 1e-6) a = 0; if (b >= TR_B1 - 1e-6) b = 1;   // 頭尾那條一定從這段的近端畫到遠端：跟前後段的邊完全同一條線（對齊像素的那一點點差，會留一條透出底色的細縫）
   for (let k = 1; k < gNS - 1; k++) { ctx.moveTo(lerp(tX1[k], tX2[k], a), lerp(tY1[k] - SEAM_Y, tY2[k], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], a), lerp(tY1[k + 1] - SEAM_Y, tY2[k + 1], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], b), lerp(tY1[k + 1] - SEAM_Y, tY2[k + 1], b)); ctx.lineTo(lerp(tX1[k], tX2[k], b), lerp(tY1[k] - SEAM_Y, tY2[k], b)); ctx.closePath(); }
+  if (GUV.T) grassUV(a, b);
+}
+// WebGL：坡面貼圖每個角自己的貼圖座標（離路中心幾公尺、世界位置 z），跟 grassPath 的點同順序。
+// 以前整條只用一個仿射（對準第 1 條和第 kC 條帶子），外面幾條帶子高低不一樣，貼圖座標是推出去的：這段遠端和下一段近端在同一條線上卻對到貼圖不同的地方，
+// 遠處山坡每段一條亮暗的橫紋（2026-11-24 掃描：三叉山 2975 右邊、合歡石門…，大範圍草色起伏那張最明顯）。每個角照實際位置給座標，共用的邊兩端一樣，接得起來
+const GUV = { T:null, side:1, sA:1, sB:1, zA:0, uv:new Float64Array(64) };
+function grassUV(a, b){
+  const T = GUV.T, r = T.w / T.m, kv = r / T.c.height, ku = GUV.side * r / T.w, dzA = F / GUV.sA;
+  const za = GUV.zA + F / lerp(GUV.sA, GUV.sB, a) - dzA, zb = GUV.zA + F / lerp(GUV.sA, GUV.sB, b) - dzA, z0 = Math.floor(za / T.m) * T.m, va = (za - z0) * kv, vb = (zb - z0) * kv, U = GUV.uv;
+  for (let k = 1, o = 0; k < gNS - 1; k++, o += 8) {
+    U[o] = lerp(tD1[k], tD2[k], a) * ku; U[o + 1] = va; U[o + 2] = lerp(tD1[k + 1], tD2[k + 1], a) * ku; U[o + 3] = va;
+    U[o + 4] = lerp(tD1[k + 1], tD2[k + 1], b) * ku; U[o + 5] = vb; U[o + 6] = lerp(tD1[k], tD2[k], b) * ku; U[o + 7] = vb;
+  }
 }   // 兩側各自的坡面明暗（畫草叢時查）
 function lvc(i, side){ return clamp((vn(i * 0.11 + side * 37.7, 21) - 0.5) / 0.14, -1, 1); }   // 世界固定的光影斑塊（-1 暗～1 亮，連續）
 // 坡面陰影的顏色（-1～1 分 81 階，先做好不每幀產生字串）：背光偏藍紫、向陽暖黃
@@ -3156,6 +3169,7 @@ function texSide(T, sd, sA, sB, zA, a, path, sub, tv){
   const n = clamp(Math.ceil((y0 - yB) / sub), 1, SUB_MAX), dzA = F / sA;
   let tp = texSnap(yA, y0, yB, h, 0, n);
   TR_A0 = tp; TR_B1 = texSnap(yA, y0, yB, h, n, n);
+  if (ctx.gpu && path === grassPath) { GUV.T = T; GUV.side = sd ? 1 : -1; GUV.sA = sA; GUV.sB = sB; GUV.zA = zA; ctx.uvs = GUV.uv; }   // WebGL：每個角自己的貼圖座標（grassUV）
   for (let q = 1; q <= n; q++) {
     const t = texSnap(yA, y0, yB, h, q, n), za = zA + F / lerp(sA, sB, tp) - dzA, zb = zA + F / lerp(sA, sB, t) - dzA;
     const w = sideAff(T, o, sd ? 1 : -1, tp, t, za, zb, a, 0);
@@ -3163,6 +3177,7 @@ function texSide(T, sd, sA, sB, zA, a, path, sub, tv){
     if (w > 0.04) { sideAff(T, o, sd ? 1 : -1, tp, t, za, zb, a, 1); ctx.fill(); }   // 縮圖換級的地方兩級交叉淡換（同 texAff）
     tp = t;
   }
+  if (GUV.T) { GUV.T = null; ctx.uvs = null; }
 }
 // 第 ta～tb 條的對齊：第 1 條帶子在 ta → (離路中心 d1, za)、在 tb → (d1, zb)，第 kC 條在 ta → (dC, za)；三個點剛好決定一個仿射。step 同 texAff
 function sideAff(T, o, side, ta, tb, za, zb, a, step){
