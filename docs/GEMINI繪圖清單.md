@@ -609,9 +609,9 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn16. The backpack must wear the SAME dark-green rain cover in ALL 16 frames, both rows: the cover hides the side bottle pockets and mesh, only the orange sleeping mat shows on top. Do not draw any frame without the rain cover. Plain flat magenta background only, no shadows, boxes or color patches behind the figures.
 ```
 
-## 第 26 批：出發前的小山載入畫面（放進 `02.素材`，1:1，**不用洋紅底**，兩張構圖要一模一樣）
+## 第 26 批（暫停，先用程式畫）：出發前的小山載入畫面（放進 `02.素材`，1:1，**不用洋紅底**，兩張構圖要一模一樣）
 
-按下「出發」到進山之間：先顯示只有墨線的那張，顏色從山腳像水位一樣慢慢往上漲（底下有百分比），漲滿就是上好色的那張。兩張必須同一個構圖、同一個位置，只差有沒有上色。
+（2026-11-24 開發者選「每座山用自己的山形輪廓」，改由程式照每座山的真實輪廓畫，這批先不用畫；之後想要更精緻再請 Gemini 畫 21 座山的輪廓）按下「出發」到進山之間：先顯示只有墨線的那張，顏色從山腳像水位一樣慢慢往上漲（底下有百分比），漲滿就是上好色的那張。兩張必須同一個構圖、同一個位置，只差有沒有上色。
 
 | 檔名 | 比例 | 內容 |
 |---|---|---|
