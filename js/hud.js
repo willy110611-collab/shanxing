@@ -219,7 +219,8 @@
     for (let i = 0; i < n; i++) { const t = i / (n - 1); a.push([.5 + .26 * Math.sin(t * 7.2) * (1 - .25 * t) + .06 * Math.sin(t * 19), 1 - t]); }
     return a;
   }
-  function setRoute(points) {
+  // points：路線折線（m.route）；meters：每個點走到第幾公尺（m.routeM，路線地標的位置跟遊戲里程對得上）
+  function setRoute(points, meters) {
     if (points && points === H.src && H.base) { H.angle = null; H.lastF = -1; H.dirty = true; if (H.els.rctx) drawRadar(0, true); return; }   // 同一條路線：底圖不用重畫
     H.src = points || null;
     let p = Array.isArray(points) && points.length >= 2 ? points.filter(q => q && isFinite(q[0]) && isFinite(q[1])) : null;
@@ -230,8 +231,9 @@
     const ext = Math.max(x1 - x0, y1 - y0, 1e-6), sc = EXTENT / ext;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const w = p.map(q => [WORLD / 2 + (q[0] - cx) * sc, WORLD / 2 + (q[1] - cy) * sc]);
-    const cum = [0];
+    let cum = [0];
     for (let i = 1; i < w.length; i++) cum.push(cum[i - 1] + Math.hypot(w[i][0] - w[i - 1][0], w[i][1] - w[i - 1][1]));
+    if (Array.isArray(meters) && meters.length === w.length && w.length === points.length) cum = meters.slice();   // 照路線每個點的公尺數找玩家位置（不是照折線長度）
     H.pts = w; H.cum = cum; H.total = Math.max(1e-6, cum[cum.length - 1]);
     H.seed = ((Math.round(p[0][0] * 997) * 31 + Math.round(p[p.length - 1][1] * 991) * 17 + p.length * 7) >>> 0) % 9973 + 1;
     H.angle = null; H.lastF = -1;

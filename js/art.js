@@ -44,7 +44,8 @@ const SHEETS = [
   [/^pet_leopardcat(_rain)?_step8$/, 8, 1, { order:PET_ORDER.leopardcat, air:true, wide:true }],
   [/^pet_magpie(_rain)?_fly12$/, 6, 2, { order:PET_ORDER.magpie, air:true, wide:true }],
   [/_step8$/, 8, 1, { order:STEP8 }],    // hiker_step8、hiker_rain_step8
-  [/_stairs16$/, 8, 2, { order:STAIRS16 }] // hiker_stairs16、hiker_rain_stairs16（兩張姿勢相同）
+  [/_stairs16$/, 8, 2, { order:STAIRS16 }], // hiker_stairs16、hiker_rain_stairs16（兩張姿勢相同）
+  [/_turn16$/, 8, 2]   // hiker_turn16、hiker_rain_turn16：斜後方往右前方走，16 格就是完整的左右兩步，照原順序播（左彎整張鏡射）
 ];
 const POSE = /^hiker_/;   // 登山客的圖：單張動作也用上半身置中（見 prep）
 function sheetOf(id){ for (let i = 0; i < SHEETS.length; i++) if (SHEETS[i][0].test(id)) return SHEETS[i]; return null; }
