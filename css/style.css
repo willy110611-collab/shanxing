@@ -809,7 +809,7 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 /* 封面（讀取畫面跑完後，輕點進入）：美術圖 cover_portrait 鋪滿；沒有圖時是紙墨風的暫代封面。動態（淡入、字的呼吸、淡出）在「動態效果」段落 */
 .cover{position:fixed;inset:0;z-index:101;display:none;overflow:hidden;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent;background:radial-gradient(ellipse at 70% 20%,#fff4d6 0%,#f3dcae 45%,#d9b47c 100%)}
 .cover.on{display:block}
-.cvArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.cvArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 50%;pointer-events:none}   /* 窄手機左右會裁掉一點：多裁左邊，登山客（在右邊）和睡墊才完整 */
 .cover.art .cvPh{display:none}
 .cvPh{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:calc(24vh + env(safe-area-inset-top))}
 .cvTitle{font-family:var(--fontT);font-size:64px;letter-spacing:14px;padding-left:14px;color:#5a3a22;text-shadow:0 2px 0 rgba(255,250,235,.8)}
