@@ -14,12 +14,16 @@ $regions = [regex]::Matches($regBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline'
 $mtBlock = [regex]::Match([IO.File]::ReadAllText((Join-Path $here '..\js\data.js')), '(?s)SX\.MOUNTAINS\s*=\s*\[(.*?)\];').Groups[1].Value
 $mts = [regex]::Matches($mtBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline') | ForEach-Object { $_.Groups[1].Value }
 $opaque = '^(sky_|ground_|enc_|scene_|plaza_|ui_page$|summit_(' + ($mts -join '|') + ')$|map_(' + ($regions -join '|') + ')$)'
-# 只在網頁上顯示、不畫在畫布上的圖：寶物卡、集印、介面木框和按鈕、圖示、天氣、稀有度、徽章、表情、標題
+# 只在網頁上顯示、不畫在畫布上的圖：寶物卡、集印、介面木框和按鈕、圖示、稀有度、徽章、標題
 # 2026-11-24 iPhone「重複發生問題」：開遊戲時把所有圖都解開放在記憶體（約 540 MB）整頁當掉。這些圖改成用到才下載、由網頁自己顯示，
-# 透明邊在轉檔時就裁掉（art\trim.js），遊戲不再先解成畫布再裁。要畫在畫布上的圖（face_ 狀態臉、map_ 地圖）不能放進來
-$htmlOnly = '^(t_|stamp_|ui_|icon_|wx_|rarity_|badge_|emo_|title_logo$|encounter_frame$)'
+# 透明邊在轉檔時就裁掉（art\trim.js），遊戲不再先解成畫布再裁。
+# 要畫在畫布上的圖不能放進來（tools/check.js 會擋）：face_ 狀態臉、wx_ 右上天氣、emo_ 廣場頭上的表情、map_ 地圖、icon_lock 地圖木牌上的鎖
+$htmlOnly = '^(t_|stamp_|ui_|icon_(?!lock$)|rarity_|badge_|title_logo$|encounter_frame$)'
 # 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖
 $lazy = '^(enc_|scene_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
+# 介面的按鈕、木框、圖示每個畫面都看得到：讀取畫面時就先下載好（manifest 標 pre），只下載、不解開放記憶體
+# （2026-11-24 改成用到才下載後，更新完第一次打開按鈕透明到圖下載完，決定先下載好）。寶物卡、集印照樣打開背包才下載
+$pre = '^(ui_|icon_|rarity_|badge_|title_logo$|encounter_frame$)'
 
 # 合法的名字只有一個來源：docs\GEMINI繪圖清單.md 裡用反引號標起來的英文名
 $doc = [IO.File]::ReadAllText((Join-Path $here '..\docs\GEMINI繪圖清單.md'))
@@ -68,7 +72,7 @@ if ($skipped.Count) { Write-Host "`n認不出名字、沒有處理（檔名裡�
 # 產生清單：檔名 + 檔案內容指紋（SHA-1 前 8 碼）。圖換了網址才會變，沒換的圖網址不變，手機不用重新下載
 $items = Get-ChildItem $here -File | Where-Object { $_.Extension -match '^\.(png|jpg|webp)$' } | Sort-Object Name | ForEach-Object {
   $v = (Get-FileHash -Algorithm SHA1 $_.FullName).Hash.Substring(0, 8).ToLower()
-  '{"file":"' + $_.Name + '","v":"' + $v + '"' + ($(if ($_.BaseName -match $lazy) { ',"lazy":1' } else { '' })) + '}'
+  '{"file":"' + $_.Name + '","v":"' + $v + '"' + ($(if ($_.BaseName -match $lazy) { ',"lazy":1' } else { '' })) + ($(if ($_.BaseName -match $pre) { ',"pre":1' } else { '' })) + '}'
 }
 $json = '[' + (($items) -join ",`n ") + ']'
 [IO.File]::WriteAllText((Join-Path $here 'manifest.json'), $json + "`n", (New-Object System.Text.UTF8Encoding $false))

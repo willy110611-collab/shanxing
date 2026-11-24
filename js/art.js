@@ -217,16 +217,18 @@ function load(){
     if (!Array.isArray(list) || !list.length) { finish(); return; }
     // lazy：只在卡片上顯示的大插圖（奇遇、登頂），開遊戲時不下載，<img> 顯示時瀏覽器才去拿
     list.filter(it => it.lazy).forEach(it => { const id = it.file.replace(/\.[a-z]+$/i, ''); lib[id] = { img:null, w:0, h:0, frames:[], opaque:true, lazy:true }; urls[id] = 'art/' + it.file + '?v=' + it.v; });
-    const todo = list.filter(it => !it.lazy); let done = 0; setProg(0, todo.length);
-    return Promise.all(todo.map(it => new Promise(res => {
+    const todo = list.filter(it => !it.lazy), pre = list.filter(it => it.lazy && it.pre); let done = 0; setProg(0, todo.length + pre.length);
+    // pre：介面的按鈕、木框、圖示（lazy 但每個畫面都看得到）：讀取畫面時就先下載進快取（sw.js 的美術快取），只下載、不解開放記憶體，進遊戲時馬上顯示
+    const preDone = pre.map(it => fetch('art/' + it.file + '?v=' + it.v).then(r => r.blob(), () => null).catch(() => null).then(() => setProg(++done, todo.length + pre.length)));
+    return Promise.all(preDone.concat(todo.map(it => new Promise(res => {
       const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
       const u = 'art/' + file + '?v=' + it.v;      // v 是檔案內容指紋：圖換了網址才變，沒換的圖手機不用重新下載
-      const end = () => { setProg(++done, todo.length); res(); };
+      const end = () => { setProg(++done, todo.length + pre.length); res(); };
       img.onload = () => { let p; try { p = prep({ id, file }, img); } catch (e) { end(); return; }
         p.then(e => { lib[id] = e; e.fit = it.fit || null; urls[id] = u; }, () => {}).then(end); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
       img.onerror = end;
       img.src = u;
-    }))).then(() => { listeners.forEach(fn => { try { fn(); } catch (e) {} }); finish(); });   // 先讓各畫面換上美術圖，再收起讀取畫面
+    })))).then(() => { listeners.forEach(fn => { try { fn(); } catch (e) {} }); finish(); });   // 先讓各畫面換上美術圖，再收起讀取畫面
   });
 }
 load();

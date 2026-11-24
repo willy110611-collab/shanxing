@@ -41,7 +41,7 @@
     if (!L) L = loops[slot] = { el:null, gn:null, name:null, gain:0, k:0, fade:null };
     if (!A.on) name = null;
     if (L.name === name) { L.gain = gain; if (L.el && !L.fade) setLevel(L, 1); return; }
-    if (L.el) { if (L.fade) clearInterval(L.fade); if (A.on) fadeTo(Object.assign({}, L, { fade:null }), 0, true); else halt(L.el, L.gn); }   // 舊的那首淡出後停掉（用副本，新歌才不會被一起停）；關聲音、切到背景就馬上停（背景時計時器可能被暫停）
+    if (L.el) { if (L.fade) clearInterval(L.fade); if (A.on) { const o = Object.assign({}, L, { fade:null }); fading.add(o); fadeTo(o, 0, true); } else halt(L.el, L.gn); }   // 舊的那首淡出後停掉（用副本，新歌才不會被一起停）；關聲音、切到背景就馬上停（背景時計時器可能被暫停）
     if (L.fade) clearInterval(L.fade);
     L.name = name; L.gain = gain; L.el = null; L.gn = null; L.fade = null; L.k = 0;
     if (!name) return;
@@ -62,14 +62,26 @@
     if (L.fade) clearInterval(L.fade);
     const from = L.k, el = L.el, gn = L.gn; let i = 0;
     const h = L.fade = setInterval(() => { i++; setLevel(L, from + (to - from) * Math.min(1, i / 15));
-      if (i >= 15) { clearInterval(h); if (L.fade === h) L.fade = null; if (stop) halt(el, gn); } }, 60);
+      if (i >= 15) { clearInterval(h); if (L.fade === h) L.fade = null; if (stop) { halt(el, gn); fading.delete(L); } } }, 60);
+  }
+  // 正在淡出的舊歌（換畫面、換天氣時）：不在 loops 裡，要另外記著，關聲音、切到背景時才停得到
+  // 2026-11-24 測試者：網頁關掉後音樂還在。換歌那一秒剛好切到背景，iPhone 背景會暫停計時器，舊歌就一直以淡出到一半的音量播下去
+  const fading = new Set();
+  function stopAll(){
+    Object.keys(loops).forEach(k => track(k, null, 0));
+    fading.forEach(L => { if (L.fade) clearInterval(L.fade); halt(L.el, L.gn); }); fading.clear();
   }
   function halt(el, gn){ el.pause(); el.removeAttribute('src'); el.load(); if (gn) gn.disconnect(); }
   function retry(){ Object.values(loops).forEach(L => { if (L.el && L.el.paused && L.name) { const p = L.el.play(); if (p && p.catch) p.catch(() => {}); } }); }
 
   A.unlock = () => { const c = ensure(); retry(); return c; };
   A.setVol = v => { A.vol = v; if (master) master.gain.value = v; Object.values(loops).forEach(L => { if (L.el && !L.gn) setLevel(L, L.k); }); };
-  A.setOn = on => { A.on = on; if (!on) Object.keys(loops).forEach(k => track(k, null, 0)); else A.mood(A._mood || {}); };
+  // 關聲音／切到背景：所有長聲音（含淡出到一半的舊歌）馬上停，Web Audio 也暫停（短音效、還在路上的聲音一起靜音）
+  A.setOn = on => {
+    A.on = on;
+    if (!on) { stopAll(); if (ctx && ctx.state === 'running') { const r = ctx.suspend(); if (r && r.catch) r.catch(() => {}); } }
+    else A.mood(A._mood || {});
+  };
 
   // 依畫面和天氣切換音樂與環境音
   let dayPick = Math.random() < 0.5 ? 'bgm_day' : 'bgm_day2';
