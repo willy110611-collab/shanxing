@@ -1735,6 +1735,7 @@ S.squeezeAt = function(){ const out = []; for (let i = 1; i <= N; i++) { const c
 S.passAt = function(){ const out = []; for (let i = 0; i <= N; i++) if (Hh(i, 300) < PASS_P && !railOn(i)) out.push(Math.round(i * SEG)); return out; };   // 測試用：鏡頭前掠過的芒草／蕨類在哪裡（公尺）
 S.curveAt = function(m){ return cAt(Math.floor(m / SEG)); };   // 測試用：某個位置（公尺）的彎度（0＝直線，正的＝右彎）
 S.turn = function(){ return hero.turn; };                     // 測試用：登山客現在轉彎傾身多少（-1～1）
+S.roadAt = function(){ const out = []; for (let j = 0; j <= DRAW; j++) out.push([pX[j], pY[j], pS[j] * rwAt(bG + j)]); return out; };   // 測試用：上一格每段路面在畫面上的中心 x、上下 y、半寬（css 像素），掃描地面縫時把路面（木頭階梯的橫木）排除
 S.addCairn = function(m, side){ cairns.push({ type:'mycairn', m:Math.max(0, +m || 0), side:side < 0 ? -1 : 1, text:'' }); mergeProps(); };
 S.setCairns = function(list){
   cairns = [];
@@ -2437,7 +2438,8 @@ function bankWd(i, side){ return BANKW + (i >= 0 && i <= N + 1 ? bankR[i * 2 + (
 function shelfHi(i, side){ return i >= 0 && i <= N + 1 ? shelfV[i * 2 + (side > 0 ? 1 : 0)] : 0; }
 const WEARK = new Float32Array([1, 1]);   // 這段兩邊路緣磨損草色帶的濃度（高土坎那邊淡掉）
 const WEARM = new Float32Array([1, 1]), WEARS = new Float32Array([0, 0]), WEARF = new Float32Array([1, 1]);   // 路緣苔蘚土色帶、高土坎投在路面的影子：這段兩邊各多濃
-const LIP_FEATHER = 0.75, LIP_FEATHER_J = 10, MOSS_SOIL = 37, MOSS_SHADE = 36, CURB_IN = 0.16, CURB_MOSS = 0.55, BANK_SHADE = 0.55;   // 路緣最多往路面裡吃進來幾公尺（蜿蜒）；路緣苔蘚帶多濃；高土坎投在路面的影子最濃多少（再乘土坎高度、有沒有太陽）
+const LIP_FEATHER = 0.75, LIP_FEATHER_J = 10, MOSS_SOIL = 37, MOSS_SHADE = 36, STAIR_PAD = 43, CURB_IN = 0.16, CURB_MOSS = 0.55, BANK_SHADE = 0.55;   // 路緣最多往路面裡吃進來幾公尺（蜿蜒）；路緣苔蘚帶多濃；高土坎投在路面的影子最濃多少（再乘土坎高度、有沒有太陽）
+// STAIR_PAD：木頭階梯兩端墊的土（色表第 14 種「路緣的土」原色）：跟土坎切面同一個褐色系，不用苔蘚陰影的深青綠（2026-11-24 回報看起來像一條漆上去的深綠帶）
 // 某一段 f 處那一邊蜿蜒路緣離路中心幾公尺（路面、階梯本身照 rwF 畫，路緣的土邊、草唇、苔蘚帶從這裡量，蓋過路面的邊）
 function rwSide(i, side, f){ const g = Math.max(0, Math.min((N + 2) * SOFT_K, Math.round((i + f) * SOFT_K))); return rwF(i, f) - softE[(g * 2 + (side > 0 ? 1 : 0)) * SOFT_V + 11]; }
 function terrH(i, side, d){
@@ -3522,7 +3524,7 @@ function drawWorld(b, t, jHi, jLo, far){
         if (wEnd) {
           // 階梯兩端的土（立面、踏面之前先墊）：從踏面邊往裡 STAIR_TUCK、往外兩倍，從每一階踏面一直墊到立面頂（下一階踏面的前緣），
           // 立面和踏面再蓋上去：階梯兩端跟土坎之間不管怎麼斜都不會露出後面的天空或一個亮的小三角形
-          ctx.globalAlpha = cka; ctx.fillStyle = LUT[MOSS_SHADE * FOGN + fi]; ctx.beginPath();
+          ctx.globalAlpha = cka; ctx.fillStyle = LUT[STAIR_PAD * FOGN + fi]; ctx.beginPath();
           for (let q = 0; q < n; q++) {
             const fa = q / n, fb = (q + 1) / n, h0 = pW[j] + rise * fa * tm, h1 = q === n - 1 ? pW[j] + rise : pW[j] + rise * fb * tm;
             const sa = stepS(j, fa), xa = stepX(j, fa, sa), sb = stepS(j, fb), xb = stepX(j, fb, sb), ya = (q === 0 ? yb : HOR - (h0 - camY) * sa), yr = HOR - (h1 - camY) * sb;
