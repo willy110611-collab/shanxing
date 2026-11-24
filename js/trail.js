@@ -185,6 +185,10 @@ const GAIT_H = { hiker_tired_step8:1, hiker_rain_tired_step8:1, hiker_walk:1, hi
 const gait = { act:null, at:0, dur:0, aflip:false, sid:'', sf:false, tB:90, tH:90, tI:140, lookM:-1, lvl:0, pace:1, mode:'walk', modeT:9, modeF:false, bendT:0, tired:false, cur:'', curF:false, prev:'', prevF:false, k:1 };
 const parts = [], flyers = []; let pIdx = 0;
 let curS = null, curT = 0, heroDone = false;
+// 擋到登山客的東西變透明：這一輪畫世界時登山客已經畫了（heroFront），之後畫的東西都在他前面；蓋住他身體多少，就淡掉多少（最多淡掉 HIDE_A）。
+// 急彎時路旁的樹、彎道的大樹會掃過鏡頭和登山客之間，整片蓋住人；所有路旁東西都經過 drawSpr，所以只在這裡處理一次
+const HIDE_A = 0.8, HIDE_MAX = 0.35;   // 好幾叢疊在一起時合起來最多還蓋住他 HIDE_MAX（越近的越先讓）
+let heroFront = false, heroCov = 0;   // heroCov：這一格擋在登山客前面的東西合起來還蓋住他幾成（巡檢用）
 
 // ═════════ 小工具 ═════════
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -502,6 +506,7 @@ const TEX_MINPX = 0.8;   // 一段路在畫面上低於這麼多像素時，地�
 function texSnap(yA, y0, yB, h, q, n){ return h > 0.01 ? (yA - Math.round(lerp(y0, yB, q / n) * DPR) / DPR) / h : q / n; }
 // 每條貼圖用同一個橫向比例，條與條交界在路緣那邊會錯開「條高 × 0.26」像素左右（路中間不錯開）：近處花紋大看得出來（像撕開的紙），
 // 所以近處（每公尺超過 SUB_NEAR_S 像素）的路面切細一點；一段最多切 SUB_MAX 條，畫面下緣以外那截不切
+const RISER_K = 1.04;   // 立面（和看不到踏面時接起立面的那一面）比踏面寬幾倍，傾斜一起乘：同一條線上，只是兩端多伸出一點
 const SUB_MAX = 64, SUB_PX_NEAR = 4, SUB_NEAR_S = 100;
 function texRun(T, uc, xA, yA, sA, xB, yB, sB, zA, a, path, sub, tv){
   const h = yA - yB;
@@ -2175,6 +2180,7 @@ function drawHero(s, t, bx, by, bs, bart){
   if (!heroArt(ctx, s, t, undefined, true)) on2D(function(c){ if (s.sleep) heroSleep(c, t); else if (s.rest) heroRest(c, t); else heroWalk(c, t); });
   ctx.restore();
   LIT.on = false; LIT.dap = 0; benchArt = false;
+  heroFront = !bart;   // 之後畫的都在登山客前面（坐長椅的整張圖本身就含長椅，不算）
 }
 let benchArt = false;   // 這一次畫的是坐長椅的美術圖（drawHero 叫 heroArt 時用）
 
@@ -2503,10 +2509,15 @@ function sprShadow(sp){
 }
 // 伸進路面的植物走到登山客旁邊時慢慢變透明（從他身後 1 公尺到身前 0.2 公尺），才不會擋到人；以前是一走到他前面就整株消失。要在 proj 之後叫（用 gz）
 function intrA(rw, xo, w){ const k = clamp((rw + 0.3 - (xo - w * 0.5)) / 0.4, 0, 1); return 1 - k * (1 - clamp((gz - HZ + 0.2) / 1.2, 0, 1)); }
+function heroCover(x0, y0, w, h){   // 這個範圍蓋住登山客身體（腳底到頭頂、左右各 45 公分）的幾成
+  const hu = hero.u * 45, ix = Math.min(x0 + w, hero.sx + hu) - Math.max(x0, hero.sx - hu), iy = Math.min(y0 + h, hero.sy) - Math.max(y0, hero.top);
+  return ix > 0 && iy > 0 ? ix * iy / (2 * hu * Math.max(1, hero.sy - hero.top)) : 0;
+}
 function drawSpr(sp, x, y, sc, fq, sh, a){
   // 只有在鏡頭後面（真正的距離被 proj 壓到下限）才不畫；鏡頭前再近都照原本大小畫，自己滑出畫面（以前離鏡頭 1.5 公尺內慢慢變透明，畫面邊緣的東西會提早不見）
-  const dw = sp.w * sc, dh = sp.hm * sc, k = a * clamp((dh - 2) / 2.5, 0, 1) * (gz > NEAR_GZ ? 1 : 0); if (k < 0.01) return;
+  const dw = sp.w * sc, dh = sp.hm * sc; let k = a * clamp((dh - 2) / 2.5, 0, 1) * (gz > NEAR_GZ ? 1 : 0); if (k < 0.01) return;
   const x0 = x - dw * 0.5; if (offView(x0, y - dh, dw, dh)) return;
+  if (heroFront) { const c = heroCover(x0, y - dh, dw, dh); if (c > 0) { k = Math.min(k * (1 - HIDE_A * c), Math.max(0, 1 - (1 - HIDE_MAX) / (1 - heroCov)) / c + Math.max(0, 1 - c / 0.15)); heroCov = 1 - (1 - heroCov) * (1 - k * c); if (k < 0.01) return; } }   // 只擦到一點邊的不會整株突然不見
   if (sh > 0.01) {   // 地面影子＋接觸陰影：每種東西先合成一張（sprShadow），一次畫完（以前每棵樹、每叢草都要畫兩次）；跟著太陽伸出去的投影排隊（castQ）
     const lc = qs.light;   // 畫質最低那兩級只留接觸陰影（一張小圖），不畫腳印和投影；換級時兩種交叉淡換
     if (lc < 0.99) {
@@ -2949,7 +2960,7 @@ function stoneEdges(i, j, n, fi, a, rock, G, ta, fq){
           ctx.moveTo(ea + side * kA * 0.55 * sa, ya); ctx.lineTo(ea + side * kA * sa, ya); ctx.lineTo(em + side * kM * sm, ym); ctx.lineTo(em + side * kM * 0.55 * sm, ym); ctx.closePath();
           ctx.moveTo(em + side * kM * 0.55 * sm, ym); ctx.lineTo(em + side * kM * sm, ym); ctx.lineTo(eb + side * kB * sb, yt); ctx.lineTo(eb + side * kB * 0.55 * sb, yt); ctx.closePath();
         } else if (yt - yr > 0.8) {   // 石頭側面：立面往外伸出一截，外側上緣往下斜
-          const rx = xb + side * wb * 1.04, ext = lerp(SE_EXT[0], SE_EXT[1], Hh(id, 713 + h)) * sb;
+          const rx = xb + side * wb * RISER_K, ext = lerp(SE_EXT[0], SE_EXT[1], Hh(id, 713 + h)) * sb;
           ctx.moveTo(rx, yr); ctx.lineTo(rx + side * ext * 0.8, yr + (yt - yr) * 0.12); ctx.lineTo(rx + side * ext, yr + (yt - yr) * 0.55); ctx.lineTo(rx + side * ext * 0.7, yt + 0.7); ctx.lineTo(rx, yt + 0.7); ctx.closePath();   // 外側往下斜、圓鈍，像一塊石頭的端面
         }
       }
@@ -3164,7 +3175,7 @@ function drawWorld(b, t, jHi, jLo, far){
   const snowTrees = snowAmt > 0.5 && SPR.coniferS;
   const lightA = (isNight || isRain || isFog || isSnow) ? 0 : clamp((sunVis - 0.3) / 0.5, 0, 1) * (1 - qs.light);   // 樹影、光斑：要有太陽才畫
   let j, k, pi = AP.length - 1;
-  heroDone = !!far; lodSkip = false; CQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
+  heroDone = !!far; heroFront = false; if (!far) heroCov = 0; lodSkip = false; CQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
   const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
   if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.bot.fill(-Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
   for (j = jHi; j >= jLo; j--) {
@@ -3272,12 +3283,12 @@ function drawWorld(b, t, jHi, jLo, far){
           const fa = q / n, fb = (q + 1) / n, h0 = pW[j] + rise * fa * tm, h1 = q === n - 1 ? pW[j] + rise : pW[j] + rise * fb * tm, mid = q < n - 1 ? tm : 1;   // mid：中間那幾階的細節（墨線、壓暗）跟著高度一起淡出
           const sa = stepS(j, fa), xa = stepX(j, fa, sa), sb = stepS(j, fb), xb = stepX(j, fb, sb);
           const ya = (q === 0 ? yb : HOR - (h0 - camY) * sa), yt = HOR - (h0 - camY) * sb, yr = HOR - (h1 - camY) * sb;
-          const wa = rwF(i, fa) * sa, wb = rwF(i, fb) * sb, W4 = wb * 1.04;   // 立面比踏面寬 4%：傾斜也一起乘 1.04（kr4、kt4），立面上下緣才跟踏面的邊在同一條線上（以前兩條線斜率不同，彎道上兩端露出細縫）
+          const wa = rwF(i, fa) * sa, wb = rwF(i, fb) * sb, W4 = wb * RISER_K;   // 立面比踏面寬 4%：傾斜也一起乘 1.04（kr4、kt4），立面上下緣才跟踏面的邊在同一條線上（以前兩條線斜率不同，彎道上兩端露出細縫）
           // 每條邊右端往下（左端往上）幾像素。接平路的那一頭，傾斜照這條邊在這段的位置 f 慢慢收到 0（平路的邊是水平的，斜了會露縫）：
           // 同一條邊不管從哪一階算都一樣。以前只把接平路的那一條邊設成 0、旁邊那條邊照樣很斜，急彎時那一階的立面扭成交叉的帶子
           const rmp = f => Math.min(1, stPrev ? 1 : 2 * f, stNext ? 1 : 2 * (1 - f));
           const ka = stairTilt(h0, sa, rwF(i, fa), dcAt(j, fa)) * rmp(fa), kt = stairTilt(h0, sb, rwF(i, fb), dcAt(j, fb)) * rmp(fb), kr = stairTilt(h1, sb, rwF(i, fb), dcAt(j, fb)) * rmp(fb);
-          const kr4 = kr * 1.04, kt4 = kt * 1.04;
+          const kr4 = kr * RISER_K, kt4 = kt * RISER_K;
           if (seA > 0.01) { const o = q * SEQ_N; SEQ[o] = xa; SEQ[o + 1] = ya; SEQ[o + 2] = wa; SEQ[o + 3] = sa; SEQ[o + 4] = xb; SEQ[o + 5] = yt; SEQ[o + 6] = yr; SEQ[o + 7] = wb; SEQ[o + 8] = sb; SEQ[o + 9] = ka; SEQ[o + 10] = kt; SEQ[o + 11] = kr; }
           // 立面（往上的那一階的正面）：比踏面暗，上緣一條受光的邊。往下走的階梯立面背對鏡頭（上緣反而比下緣低），看不到就不畫
           const rv = Math.min((yt - kt4) - (yr - kr4), (yt + kt4) - (yr + kr4)), riser = rv > 0;
@@ -3329,9 +3340,10 @@ function drawWorld(b, t, jHi, jLo, far){
           } else {
             // 整片踏面都在眼睛上面（遠處爬上稜線的階梯、從下面往上看）：看到的是整塊階梯朝向鏡頭的那一面，跟立面同色，把上一階立面的上緣和這一階立面的下緣接起來。
             // 以前什麼都不畫：路橫著走的時候一根根立面左右錯開，中間露出後面的地面、天空，遠遠看是一排虛線
-            ctx.fillStyle = LUT[16 * FOGN + fi]; quadE(xa, ya, wa, ka, xb, yt, wb, kt);
-            ctx.globalAlpha = fade * RISER_DK * stk * (1 - fq); ctx.fillStyle = '#2a1e22'; quadE(xa, ya, wa, ka, xb, yt, wb, kt); ctx.globalAlpha = fade;
-            if (AUD.geo && fade > 0.5) { AUD.geo.push({ t:3, i, q, xa, ya, wa, ka, xb, yt, wb, kt }); AUD.geo.push({ t:2, i, q, xb, yt, yr, kr4, kt4, W4, riser }); }   // 測試用：看不到踏面的那一階（立面、接起來的那一面）
+            const wa4 = wa * RISER_K, ka4 = ka * RISER_K;   // 跟立面一樣寬（RISER_K）：以前用踏面寬，路橫著走時兩側一階凸一階凹，像梳子（2026-11-24 太平山 893 公尺）
+            ctx.fillStyle = LUT[16 * FOGN + fi]; quadE(xa, ya, wa4, ka4, xb, yt, W4, kt4);
+            ctx.globalAlpha = fade * RISER_DK * stk * (1 - fq); ctx.fillStyle = '#2a1e22'; quadE(xa, ya, wa4, ka4, xb, yt, W4, kt4); ctx.globalAlpha = fade;
+            if (AUD.geo && fade > 0.5) { AUD.geo.push({ t:3, i, q, xa, ya, wa:wa4, ka:ka4, xb, yt, wb:W4, kt:kt4 }); AUD.geo.push({ t:2, i, q, xb, yt, yr, kr4, kt4, W4, riser }); }   // 測試用：看不到踏面的那一階（立面、接起來的那一面）
           }
           const a = farA(j, 52, 52);
           if (a > 0) {
@@ -3598,6 +3610,7 @@ function farStep(t, dt){
 }
 const AUD = { sky:null, geo:null };
 S.auditSky = function(col){ AUD.sky = col || null; };   // 測試掛鉤（tools/turnaudit.js 找地形破圖）：背景（天空、遠山、雲海）整片換成一個純色；null 恢復
+S.auditCov = function(){ return heroCov; };   // 測試掛鉤：上一格擋在登山客前面的東西還蓋住他幾成（0～1）
 S.auditGeo = function(on){ const g = AUD.geo; AUD.geo = on ? [] : null; return g; };   // 測試掛鉤：開始記錄下一次畫的路面、每一階階梯的形狀（true），或收回記錄（false）
 S.far = function(on){ if (on != null) { FAR.on = !!on; farReset(); } return { on:FAR.on, ok:FAR.ok, jK:FAR.jK }; };   // 測試掛鉤：開關遠景快取（比對畫面、量效能）
 
