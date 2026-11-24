@@ -14,7 +14,7 @@ const G = SX.gl2d = {};
 const API = ['drawImage', 'fillRect', 'strokeRect', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'quadraticCurveTo', 'bezierCurveTo', 'arc', 'ellipse', 'rect', 'roundRect',
   'fill', 'stroke', 'save', 'restore', 'translate', 'rotate', 'scale', 'setTransform', 'transform', 'createPattern', 'createLinearGradient', 'createRadialGradient',
   'measureText', 'fillText', 'strokeText', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha', 'globalCompositeOperation', 'font', 'textAlign', 'textBaseline',
-  'gpu', 'begin', 'grade', 'flush', 'drop', 'prep', 'stats', 'lost'];
+  'gpu', 'begin', 'grade', 'flush', 'drop', 'prep', 'stats', 'lost', 'uvs'];
 G.API = API;
 const SLOTS = 16;                // 一批最多同時用幾張貼圖（WebGL2 保證至少能同時綁 16 張；換圖不用另外送一批）
 const CAP = 1 << 16;             // 一批最多幾個頂點（滿了先送出去）
@@ -114,6 +114,7 @@ function Ctx(canvas, gl){
   this.m = [1, 0, 0, 1, 0, 0]; this.stack = []; this.sp = 0;
   this.globalAlpha = 1; this.globalCompositeOperation = 'source-over'; this.fillStyle = '#000'; this.strokeStyle = '#000';
   this.lineWidth = 1; this.lineCap = 'butt'; this.lineJoin = 'miter'; this.font = '10px sans-serif'; this.textAlign = 'start'; this.textBaseline = 'alphabetic';
+  this.uvs = null;   // 貼圖填色時每個路徑點自己的貼圖座標（一張圖＝1，跟路徑點同順序）：給了就不用圖案的變換算，見 P.fill
   this.px = new Float64Array(1024); this.pn = 0; this.subs = [0]; this.closed = [false]; this.cx = 0; this.cy = 0;   // 路徑：畫面像素座標
   this.st = { calls:0, batches:0, verts:0, uploads:0, frameBatches:0, frameCalls:0, frameVerts:0 };
   this.meas = document.createElement('canvas').getContext('2d');
@@ -358,6 +359,11 @@ P.pv = function(x, y){
   if (s === SOLID) { f32[f + 2] = 0; f32[f + 3] = 0; } else { f32[f + 2] = TU[0] * x + TU[2] * y + TU[4]; f32[f + 3] = TU[1] * x + TU[3] * y + TU[5]; }
   this.u32[f + 4] = this.fc; this.u32[f + 5] = s;
 };
+// 路徑第 p / 2 個點：貼圖座標用 uv 同一個位置的（P.fill 給了 uvs 時）
+P.pt2 = function(px, uv, p){
+  const f = (this.n++) * 6, f32 = this.f32;
+  f32[f] = px[p]; f32[f + 1] = px[p + 1]; f32[f + 2] = uv[p]; f32[f + 3] = uv[p + 1]; this.u32[f + 4] = this.fc; this.u32[f + 5] = this.ts;
+};
 // 四個畫面像素角（依序）畫成兩個三角形
 P.quad = function(x0, y0, x1, y1, x2, y2, x3, y3, t){
   this.open(6, t);
@@ -437,12 +443,14 @@ P.roundRect = function(x, y, w, h, r){
 P.fill = function(){
   this.st.calls++; this.st.frameCalls++;
   this.add = this.blendFor();
-  const t = this.style(this.fillStyle), px = this.px, subs = this.subs;
+  const t = this.style(this.fillStyle), px = this.px, subs = this.subs, uv = this.uvs;
   for (let k = 0; k < subs.length; k++) {
     const a = subs[k], b = k + 1 < subs.length ? subs[k + 1] : this.pn, n = (b - a) >> 1;
     if (n < 3) continue;
     this.open(n * 3 + 3, t);
-    if (n <= 4) {
+    if (uv && t && n <= 4) {   // 每個點自己的貼圖座標（從第一點放射）：相鄰兩塊共用的那條邊兩端座標一樣，貼圖沿著邊接得起來（一個仿射對不準整片高低不平的坡面）
+      for (let i = 1; i < n - 1; i++) { this.pt2(px, uv, a); this.pt2(px, uv, a + i * 2); this.pt2(px, uv, a + i * 2 + 2); }
+    } else if (n <= 4) {
       for (let i = 1; i < n - 1; i++) { this.pv(px[a], px[a + 1]); this.pv(px[a + i * 2], px[a + i * 2 + 1]); this.pv(px[a + i * 2 + 2], px[a + i * 2 + 3]); }
     } else {
       let mx = 0, my = 0; for (let i = a; i < b; i += 2) { mx += px[i]; my += px[i + 1]; } mx /= n; my /= n;
