@@ -1730,7 +1730,7 @@ S.curveAt = function(m){ return cAt(Math.floor(m / SEG)); };   // 測試用：�
 S.turn = function(){ return hero.turn; };                     // 測試用：登山客現在轉彎傾身多少（-1～1）
 S.roadAt = function(){ const out = []; for (let j = 0; j <= DRAW; j++) out.push([pX[j], pY[j], pS[j] * rwAt(bG + j)]); return out; };   // 測試用：上一格每段路面在畫面上的中心 x、上下 y、半寬（css 像素），掃描地面縫時把路面（木頭階梯的橫木）排除
 // 測試用：地面遮罩（tools/edgescan 掃地面縫只看真正的地面，不靠顏色猜）。用 Canvas 2D 照上一格的位置整段現場再畫一格到透明的畫布上：
-// 地面那幾層（坡面底色、草地貼圖、土坎、路面、階梯、路緣、地上的光斑和投影，gmk(1)）照常畫；其他（植物、草叢、石頭、墨線、人、霧、前景框，gmk(0)／gmk(2)）
+// 地面那幾層（坡面底色、草地貼圖、土坎、路面、階梯、路緣、地上的光斑和投影，gmk(1)）照常畫；其他（人、霧、前景框 gmk(0)，草叢、石頭、墨線 gmk(2)，路旁的植物和道具 gmk(3)）
 // 改成擦掉（destination-out，擋住多少就擦掉多少），天空不畫。回傳 { w, h, m }：每個裝置像素的不透明度（0～255）＝這一點有幾成是看得到的地面。
 // paint：改成照原本的顏色畫、不是地面的那幾類直接不畫（查一條線是地面自己畫出來的、還是植物草叢墨線疊出來的），回傳 { w, h, d }（RGBA）。
 // 平常 GMK 是 null，gmk() 只多一個判斷
@@ -1743,8 +1743,8 @@ S.gmask = function(as, paint){   // as：哪幾類算地面（預設 [1]；查�
   if (gl0) useGL(false);
   S.resize();
   let out = null;
-  const st = { k:0, g:[0, 1, 0], paint:!!paint }, fn = {}, nop = function(){};
-  if (as) { st.g = [0, 0, 0]; as.forEach(function(k){ st.g[k] = 1; }); }
+  const st = { k:0, g:[0, 1, 0, 0], paint:!!paint }, fn = {}, nop = function(){};
+  if (as) { st.g = [0, 0, 0, 0]; as.forEach(function(k){ st.g[k] = 1; }); }
   // 擦掉的那幾層裡，程式自己換混色方式（例如發光的 lighter、畫完換回 source-over）不算數，一律照擦掉畫
   const px = new Proxy(c2d, {
     get(t, p){ const v = t[p]; if (typeof v !== 'function') return v; if (st.paint && !st.g[st.k] && GMK_DRAW[p]) return nop; return fn[p] || (fn[p] = v.bind(t)); },
@@ -2759,7 +2759,7 @@ function footQ(c, x, y, w, h, a, hg){
   if (!(a > 0.01)) return;
   const ye = y + h, hh = shRise(x, x + w, hg);
   let t = CQ.j; while (t > CQ.lo && pY[t] - hh * pS[t] < ye) t--;
-  if (t === CQ.j || FQ.n >= 512) { gmk(1); ctx.globalAlpha = a; ctx.drawImage(c, x, y, w, h); gmk(0); return; }
+  if (t === CQ.j || FQ.n >= 512) { const k0 = GMK ? GMK.k : 0; gmk(1); ctx.globalAlpha = a; ctx.drawImage(c, x, y, w, h); gmk(k0); return; }
   const o = FQ.n * 6, q = FQ.a; FQ.c[FQ.n++] = c;
   q[o] = x; q[o + 1] = y; q[o + 2] = w; q[o + 3] = h; q[o + 4] = a; q[o + 5] = t;
 }
@@ -3581,7 +3581,7 @@ function drawWorld(b, t, jHi, jLo, far){
   const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
   if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.bot.fill(-Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
   for (j = jHi; j >= jLo; j--) {
-    if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
+    gmk(0); if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false; CQ.j = j;
     // 彎道上這三個點不在一條直線上（中間那點偏開超過半個像素）就不合併：合成一段會切掉彎的外側，露出一條條背景的細縫
@@ -3872,7 +3872,7 @@ function drawWorld(b, t, jHi, jLo, far){
       }
       if (farA(j, turfJ(), 8) > 0 && TURF.length && snowAmt < 0.9) { gmk(2); drawTurf(i, j, y1, y2, s1, fq, fade, DS, dW1, Math.min(gw1, rw + lerp(30, 7, wallAt(i)))); gmk(1); } if (lightA > 0.01) groundLight(i, j, t, fq, fade * lightA);   // 森林步道外側被植物牆擋住，草叢只蓋到路邊幾公尺（省效能）   // 畫在路面之後：路邊第一排草會垂到土坎上
     }
-    gmk(1); castFlush(j); gmk(0);   // 這段地面畫完：落在這段（和更遠幾段）的投影畫上去，再畫這段的植物、道具
+    gmk(1); castFlush(j); gmk(3);   // 這段地面畫完：落在這段（和更遠幾段）的投影畫上去，再畫這段的植物、道具
     if (lod) lodRestore(j);   // 植物、道具照原本這一段的位置畫
     // 路旁植物：每段 4 個固定亂數位置（由遠到近）；森林步道的樹離路比較近、比較密，兩邊像一道樹牆
     const wl = wallAt(i), treeP = al ? lerp(0.5, 0.06, clamp(z0 / total, 0, 1)) : lerp(treeBase, 0.8, wl), spread = 26 * (1 - 0.6 * wl);
@@ -3990,7 +3990,7 @@ function drawWorld(b, t, jHi, jLo, far){
     // 一起爬的隊友（在自己這一段畫）
     for (k = 0; k < mates.length; k++) { const mt = mates[k]; if (mt.d >= z0 && mt.d < z0 + SEG) drawMate(mt, j, (mt.d - z0) / SEG, t, fade); }
   }
-  if (!heroDone) { drawHero(s, t); heroDone = true; }
+  gmk(0); if (!heroDone) { drawHero(s, t); heroDone = true; }
   gmk(1); castFlush(-Infinity); gmk(0);   // 還沒輪到的投影（伸到畫面最下面那段之外）全部畫掉
   ctx.globalAlpha = 1;
 }
