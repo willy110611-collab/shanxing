@@ -2431,6 +2431,10 @@ function shelfCut(i, sd){ return i >= 0 && i <= N + 1 ? shelfU[i * 2 + sd] : 0; 
 function bankWd(i, side){ return BANKW + (i >= 0 && i <= N + 1 ? bankR[i * 2 + (side > 0 ? 1 : 0)] : 0); }   // 土坎切面的寬（公尺）：高土坎是往外斜的土堤
 function shelfHi(i, side){ return i >= 0 && i <= N + 1 ? shelfV[i * 2 + (side > 0 ? 1 : 0)] : 0; }
 const WEARK = new Float32Array([1, 1]);   // 這段兩邊路緣磨損草色帶的濃度（高土坎那邊淡掉）
+const WEARM = new Float32Array([1, 1]), WEARS = new Float32Array([0, 0]), WEARF = new Float32Array([1, 1]);   // 路緣苔蘚土色帶、高土坎投在路面的影子：這段兩邊各多濃
+const LIP_FEATHER = 0.75, LIP_FEATHER_J = 10, MOSS_SOIL = 37, CURB_IN = 0.16, CURB_MOSS = 0.55, BANK_SHADE = 0.55, BANK_SHADE_COL = 'rgb(38,40,66)';   // 路緣最多往路面裡吃進來幾公尺（蜿蜒）；路緣苔蘚帶多濃；高土坎投在路面的影子最濃多少（再乘土坎高度、有沒有太陽）
+// 某一段 f 處那一邊蜿蜒路緣離路中心幾公尺（路面、階梯本身照 rwF 畫，路緣的土邊、草唇、苔蘚帶從這裡量，蓋過路面的邊）
+function rwSide(i, side, f){ const g = Math.max(0, Math.min((N + 2) * SOFT_K, Math.round((i + f) * SOFT_K))); return rwF(i, f) - softE[(g * 2 + (side > 0 ? 1 : 0)) * SOFT_V + 11]; }
 function terrH(i, side, d){
   const rw = rwAt(i);   // 這一段的路半寬（每段不一樣，地形從路緣量起）
   if (d <= rw) return 0;
@@ -2759,9 +2763,9 @@ const SOFT_J = 26, SOFT_FADE = 8;      // 幾段以內畫（最後幾段淡入�
 const SOFT_IN = [0.01, 0.12];           // 土邊吃進路面多少（公尺）
 const SOFT_SPILL = 0.3;                // 草唇蓋進路面最多多少（公尺，乘上超過 1 的部分）
 const SOFT_PEB_J = 20, SOFT_PEB_N = 3, SOFT_PEB_P = 0.45;   // 路邊小石子：幾段以內、每邊每段最多幾顆、每顆出現的機率
-const SOFT_TUFT_J = 24, SOFT_TUFT_P = 0.4;                  // 長進路面的小草叢：幾段以內、每邊每段出現的機率
+const SOFT_TUFT_J = 24, SOFT_TUFT_P = 0.4, CURB_J = 14, CURB_N = 2, CURB_P = 0.42, CURB_FERN = 0.22, CQV = new Float32Array(4 * 5 * 2);                  // 長進路面的小草叢：幾段以內、每邊每段出現的機率
 function softOn(){ return TH.trail !== 'wood'; }
-const SOFT_V = 11;                     // 每個節點每邊存幾個數（見 buildSoft）
+const SOFT_V = 12;                     // 每個節點每邊存幾個數（見 buildSoft）
 const SOFT_FQ = 0.3;                   // 路緣寬窄起伏多快：每個節點（0.4 公尺）走雜訊的幾格（0.3 ≈ 每 1.3 公尺起伏一次）
 const SOFT_JOG = 0.02;                 // 草唇下緣每一截中間那一點最多再往路面多伸幾公尺（以前 0.1：每 0.4 公尺鼓出一個尖角，近處放大成一排一排的鋸齒，看起來像一階一階的方塊）
 const SOFT_U_MIN = 1.05, SOFT_U_RND = 0.35;   // 草唇每個節點至少垂多低（再加 0～SOFT_U_RND 平滑起伏）：一定垂過土坎、蓋進路面一點。以前最少 0.9（有的節點沒垂到底、露出土坎），近處土坎切面有幾十像素高，草唇下緣在土坎上上下下，路緣看起來是一階一階的方塊缺口
@@ -2792,6 +2796,7 @@ function buildSoft(){
     softE[o + 7] = 0.1 + 0.45 * vn((g + 0.5) * SOFT_FQ + s * 11.1, 815);
     softE[o + 8] = 0;
     softE[o + 9] = SOFT_JOG * vn((g + 0.5) * SOFT_FQ + s * 3.3, 823);
+    softE[o + 11] = CURB_IN * (0.2 + 0.8 * ease01((0.65 * vn(g * 0.11 + s * 21.7, 841) + 0.35 * vn(g * 0.37 + s * 5.3, 843) - 0.3) / 0.4));   // 路緣往路面裡吃進來多少（公尺）：左右各自一條慢慢蜿蜒的線（每 3～8 公尺起伏一次），路緣不是平行路面的直線
   }
   for (let g = 0; g < n; g++) for (let s = 0; s < 2; s++) {   // 草唇蓋過土邊：節點上看這一點，中間那一點看前後兩端的平均
     const o = (g * 2 + s) * V;
@@ -2866,7 +2871,7 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
     const x = lerp(x1, x2, ak), y = lerp(yb, y2, ak), hw = lerp(w1, w2, ak), g = i * SOFT_K + k;
     for (let sd = 0; sd < 2; sd++) {
       const side = sd ? 1 : -1, o = (k * 2 + sd) * SOFT_PN, e = (g * 2 + sd) * SOFT_V, sk = lerp(stairB[clamp(i, 0, N + 1)], stairB[clamp(i + 1, 0, N + 1)], f), u = lerp(softE[e + 1], Math.min(softE[e + 1], STAIR_LIP), sk), out = softE[e + 3];   // 階梯段：草唇只垂到土坎一半，露出土切面
-      const bh = lerp(bankH(i, side), bankH(i + 1, side), f), ex = x + side * hw, tx = ex + side * lerp(bankWd(i, side), bankWd(i + 1, side), f) * s, ty = y - bh * s;
+      const bh = lerp(bankH(i, side), bankH(i + 1, side), f), ex = x + side * (hw - softE[e + 11] * s), tx = x + side * hw + side * lerp(bankWd(i, side), bankWd(i + 1, side), f) * s, ty = y - bh * s;   // ex：蜿蜒的路緣（土邊、草唇、磨損帶都從這裡量）；tx：土坎上緣照真正的路寬
       P[o] = ex; P[o + 1] = y; P[o + 2] = s; P[o + 3] = ex - side * softE[e] * s; P[o + 4] = tx; P[o + 5] = ty;
       if (u <= 1) { P[o + 6] = lerp(tx, ex, u); P[o + 7] = lerp(ty, y, u); } else { P[o + 6] = ex - side * (u - 1) * SOFT_SPILL * s; P[o + 7] = y; }
       P[o + 8] = tx + side * out * s; P[o + 9] = ty - (out * 0.3 + softE[e + 10]) * s;   // 草唇上緣往外多蓋一點（寬窄不一），蓋掉土坎上緣那條直線
@@ -2874,11 +2879,16 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
     }
   }
   // 路面靠邊那一圈漸漸變成土色：越靠邊越濃（一條平滑的漸層，像顏料暈開，不是一條硬邊）
-  if (!stp) wearRun(0, LUT[43 * FOGN + fi], a, s1, s2);
+  if (!stp) wearRun(0, LUT[MOSS_SOIL * FOGN + fi], a, s1, s2);   // 路面靠路緣那一圈：土色帶一點苔蘚綠（路緣的苔蘚土色帶就是這一條，沿路連續）
+  // 沿著蜿蜒路緣一條連續的苔蘚＋土色帶（半透明漸層，跟前後段接得起來），高土坎那一邊再加一條土坎投在路面上的影子
+  for (let sd = 0; sd < 2; sd++) { const c = Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)); WEARM[sd] = CURB_MOSS * (stp ? 0.6 : 1); WEARS[sd] = BANK_SHADE * clamp((c - 0.08) / 0.4, 0, 1) * (isNight ? 0.4 : 0.6 + 0.4 * sunVis); }
+  if (stp) wearRun(2, LUT[37 * FOGN + fi], a, s1, s2);   // 階梯段沒有上面那條：另外一條窄的苔蘚土色帶蓋住階梯兩端
+  if (WEARS[0] > 0.02 || WEARS[1] > 0.02) wearRun(3, BANK_SHADE_COL, a, s1, s2);
   // 土邊：路面邊緣往內吃進一點 → 土坎半截，內緣、外緣都凹凸不平。顏色跟那一邊的土坎一樣（左邊受光、右邊背光），土坎和土邊連成一片，
   // 路面和土坎之間那條直線換成凹凸的土邊內緣；土坎上緣那條直線由草唇蓋掉
   ctx.globalAlpha = a * SOFT_SOIL_A;   // 半透明：吃進路面那一截透出底下的路面花紋，土邊像顏料暈在路面上，不是一條平塗的土色直帶
   if (!stp) for (let sd = 0; sd < 2; sd++) {
+    ctx.globalAlpha = a * lerp(SOFT_SOIL_A, 0.9, clamp((Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)) - 0.04) / 0.16, 0, 1));   // 高土坎腳下的土邊幾乎不透明：蓋掉土坎切面下緣那條直線，留下蜿蜒的土邊
     ctx.beginPath();
     for (let k = 0; k < SOFT_K; k++) {
       const o = (k * 2 + sd) * SOFT_PN, q = o + SOFT_PN * 2;
@@ -2920,6 +2930,10 @@ function softEdge(i, j, x1, y1, yb, s1, x2, y2, s2, w1, w2, fi, a, ta, zA, stp){
     ctx.beginPath(); for (let k = 0; k < SOFT_K; k++) softLip(i, k, sd, 0); bladePath(nB, sd, 1, 0);
     ctx.globalAlpha = a * (1 - 0.8 * fi / (FOGN - 1)); ctx.fillStyle = SHC[softSH[sd] + 40]; ctx.fill(); ctx.globalAlpha = a;
   }
+  // 草唇蓋在路面上的下緣慢慢淡掉：下緣再往路面一圈越來越淡的草色漸層（WEAR_P[4]，不是一刀切齊的邊）
+  const fA = stp ? 0 : farA(j, LIP_FEATHER_J, 4); if (fA > 0) {   // 階梯段不畫：草唇的位置照整段斜面算，跟一階一階的踏面對不上，會變成一條浮在階梯上的半透明直帶
+    WEARF[0] = WEARF[1] = LIP_FEATHER * fA; wearRun(4, grs(fi, (softG[0] + softG[1]) >> 1), a, s1, s2); }   // 遠處草唇只剩幾像素，不畫（省效能）
+  ctx.globalAlpha = a;
   // 路緣外面被踩過的草：從草唇下緣往外，草色往淺的土黃綠拉，越靠路越淺（一條平滑的漸層，外緣看不出邊）
   for (let sd = 0; sd < 2; sd++) { const c = Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)); WEARK[sd] = 1 - clamp((c - 0.04) / 0.12, 0, 1); }
   wearRun(1, LUT[40 * FOGN + fi], a, s1, s2);
@@ -3006,8 +3020,11 @@ function bladeFill(n, sd, cls, part, col){ ctx.beginPath(); bladePath(n, sd, cls
 // 近處一段跨好幾百像素，就是一塊一塊顏色不一樣的補丁。現在每條只畫一層，用一張很小的漸層貼圖（離路緣幾公尺 → 多濃），
 // 外緣濃度慢慢降到 0（看不出邊）。貼圖橫向對齊「離路緣的距離」：一段切成約 WEAR_SUB 像素高的薄橫條，每條用自己那裡的比例（跟草地貼圖一樣，近處不會走樣）
 // d：離路緣幾公尺（往草地那邊為正）；[貼圖從 d 幾公尺到幾公尺, 從哪裡開始變濃／變淡到哪裡, 色塊畫到哪裡]
-const WEAR_P = [{ lo:-0.7, hi:0.1, r0:-0.55, r1:-0.06, up:true, poly:-0.6 }, { lo:-0.6, hi:1, r0:0.1, r1:0.7, up:false, poly:0.85 }];
-const WEAR_A = 0.42, WEAR_TW = 64, WEAR_SUB = 48;   // 最濃多少（以前兩層 0.24 疊起來）、漸層貼圖多寬（像素）、每條橫條約幾像素高
+const WEAR_P = [{ lo:-0.7, hi:0.1, r0:-0.55, r1:-0.06, up:true, poly:-0.6 }, { lo:-0.6, hi:1, r0:0.1, r1:0.7, up:false, poly:0.85 },
+  { lo:-0.42, hi:0.12, r0:-0.34, r1:-0.02, up:true, poly:-0.38 },    // 2：路緣蜿蜒那條線往路面裡一條半透明的苔蘚＋土色帶（沿著路緣連續，跟磨損帶一樣接得起來）
+  { lo:-0.62, hi:0.06, r0:-0.55, r1:0, up:true, poly:-0.58 },
+  { lo:-0.5, hi:0.2, r0:-0.18, r1:0.02, up:true, poly:0.14 }];      // 4：草唇下緣往路面淡掉的那一圈（poly：往路面幾公尺）      // 3：高土坎那一邊投在路面上的影子（越靠土坎越深）
+const WEAR_A = 0.42, WEAR_TW = 64, WEAR_SUB = 48, WEAR_SUB2 = 140;   // 最濃多少（以前兩層 0.24 疊起來）、漸層貼圖多寬（像素）、每條橫條約幾像素高
 const WEARC = new Map();               // 漸層貼圖（依顏色：霧越濃顏色越淡，用到哪個才做哪個，最多留 48 張：一格最多用到十幾張，不會每格重做）
 function wearTex(what, col){
   const key = what + col; let o = WEARC.get(key);
@@ -3024,12 +3041,19 @@ function wearTex(what, col){
 // what 0 從路緣往路面裡 WEAR_P.poly 公尺
 function wearPoly(what, sd, dst){
   const P = SOFT_P, side = sd ? 1 : -1, w = WEAR_P[what].poly; let n = 0;
-  if (what) {
+  if (what === 1) {
     for (let k = 0; k <= SOFT_K; k++) {
       const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o + 6]; dst[n++] = P[o + 7];
       if (k < SOFT_K) { const m = (k * 2 + sd) * 2; dst[n++] = LIPM[m]; dst[n++] = LIPM[m + 1]; }
     }
     for (let k = SOFT_K; k >= 0; k--) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o] + side * w * P[o + 2]; dst[n++] = P[o + 5]; }
+  } else if (what === 4) {   // 草唇下緣 → 往路面 w 公尺（草唇淡進路面的那一圈）；不超過這段近端
+    const yN = P[sd * SOFT_PN + 1];
+    for (let k = 0; k <= SOFT_K; k++) {
+      const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o + 6]; dst[n++] = P[o + 7];
+      if (k < SOFT_K) { const m = (k * 2 + sd) * 2; dst[n++] = LIPM[m]; dst[n++] = LIPM[m + 1]; }
+    }
+    for (let k = SOFT_K; k >= 0; k--) { const o = (k * 2 + sd) * SOFT_PN, d = w * P[o + 2]; dst[n++] = P[o + 6] - side * d; dst[n++] = Math.min(P[o + 7] + d * 0.3, yN); }
   } else {
     for (let k = 0; k <= SOFT_K; k++) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o]; dst[n++] = P[o + 1]; }
     for (let k = SOFT_K; k >= 0; k--) { const o = (k * 2 + sd) * SOFT_PN; dst[n++] = P[o] + side * w * P[o + 2]; dst[n++] = P[o + 1]; }
@@ -3111,14 +3135,16 @@ function lipPath(a, b){
   slabPath(CLA, lipPoly(LIPS, CLA), yHi, yLo);
 }
 // 畫 what 那條漸層色帶（兩邊）：sA、sB 這段近端、遠端每公尺幾像素
-function wearRun(what, col, a, sA, sB){
+function wearRun(what, col, a, sA, sB, only){   // only：只畫這一邊（0 左、1 右；不給＝兩邊）
   const P = SOFT_P, T = wearTex(what, col), p = patOf(T), pw = WEAR_P[what], span = pw.hi - pw.lo, m = TEX_MTX || new DOMMatrix();
   const yA = P[1], yB = P[SOFT_K * 2 * SOFT_PN + 1], yS = Math.min(yA, H + 2);
   if (yS <= yB) return;
-  const n = clamp(Math.ceil((yS - yB) / WEAR_SUB), 1, 16);
+  const n = clamp(Math.ceil((yS - yB) / (what >= 2 ? WEAR_SUB2 : WEAR_SUB)), 1, 16);   // 新加的三條（苔蘚帶、土坎影子、草唇淡出）切粗一點：顏色很淡、看不出條與條之間的差別，少畫很多筆
   ctx.fillStyle = p; ctx.globalAlpha = a;
   for (let sd = 0; sd < 2; sd++) {
-    if (what) { if (WEARK[sd] < 0.02) continue; ctx.globalAlpha = a * WEARK[sd]; }   // 山腰台階切出高土坎的那一邊：路邊沒有被踩過的草（色帶會蓋到土坎切面上），慢慢淡掉
+    if (only != null && sd !== only) continue;
+    const K = what === 1 ? WEARK : what === 2 ? WEARM : what === 3 ? WEARS : what === 4 ? WEARF : null;
+    if (K) { if (K[sd] < 0.02) continue; ctx.globalAlpha = a * K[sd]; }   // 山腰台階切出高土坎的那一邊：路邊沒有被踩過的草（色帶會蓋到土坎切面上），慢慢淡掉
     const side = sd ? 1 : -1, o0 = sd * SOFT_PN, oK = (SOFT_K * 2 + sd) * SOFT_PN, dy = P[oK + 1] - P[o0 + 1], gx = Math.abs(dy) > 0.01 ? (P[oK] - P[o0]) / dy : 0;   // 路緣在這段是一條直線：每往上 1 像素往旁邊 gx 像素
     const np = wearPoly(what, sd, CLA);
     let ya = yS;
@@ -3337,7 +3363,7 @@ function edgeLeaves(i, j, stp, n){
   for (let q = 0; q < 3; q++) {
     if (Hh(i, 140 + q) > 0.6) continue;
     proj(j, Hh(i, 143 + q), stp);
-    const side = Hh(i, 146 + q) < 0.5 ? -1 : 1, x = gx + side * (rwAt(i) - 0.05 - 0.25 * Hh(i, 149 + q)) * gs, r = Math.max(1, 0.06 * gs), a = Hh(i, 152 + q) * TAU;
+    const side = Hh(i, 146 + q) < 0.5 ? -1 : 1, x = gx + side * (rwSide(i, side, Hh(i, 143 + q)) - 0.02 - 0.25 * Hh(i, 149 + q)) * gs, r = Math.max(1, 0.06 * gs), a = Hh(i, 152 + q) * TAU;
     ctx.fillStyle = LEAFC[(Hh(i, 155 + q) * 4) | 0]; leaf(x, gy, r, a);
     if (r > 2.5) { ctx.lineWidth = Math.min(1, r * 0.15); ctx.strokeStyle = INK; ctx.stroke(); }
   }
@@ -3686,14 +3712,29 @@ function drawWorld(b, t, jHi, jLo, far){
       }
     }
     // 長進路面的小草叢（路緣融進草地）：每邊每段偶爾一叢，根部在路面邊緣往內 5～17 公分（蓋過路寬 10～25% 的那一圈），跟著距離變小
-    const tA = softOn() && sAt(i) !== 1 && SPR.clump ? fade * farA(j, SOFT_TUFT_J, 6) * (1 - endK(i)) * (1 - snowAmt) : 0;
-    if (tA > 0.01) for (let side = -1; side <= 1; side += 2) {
-      const h0 = side < 0 ? 840 : 846;
-      if (Hh(i, h0) > SOFT_TUFT_P) continue;
-      const f = Hh(i, h0 + 1), sp = SPR.clump[(Hh(i, h0 + 2) * SPR.clump.length) | 0], m = 0.5 + 0.5 * Hh(i, h0 + 3);
-      if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
-      proj(j, f, false);
-      drawSpr(sp, gx + side * (rwF(i, f) - 0.05 - 0.12 * Hh(i, h0 + 4)) * gs, gy, gs * m, fq, 0, tA);
+    // 沿著蜿蜒路緣一路長的小草叢、蕨類（2026-11-24 玩家意見：平台上一格一格的草叢）：每邊每段最多 CURB_N 叢，位置、大小、種類、離路緣多遠都不一樣，
+    // 一片密一片疏（低頻雜訊），前後交錯；長在路面上的貼著路面，長在路緣外的種在那裡的地面上（plantAt）。由遠到近畫
+    const tA = softOn() && sAt(i) !== 1 && SPR.clump ? fade * farA(j, CURB_J, 6) * (1 - endK(i)) * (1 - snowAmt) : 0;
+    if (tA > 0.01) {
+      let nc = 0;
+      for (let side = -1; side <= 1; side += 2) {
+        const sd = side > 0 ? 1 : 0, dens = CURB_P * (0.35 + 1.1 * vn(i * 0.23 + sd * 9.1, 851)), tall = clamp((Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)) - 0.04) / 0.16, 0, 1);
+        for (let q = 0; q < CURB_N; q++) {
+          const h0 = 860 + sd * 16 + q * 5; if (Hh(i, h0) > dens) continue;
+          const fern = SPR.fern && Hh(i, h0 + 1) < CURB_FERN, arr = fern ? SPR.fern : SPR.clump;
+          CQV[nc * 5] = Hh(i, h0 + 2); CQV[nc * 5 + 1] = side; CQV[nc * 5 + 2] = (fern ? 0.32 + 0.25 * Hh(i, h0 + 3) : 0.45 + 0.65 * Hh(i, h0 + 3));
+          CQV[nc * 5 + 3] = lerp(-0.1, lerp(0.35, 0.04, tall), Hh(i, h0 + 4)); CQV[nc * 5 + 4] = (fern ? 1000 : 0) + ((Hh(i, h0 + 1) * 997) | 0) % arr.length; nc++;
+        }
+      }
+      for (let r = 0; r < nc; r++) {   // 由遠到近（f 大的先畫）
+        let b = r; for (let q = r + 1; q < nc; q++) if (CQV[q * 5] > CQV[b * 5]) b = q;
+        if (b !== r) for (let c = 0; c < 5; c++) { const v = CQV[r * 5 + c]; CQV[r * 5 + c] = CQV[b * 5 + c]; CQV[b * 5 + c] = v; }
+        const f = CQV[r * 5], side = CQV[r * 5 + 1], m = CQV[r * 5 + 2], id = CQV[r * 5 + 4], sp = id >= 1000 ? SPR.fern[id - 1000] : SPR.clump[id];
+        if (!heroDone && !benchO && j === jhG && f <= fhG) { drawHero(s, t); heroDone = true; ctx.globalAlpha = fade; }
+        proj(j, f, false);
+        const xc = rwSide(i, side, f) + CQV[r * 5 + 3];
+        if (xc <= rwF(i, f)) drawSpr(sp, gx + side * xc * gs, gy, gs * m, fq, 0, tA); else plantAt(sp, i, side, xc, m, fq, 0, tA, true);
+      }
     }
     // 偶爾一叢芒草或蕨類長在路緣、往路面斜：從遠處慢慢靠近，走過時比背景快很多地從畫面邊緣滑出去（離鏡頭很近，大半被畫面切掉）
     const pA = fade * farA(j, 30, 6);
