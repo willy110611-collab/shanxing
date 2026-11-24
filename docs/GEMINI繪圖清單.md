@@ -608,3 +608,18 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 ```
 Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn16. The backpack must wear the SAME dark-green rain cover in ALL 16 frames, both rows: the cover hides the side bottle pockets and mesh, only the orange sleeping mat shows on top. Do not draw any frame without the rain cover. Plain flat magenta background only, no shadows, boxes or color patches behind the figures.
 ```
+
+## 第 26 批：出發前的小山載入畫面（放進 `02.素材`，1:1，**不用洋紅底**，兩張構圖要一模一樣）
+
+按下「出發」到進山之間：先顯示只有墨線的那張，顏色從山腳像水位一樣慢慢往上漲（底下有百分比），漲滿就是上好色的那張。兩張必須同一個構圖、同一個位置，只差有沒有上色。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `load_mt_line` | 1:1 | 只有手繪墨線、還沒上色的版本（見下方提示詞，最後加 "line art only, no color fill, ink lines on warm off-white paper"） |
+| `load_mt_color` | 1:1 | 上好色的完整版本（同一段提示詞，最後加 "fully colored with soft cel shading"）。先畫這張，再上傳這張請 Gemini 畫墨線版 |
+
+```
+A cozy, healing hand-drawn illustration in the game's style: fine ink outlines with soft cel-shading, warm and gentle. A single small rounded mountain in the center, like a cute hill, with a winding little trail up to the top, a tiny wooden signpost halfway, a few round trees and grass tufts at its foot, a small red flag fluttering on the summit, two or three soft clouds around the peak, and a tiny shiba inu sitting at the trail start looking up. Simple, calm composition with lots of breathing room, centered in the frame, warm off-white paper background (#f6ecd6), no text, no people, no harsh shadows. Square 1:1.
+```
+
+上傳參考圖：`hut_paiyun`（墨線粗細、上色方式）、`pet_shiba_sit`（小柴犬長相）。
