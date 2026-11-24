@@ -330,6 +330,25 @@
     WM.onBackground(hideRoute);
   } catch(e){ console.error('worldmap', e); }
   $('#mapWrap').addEventListener('pointerdown', () => $('#scrMap .mapHint').classList.add('off'), { once:true });   // 知道怎麼操作了，提示就收起來
+  // 地圖選單（右下「選單」木牌）：點了往上展開一疊木牌（動態 js/motion.js fan）；點外面（mnShade 蓋住地圖，不會順便點到山）、再點一次、選了一顆都會收起
+  // 紅點：每一顆照舊由自己的 data-badge 決定（每日 updateDailyBadge、大廳 social.js updateBadge）；「選單」上的小燈只看裡面有沒有紅點（css :has）
+  const mnMenu = $('#mapMenu'), mnList = $('#mnList'), mnBtn = $('#mnBtn'), mnShade = $('#mnShade');
+  function menuSet(open){
+    open = !!open; if (open === mnMenu.classList.contains('open')) return;
+    mnMenu.classList.toggle('open', open); mnShade.classList.toggle('on', open); mnBtn.setAttribute('aria-expanded', String(open));
+    MO.fan(mnList, open);
+  }
+  mnBtn.addEventListener('click', () => { A.unlock(); A.pop(); menuSet(!mnMenu.classList.contains('open')); });
+  mnShade.addEventListener('pointerdown', () => menuSet(false));
+  mnList.addEventListener('click', e => { if (e.target.closest('[data-go]')) menuSet(false); });
+  // 我的位置（左下圓形木牌）：地圖滑過去拉近到正在爬的山；沒有就上次爬的山（存檔裡最後走過的那座）；都沒有就象山。只移鏡頭，不選山、不開卡片
+  function myPlace(){
+    const t = onTrail() || (SV.cur && SX.M[SV.cur] ? SV.cur : null); if (t) return t;
+    let id = null, at = -1;
+    for (const k in SV.prog) { const q = SV.prog[k]; if (SX.M[k] && q && (q.dist > 0 || q.fin) && q.last > at) { at = q.last; id = k; } }
+    return id || 'xiangshan';
+  }
+  $('#locBtn').addEventListener('click', () => { A.unlock(); A.pop(); menuSet(false); try { WM.locate(SX.groupOf(myPlace())); } catch(e){} });
 
   const PET_NONE = { id:'', name:'自己走', desc:'一個人慢慢走，聽自己的腳步聲。', unlocked:true };
   const hasPet = p => !p.id || p.unlocked || SV.pets.includes(p.id);
@@ -921,14 +940,16 @@
     const u = id => SX.art.url(id), css = [];
     const icons = { icon_map:'.i-map', icon_bag:'.i-bag', icon_album:'.i-photo', icon_settings:'.i-gear', icon_rest:'.i-tent' };
     for (const id in icons) if (u(id)) css.push(`${icons[id]}{background-image:url("${u(id)}")!important;filter:none!important}`);
+    // 地圖左下「我的位置」：圖本身就是圓形木牌＋準星，拿掉程式畫的木框和準星
+    if (u('icon_locate')) css.push(`.locBtn{background:url("${u('icon_locate')}") center/contain no-repeat!important;border:0!important;box-shadow:none!important}.locBtn svg{display:none}`);
     // 休息選單：拍照、上傳照片的按鈕上方加小圖示
     for (const [sel, id] of [['#rsPhoto', 'icon_camera'], ['#rsUp', 'icon_upload'], ['#rsStone', 'cairn']]) if (u(id)) css.push(`${sel}::before{content:"";width:30px;height:30px;background:url("${u(id)}") center/contain no-repeat}`);
     // 完成的隱藏任務：打勾換成任務徽章
     if (u('badge_quest')) css.push(`.quest li.done::before{width:30px;height:30px;border:0;border-radius:0;background:url("${u('badge_quest')}") center/contain no-repeat!important}`);
     // 木框介面（第六、九批）：面板用羊皮紙木框、分頁和開關用木牌、標題用緞帶、對話框用手繪泡泡、選單頁用木桌背景
     // 數字是各張圖裁掉透明邊後量的邊框寬度（像素），換圖要重量
-    if (u('ui_panel')) css.push(`.mCard,.infoCard,#restSheet{background:none!important;border-style:solid!important;border-width:18px!important;border-color:transparent!important;border-image:url("${u('ui_panel')}") 50 fill / 18px stretch!important;box-shadow:0 8px 20px rgba(40,25,10,.35)!important;color:var(--ink)!important;text-shadow:none!important}
-      .mCard::before,.mCard::after,.infoCard::before,.infoCard::after,#restSheet::before,#restSheet::after{display:none!important}
+    if (u('ui_panel')) css.push(`.mCard,.infoCard,#restSheet,#frSheet{background:none!important;border-style:solid!important;border-width:18px!important;border-color:transparent!important;border-image:url("${u('ui_panel')}") 50 fill / 18px stretch!important;box-shadow:0 8px 20px rgba(40,25,10,.35)!important;color:var(--ink)!important;text-shadow:none!important}
+      .mCard::before,.mCard::after,.infoCard::before,.infoCard::after,#restSheet::before,#restSheet::after,#frSheet::before,#frSheet::after{display:none!important}
       .mCard .summitBig,.mCard .tiny,.mCard p,.infoCard .ic-h b,.infoCard .rc-h b,.mCard .grp,.mCard .empty{color:var(--ink)!important;text-shadow:none!important}
       .infoCard .ic-alt,.infoCard .rc-feat em,.mCard .rc-feat em,.infoCard .rc-h span{color:var(--wood2)!important;text-shadow:none!important}
       .mCard .stoneGame .sg-top{color:#fff7e4!important;text-shadow:var(--txo)!important}`);
