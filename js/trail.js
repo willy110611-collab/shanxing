@@ -1766,10 +1766,13 @@ function drawFG(t){
 // ═════════ 對外：初始化／尺寸／換山 ═════════
 // 畫筆：能用 WebGL 就用（js/gl2d.js，一格幾十批送顯示卡），不支援或建立失敗就用 Canvas 2D（跟以前一樣）
 // 網址加 ?gl=0（或 localStorage sx_gl = '0'）強制用 Canvas 2D：開發者測試、比對兩邊畫面用，玩家看不到
+// 立體地面試作（方案 B）：網址加 ?g3d=1 才開，只在象山。地面（路、階梯、兩側山坡）改成一整片真正的 3D 網格，植物、人物、天空照舊
+const G3D_Q = /[?&]g3d=1\b/.test(location.search), G3D_IDS = ['xiangshan'];
+function g3On(){ return G3D_Q && ctx && ctx.gpu && ctx.hasDepth && M && G3D_IDS.indexOf(M.id) >= 0; }
 const GL_OFF = /[?&]gl=0\b/.test(location.search) || (function(){ try { return localStorage.getItem('sx_gl') === '0'; } catch (e) { return false; } })();
 S.init = function(canvas){
   cv = canvas; if (!SHADOW) buildStatic();
-  glc = !GL_OFF && SX.gl2d ? SX.gl2d.create(cv) : null;
+  glc = !GL_OFF && SX.gl2d ? SX.gl2d.create(cv, { depth:G3D_Q }) : null;
   if (glc) { glc.onLost = function(){ useGL(false); }; glc.onRestored = function(){ useGL(true); }; }   // 顯示卡掉了：馬上換 Canvas 2D 接著畫；恢復了再換回來
   useGL(!!glc);
 };
@@ -3073,6 +3076,53 @@ function cullPad(w, h){ return Math.max(w, h) * CULL_K + CULL_PAD; }
 function offView(x0, y0, w, h){ const m = cullPad(w, h); return x0 - m > W || x0 + w + m < 0 || y0 - m > H || y0 + h + m < 0; }
 function stepS(j, f){ return F / (pZ[j] + f * (pZ[j + 1] - pZ[j])); }
 function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * s; }
+// ───────── 立體地面試作（方案 B）─────────
+// 每一段的近端（階梯段再切成一階一階：踏面平的、立面直的）一排點，左右從路中間往外：路面幾個點、路緣、土坎、山坡越外面越疏，到 gwAt 為止
+// 高度：路面用路的高度（階梯是一階一階的），路外面用 terrH（跟路旁植物種的地面同一個）。貼圖座標用公尺（走路時貼圖跟著地面不會滑）
+const G3M = { v:new Float32Array(8 * 60000), idx:new Uint32Array(360000) };
+const G3_ROAD = [0.45, 0.85, 1], G3_SIDE = [0.2, 0.5, 0.9, 1.4, 2.1, 3, 4.2, 5.6, 7.4, 9.6, 12.2, 15.2, 18.6, 22.4, 26.6, 31];
+function meshGround(b){
+  const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road, GT = TEX.grass;
+  if (!RT || !GT || !RT.c || !GT.c) return;
+  const V = G3M.v, I = G3M.idx, nSide = G3_ROAD.length + 2 + G3_SIDE.length, nc = 1 + nSide * 2, off = offG;
+  let nv = 0, ni = 0, prev = -1;
+  function row(j, f, hr){
+    if ((nv + nc) * 8 > V.length) return;
+    const i = b + j, rw = rwF ? rwF(i, f) : rwAt(i), zr = (j + f - off) * SEG, xc = lerp(pC[j], pC[j + 1], f), ht = lerp(pW[j], pW[j + 1], f), za = (i + f) * SEG;
+    const gw = gwAt(Math.max(zr, 0)), fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A), base = nv;
+    for (let c = 0; c < nc; c++) {
+      const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1;
+      let d, w;
+      if (k === 0) { d = 0; w = 1; }
+      else if (q < G3_ROAD.length) { d = G3_ROAD[q] * rw; w = q === G3_ROAD.length - 1 ? 0.5 : 1; }
+      else { const bw = bankWd(i, side), r = q - G3_ROAD.length; d = r === 0 ? rw + bw * 0.5 : r === 1 ? rw + bw : rw + bw + G3_SIDE[r - 2]; d = Math.min(d, Math.max(gw, rw + bw + 0.5)); w = 0; }
+      const h = q < G3_ROAD.length ? hr : ht + terrH(i, side, d), o = nv * 8;
+      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w; V[o + 6] = 1;
+      V[o + 7] = fade * (Math.abs(k) === nSide ? 0 : Math.abs(k) === nSide - 1 ? 0.55 : 1);
+      nv++;
+    }
+    if (prev >= 0) for (let c = 0; c < nc - 1; c++) { const a = prev + c, a2 = a + 1, d0 = base + c, d1 = d0 + 1; I[ni++] = a; I[ni++] = a2; I[ni++] = d1; I[ni++] = a; I[ni++] = d1; I[ni++] = d0; }
+    prev = base;
+  }
+  for (let j = 0; j < DRAW; j++) {
+    const i = b + j;
+    if (sAt(i) !== 1) { row(j, 0, pW[j]); continue; }
+    const n = stairN(j), rise = pW[j + 1] - pW[j];
+    for (let q = 0; q < n; q++) { const h = pW[j] + rise * q / n; row(j, q / n, h); row(j, (q + 1) / n, h); }
+  }
+  row(DRAW, 0, pW[DRAW]);
+  // 明暗：每個點的坡面朝向（左右、前後的高度差）對著右上來的光
+  const rows = nv / nc, Lx = 0.6, Ly = 0.8;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < nc; c++) {
+    const o = (r * nc + c) * 8, oL = (r * nc + Math.max(0, c - 1)) * 8, oR = (r * nc + Math.min(nc - 1, c + 1)) * 8, oB = (Math.max(0, r - 1) * nc + c) * 8, oF = (Math.min(rows - 1, r + 1) * nc + c) * 8;
+    const dx = V[oR] - V[oL], dy = V[oR + 1] - V[oL + 1], gx = Math.abs(dx) > 1e-4 ? dy / dx : 0, dz = V[oF + 2] - V[oB + 2], gz = dz > 0.02 ? (V[oF + 1] - V[oB + 1]) / dz : 0;   // 階梯立面那幾排（同一個遠近）：明暗交給著色器（立面整面暗）
+    const nl = 1 / Math.sqrt(gx * gx + 1 + gz * gz), dt = (-gx * Lx + Ly) * nl;
+    V[o + 6] = clamp(1 + 0.6 * (dt - Ly), 0.42, 1.25);
+  }
+  const hz = hazeRgb;
+  ctx.mesh({ v:V, nv, idx:I, ni, road:RT.c, grass:GT.c, rs:[1 / RT.m, RT.c.width / (RT.m * RT.c.height), 1 / GT.m, GT.c.width / (GT.m * GT.c.height)],
+    k:[2 * F / W, 2 * F / H, 1 - 2 * HOR / H], fog:[hz[0] / 255, hz[1] / 255, hz[2] / 255, 0.85], fd:[fogD0, fogD], soil:[0.46, 0.36, 0.26] });
+}
 function farA(j, J, n){ return clamp((J * SEG - pZ[j]) / (n * SEG), 0, 1); }
 // 樹影與光斑：右上來的陽光被路邊的樹擋住，路上落下一片一片柔和的樹影（往左下斜）；森林段再有幾個慢慢飄動的光斑
 // 位置只跟這段路是第幾段有關（走近時不會重新洗牌）；遠處跟著霧淡掉、70 段外慢慢淡出
@@ -3795,15 +3845,17 @@ function lodSave(j){ LODV[0] = pX[j]; LODV[1] = pY[j]; LODV[2] = pS[j]; LODV[3] 
 function lodRestore(j){ pX[j] = LODV[0]; pY[j] = LODV[1]; pS[j] = LODV[2]; pZ[j] = LODV[3]; pC[j] = LODV[4]; pW[j] = LODV[5]; }
 // 畫第 jHi 段到第 jLo 段（由遠到近）。far：畫進遠景快取（見 FAR），不畫登山客，最近那段的地面往下多畫 FAR_BLEED 像素，跟現場畫的近景接起來不會露縫
 function drawWorld(b, t, jHi, jLo, far){
-  const s = curS, isWood = TH.trail === 'wood', nPeb = TH.trail === 'scree' ? 4 : 2, al = TH.alpine, treeBase = TH.bigtree ? 0.55 : 0.42;
+  const s = curS, isWood = TH.trail === 'wood', nPeb = TH.trail === 'scree' ? 4 : 2, al = TH.alpine, treeBase = TH.bigtree ? 0.55 : 0.42, G3 = g3On();
   const snowTrees = snowAmt > 0.5 && SPR.coniferS;
   const lightA = (isNight || isRain || isFog || isSnow) ? 0 : clamp((sunVis - 0.3) / 0.5, 0, 1) * (1 - qs.light);   // 樹影、光斑：要有太陽才畫
   let j, k, pi = AP.length - 1;
   heroDone = !!far; heroFront = false; if (!far) heroCov = 0; lodSkip = false; CQ.n = 0; FQ.n = 0; CQ.lo = jLo;   // 投影排隊從這次畫世界開始
   const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
   if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.bot.fill(-Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
+  if (G3) HS.on = false;   // 立體地面試作：地平線霧帶跟著舊的地面畫法，不畫
   for (j = jHi; j >= jLo; j--) {
     gmk(0); if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
+    if (G3) ctx.depthAt(pZ[j] * 0.995);   // 立體地面試作：這段的東西在這個遠近（比它近的地面擋得住它）
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false; CQ.j = j;
     // 彎道上這三個點不在一條直線上（中間那點偏開超過半個像素）就不合併：合成一段會切掉彎的外側，露出一條條背景的細縫
@@ -3823,7 +3875,7 @@ function drawWorld(b, t, jHi, jLo, far){
     const fx = clamp((pZ[j] - fogD0) / (fogD - fogD0), 0, 1), fq = 1 - (1 - fx * (2 - fx)) * ease01((fz - FAR_FADE_H) / (1 - FAR_FADE_H)), fi = (fq * (FOGN - 1)) | 0;   // 空氣透視：中景就開始變淡（先快後慢），山坡才會融進遠山
     if (fade < 0.005) { if (lod) { lodRestore(j); lodSkip = false; } continue; }
     ctx.globalAlpha = fade;
-    if (!below && !skipG && y1 - y2 > 0.2) {
+    if (!G3 && !below && !skipG && y1 - y2 > 0.2) {
       gmk(1);
       if (HS.on && fade > 0.05 && y2 < HS.y) HS.y = y2;   // 遠處地面最高到畫面哪裡（地平線霧帶的位置）
       const yb = y1 + SEAM_Y + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
@@ -4624,7 +4676,8 @@ S.render = function(s){
   if (GMK && !GMK.paint) c2d.clearRect(0, 0, W, H); else drawBG(t, dist);   // 地面遮罩（S.gmask）：天空不畫（透明）
   if (AUD.sky) { ctx.globalAlpha = 1; ctx.fillStyle = AUD.sky; ctx.fillRect(0, 0, W, H); }   // 測試用（tools/turnaudit.js）：背景換成一個純色，兩張比對就知道哪裡露出背景
   hitN = 0; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  drawWorld(b, t, s.dt > 0 ? farBlit() : DRAW - 1, 0, false);   // 拍照那一格（dt = 0，鏡頭焦距不一樣）整段現場畫
+  if (g3On()) { meshGround(b); ctx.depth3(true); drawWorld(b, t, DRAW - 1, 0, false); ctx.depth3(false); ctx.depthAt(0); }   // 立體地面試作：先畫整片地形網格，路旁東西照遠近被前面的山坡擋住
+  else drawWorld(b, t, s.dt > 0 ? farBlit() : DRAW - 1, 0, false);   // 拍照那一格（dt = 0，鏡頭焦距不一樣）整段現場畫
   drawFlyers(t, dt, sp);
   if (isFog && !GMK) fogBands(t, dist);
   if (SHOW_FG) drawFG(t);

@@ -14,7 +14,7 @@ const G = SX.gl2d = {};
 const API = ['drawImage', 'fillRect', 'strokeRect', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'quadraticCurveTo', 'bezierCurveTo', 'arc', 'ellipse', 'rect', 'roundRect',
   'fill', 'stroke', 'save', 'restore', 'translate', 'rotate', 'scale', 'setTransform', 'transform', 'createPattern', 'createLinearGradient', 'createRadialGradient',
   'measureText', 'fillText', 'strokeText', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'lineJoin', 'globalAlpha', 'globalCompositeOperation', 'font', 'textAlign', 'textBaseline',
-  'gpu', 'begin', 'grade', 'flush', 'drop', 'prep', 'stats', 'lost', 'uvs'];
+  'gpu', 'begin', 'grade', 'flush', 'drop', 'prep', 'stats', 'lost', 'uvs', 'mesh', 'depthAt', 'depth3', 'hasDepth'];
 G.API = API;
 const SLOTS = 16;                // 一批最多同時用幾張貼圖（WebGL2 保證至少能同時綁 16 張；換圖不用另外送一批）
 const CAP = 1 << 16;             // 一批最多幾個頂點（滿了先送出去）
@@ -27,10 +27,35 @@ const AT_G = 8, AT_CLS = [32, 64, 128, 256], AT_PAGE = { 32:256, 64:512, 128:102
 const TRIM_MS = 30000, TRIM_EVERY = 2000;
 
 const VS = `#version 300 es
-in vec2 aP; in vec2 aT; in vec4 aC; in float aS;
+in vec2 aP; in vec2 aT; in vec4 aC; in float aS; in float aZ;
 uniform vec2 uR;
 out vec2 vT; out vec4 vC; flat out int vS;
-void main(){ vT = aT; vC = aC; vS = int(aS + 0.5); gl_Position = vec4(aP.x / uR.x * 2.0 - 1.0, 1.0 - aP.y / uR.y * 2.0, 0.0, 1.0); }`;
+void main(){ vT = aT; vC = aC; vS = int(aS + 0.5); gl_Position = vec4(aP.x / uR.x * 2.0 - 1.0, 1.0 - aP.y / uR.y * 2.0, aZ * 2.0 - 1.0, 1.0); }`;
+// 立體地面（試作，網址加 ?g3d=1 才開）：一整片地形網格用真正的透視畫（顯示卡算遠近、近的山坡擋住後面的東西），
+// 每個點：相對鏡頭的位置 (X 右、Y 上、Z 往前)、地面座標（公尺）、路面比例、明暗、不透明度
+const MVS = `#version 300 es
+in vec3 aP; in vec2 aU; in vec3 aA;
+uniform vec3 uK; uniform vec2 uZ;
+out vec2 vU; out vec3 vA; out float vD;
+void main(){ vU = aU; vA = aA; vD = aP.z; gl_Position = vec4(aP.x * uK.x, aP.y * uK.y + aP.z * uK.z, aP.z * uZ.x + uZ.y, aP.z); }`;
+const MFS = `#version 300 es
+precision highp float;
+in vec2 vU; in vec3 vA; in float vD;
+uniform sampler2D tR, tG; uniform vec4 uRS; uniform vec4 uFog; uniform vec2 uFD; uniform vec3 uSoil;
+out vec4 o;
+void main(){
+  vec3 r = texture(tR, vec2(vU.x * uRS.x + 0.5, vU.y * uRS.y)).rgb;
+  vec3 g = texture(tG, vec2(vU.x * uRS.z, vU.y * uRS.w)).rgb;
+  float w = clamp(vA.x, 0.0, 1.0), e = clamp(1.0 - abs(vA.x * 2.0 - 1.0), 0.0, 1.0);
+  vec3 c = mix(g, r, w);
+  c = mix(c, uSoil * (0.8 + 0.4 * r), e * 0.55);
+  float rs = 1.0 - smoothstep(0.0, 0.0004 * vD, fwidth(vD));   // 階梯立面（整面同一個遠近）：比踏面暗
+  c *= vA.y * mix(1.0, 0.58, rs);
+  float f = clamp((vD - uFD.x) / (uFD.y - uFD.x), 0.0, 1.0); f = f * (2.0 - f);
+  c = mix(c, uFog.rgb, f * uFog.a);
+  o = vec4(c * vA.z, vA.z);
+}`;
+const ZN = 0.3, ZF = 420;   // 立體地面的近、遠裁切面（公尺）
 const FS = `#version 300 es
 precision highp float;
 in vec2 vT; in vec4 vC; flat in int vS;
@@ -97,14 +122,14 @@ function parseColor(s){
 // ───────── 建立 ─────────
 // host：原本的 #cv。另外做一張同位置的畫布給 WebGL 畫（不接手點擊，點擊照舊在 #cv 上）；
 // 這樣 WebGL 失效時 #cv 還沒被拿去用，可以直接換回 Canvas 2D
-G.create = function(host){
+G.create = function(host, opt){
   let cvs = null, gl = null;
   try {
     cvs = document.createElement('canvas'); cvs.className = 'cvgl';
     cvs.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
-    gl = cvs.getContext('webgl2', { alpha:false, antialias:true, depth:false, stencil:false, premultipliedAlpha:true, preserveDrawingBuffer:false, powerPreference:'high-performance' });
+    gl = cvs.getContext('webgl2', { alpha:false, antialias:true, depth:!!(opt && opt.depth), stencil:false, premultipliedAlpha:true, preserveDrawingBuffer:false, powerPreference:'high-performance' });
     if (!gl) return null;
-    const c = new Ctx(cvs, gl);
+    const c = new Ctx(cvs, gl); c.hasDepth = !!(opt && opt.depth);
     if (!c.init()) return null;
     host.insertAdjacentElement('afterend', cvs);
     return c;
@@ -114,7 +139,7 @@ G.create = function(host){
 function Ctx(canvas, gl){
   this.canvas = canvas; this.gl = gl; this.gpu = true; this.lost = false;
   this.buf = new ArrayBuffer(CAP * STRIDE); this.f32 = new Float32Array(this.buf); this.u32 = new Uint32Array(this.buf); this.u8 = new Uint8Array(this.buf);
-  this.n = 0; this.slots = []; this.mode = 'source-over'; this.bound = []; this.now = 0; this.trimT = 0; this.bytes = 0;
+  this.n = 0; this.slots = []; this.mode = 'source-over'; this.bound = []; this.zq = 0; this.hasDepth = false; this.now = 0; this.trimT = 0; this.bytes = 0;
   this.texs = new WeakMap(); this.grads = new Map(); this.texts = new Map(); this.list = new Set(); this.pages = []; this.pageOf = new Map();
   this.m = [1, 0, 0, 1, 0, 0]; this.stack = []; this.sp = 0;
   this.globalAlpha = 1; this.globalCompositeOperation = 'source-over'; this.fillStyle = '#000'; this.strokeStyle = '#000';
@@ -150,6 +175,7 @@ P.init = function(){
   gl.enableVertexAttribArray(at('aT')); gl.vertexAttribPointer(at('aT'), 2, gl.FLOAT, false, STRIDE, 8);
   gl.enableVertexAttribArray(at('aC')); gl.vertexAttribPointer(at('aC'), 4, gl.UNSIGNED_BYTE, true, STRIDE, 16);
   gl.enableVertexAttribArray(at('aS')); gl.vertexAttribPointer(at('aS'), 1, gl.UNSIGNED_BYTE, false, STRIDE, 20);
+  gl.enableVertexAttribArray(at('aZ')); gl.vertexAttribPointer(at('aZ'), 1, gl.UNSIGNED_SHORT, true, STRIDE, 22);   // 遠近（立體地面試作才用；平常 0 = 最近、不比遠近）
   gl.useProgram(p);
   for (let i = 0; i < SLOTS; i++) gl.uniform1i(gl.getUniformLocation(p, 't' + i), i);
   this.uR = gl.getUniformLocation(p, 'uR');
@@ -160,6 +186,16 @@ P.init = function(){
   gl.useProgram(this.gprog);
   this.gu = {}; ['uS', 'uW', 'uR', 'uMul', 'uFog', 'uWA', 'uWC', 'uSC'].forEach(k => { this.gu[k] = gl.getUniformLocation(this.gprog, k); });
   gl.uniform1i(this.gu.uS, 0); gl.uniform1i(this.gu.uW, 1);
+  if (this.hasDepth) {
+    this.mprog = compile(gl, MVS, MFS); this.mvao = gl.createVertexArray(); gl.bindVertexArray(this.mvao);
+    this.mvbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.mvbo); this.mibo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.mibo);
+    const ma = n => gl.getAttribLocation(this.mprog, n);
+    gl.enableVertexAttribArray(ma('aP')); gl.vertexAttribPointer(ma('aP'), 3, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(ma('aU')); gl.vertexAttribPointer(ma('aU'), 2, gl.FLOAT, false, 32, 12);
+    gl.enableVertexAttribArray(ma('aA')); gl.vertexAttribPointer(ma('aA'), 3, gl.FLOAT, false, 32, 20);
+    gl.useProgram(this.mprog); this.mu = {}; ['tR', 'tG', 'uRS', 'uFog', 'uFD', 'uK', 'uZ', 'uSoil'].forEach(k => { this.mu[k] = gl.getUniformLocation(this.mprog, k); });
+    gl.uniform1i(this.mu.tR, 0); gl.uniform1i(this.mu.tG, 1);
+  }
   gl.bindVertexArray(this.vao); gl.useProgram(this.prog);
   gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   this.white = this.upload(null, 's');
@@ -267,7 +303,9 @@ P.begin = function(){
   gl.viewport(0, 0, c.width, c.height);
   gl.bindVertexArray(this.vao); gl.useProgram(this.prog); gl.uniform2f(this.uR, c.width, c.height);
   gl.enable(gl.BLEND); this.setBlend('source-over');
-  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clearColor(0, 0, 0, 1);
+  if (this.hasDepth) { gl.disable(gl.DEPTH_TEST); gl.depthMask(true); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); } else gl.clear(gl.COLOR_BUFFER_BIT);
+  this.zq = 0;
   this.n = 0; this.slots.length = 0; this.sp = 0;
   this.now = performance.now();
   if (this.now - this.trimT > TRIM_EVERY) { this.trimT = this.now; this.trim(TRIM_MS); }
@@ -315,7 +353,7 @@ function pack(r, g, b, a, add){
 P.room = function(k){ if (this.n + k > CAP) this.flush(); };
 P.v = function(x, y, u, v, col, slot){
   const i = this.n++, f = i * 6, f32 = this.f32;
-  f32[f] = x; f32[f + 1] = y; f32[f + 2] = u; f32[f + 3] = v; this.u32[f + 4] = col; this.u32[f + 5] = slot;
+  f32[f] = x; f32[f + 1] = y; f32[f + 2] = u; f32[f + 3] = v; this.u32[f + 4] = col; this.u32[f + 5] = (slot | this.zq) >>> 0;
 };
 
 // ───────── 變換 ─────────
@@ -418,12 +456,12 @@ P.pv = function(x, y){
   const f = (this.n++) * 6, f32 = this.f32, s = this.ts;
   f32[f] = x; f32[f + 1] = y;
   if (s === SOLID) { f32[f + 2] = 0; f32[f + 3] = 0; } else { f32[f + 2] = TU[0] * x + TU[2] * y + TU[4]; f32[f + 3] = TU[1] * x + TU[3] * y + TU[5]; }
-  this.u32[f + 4] = this.fc; this.u32[f + 5] = s;
+  this.u32[f + 4] = this.fc; this.u32[f + 5] = (s | this.zq) >>> 0;
 };
 // 路徑第 p / 2 個點：貼圖座標用 uv 同一個位置的（P.fill 給了 uvs 時）
 P.pt2 = function(px, uv, p){
   const f = (this.n++) * 6, f32 = this.f32;
-  f32[f] = px[p]; f32[f + 1] = px[p + 1]; f32[f + 2] = uv[p]; f32[f + 3] = uv[p + 1]; this.u32[f + 4] = this.fc; this.u32[f + 5] = this.ts;
+  f32[f] = px[p]; f32[f + 1] = px[p + 1]; f32[f + 2] = uv[p]; f32[f + 3] = uv[p + 1]; this.u32[f + 4] = this.fc; this.u32[f + 5] = (this.ts | this.zq) >>> 0;
 };
 // 四個畫面像素角（依序）畫成兩個三角形
 P.quad = function(x0, y0, x1, y1, x2, y2, x3, y3, t){
@@ -546,6 +584,32 @@ P.disc = function(x, y, r, t){
   for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, b = (i + 1) / n * Math.PI * 2; this.pv(x, y); this.pv(x + Math.cos(a) * r, y + Math.sin(a) * r); this.pv(x + Math.cos(b) * r, y + Math.sin(b) * r); }
 };
 P.strokeRect = function(x, y, w, h){ this.beginPath(); this.rect(x, y, w, h); this.stroke(); this.beginPath(); };
+
+// ───────── 立體地面（試作）─────────
+// 接下來畫的東西在離鏡頭 z 公尺的地方（0：最近，不會被地面擋住）；跟網格同一套遠近換算
+P.depthAt = function(z){ this.zq = z > ZN ? (Math.max(0, Math.min(65535, Math.round(((ZF + ZN) / (ZF - ZN) - 2 * ZF * ZN / (ZF - ZN) / z) * 0.5 * 65535 + 0.5 * 65535))) << 16) >>> 0 : 0; };
+// on：之後畫的東西要比遠近（被比較近的地面擋住，但不寫進遠近）；off：照舊一筆蓋一筆
+P.depth3 = function(on){ if (!this.hasDepth || this.lost) return; this.flush(); const gl = this.gl; if (on) { gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(false); } else gl.disable(gl.DEPTH_TEST); };
+// 畫一整片地形網格：m = { v:Float32Array（每點 8 個數）, nv, idx:Uint32Array, ni, road, grass（貼圖畫布）, rs:[路面橫, 路面縱, 草地橫, 草地縱]（每公尺幾張）,
+//   k:[2F/W, 2F/H, 1−2·地平線/H], fog:[r,g,b,濃度], fd:[霧開始, 霧最濃]（公尺）, soil:[r,g,b] }
+P.mesh = function(m){
+  if (!this.hasDepth || this.lost) return;
+  this.flush();
+  const gl = this.gl, tR = this.tex(m.road, 'p'), tG = this.tex(m.grass, 'p'); if (!tR || !tG) return;
+  gl.useProgram(this.mprog); gl.bindVertexArray(this.mvao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, this.mvbo); gl.bufferData(gl.ARRAY_BUFFER, m.v.subarray(0, m.nv * 8), gl.STREAM_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.mibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.idx.subarray(0, m.ni), gl.STREAM_DRAW);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tR); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tG); gl.activeTexture(gl.TEXTURE0);
+  const U = this.mu;
+  gl.uniform4f(U.uRS, m.rs[0], m.rs[1], m.rs[2], m.rs[3]); gl.uniform3f(U.uK, m.k[0], m.k[1], m.k[2]); gl.uniform2f(U.uZ, (ZF + ZN) / (ZF - ZN), -2 * ZF * ZN / (ZF - ZN));
+  gl.uniform4f(U.uFog, m.fog[0], m.fog[1], m.fog[2], m.fog[3]); gl.uniform2f(U.uFD, m.fd[0], m.fd[1]); gl.uniform3f(U.uSoil, m.soil[0], m.soil[1], m.soil[2]);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); this.setBlend('source-over');
+  gl.drawElements(gl.TRIANGLES, m.ni, gl.UNSIGNED_INT, 0);
+  gl.depthMask(false); gl.disable(gl.DEPTH_TEST);
+  this.st.frameBatches++; this.st.frameVerts += m.ni;
+  gl.useProgram(this.prog); gl.bindVertexArray(this.vao); gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+  this.slots.length = 0; this.bound[0] = this.bound[1] = null;
+};
 
 // ───────── 文字：畫在一張小 2D 畫布上（內容一樣就重複用），再當圖貼上 ─────────
 P.measureText = function(s){ this.meas.font = this.font; return this.meas.measureText(s); };
