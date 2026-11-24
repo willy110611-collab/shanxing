@@ -143,7 +143,9 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `badge_quest` | 1:1 | An empty round brass medal badge with a mountain relief and laurel, no text. |
 | `rarity_common` `rarity_rare` `rarity_legend` | 1:1 | Three empty item-slot frames: plain wood / silver-blue with small gems / gold with sparkles. |
 | `encounter_frame` | 9:16 | An empty storybook-style illustrated frame with leaves and flowers around the edges for event cards, parchment center, no text. |
-| `title_logo` | 16:9 | A title logo plate: wooden sign with carved Chinese characters 「山行小日子」, small mountain and cloud decorations. （這張可以有字） |
+| `title_logo` | 16:9 | A title logo plate: wooden sign with carved Chinese characters 「森呼吸」, small mountain and cloud decorations. （這張可以有字；舊的「山行小日子」木牌已經不用，畫好新的才會出現在地圖左上角） |
+| `cover_portrait` | 9:16 | 不用洋紅底。直版封面（開遊戲讀取完顯示，輕點進入）：森呼吸標題在上方三分之一、登山客和柴犬背影在下方、最下面 12% 只有草和步道（遊戲在那裡放一行字）。提示詞見 `_交付/封面與好友圖示繪圖包/提示詞.md`。 |
+| `cover_key` | 16:9 | 不用洋紅底。橫版封面（森呼吸主視覺），電腦或橫放的螢幕用。 |
 
 ## 第七批：奇遇插圖（之後再畫也可以）
 

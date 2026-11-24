@@ -8,20 +8,23 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/shiba-180.png">
 <link rel="icon" href="icons/shiba-192.png">
-<title>山行小日子</title>
-<link rel="stylesheet" href="css/fonts.css?v=132">
-<link rel="stylesheet" href="css/style.css?v=132">
+<title>森呼吸</title>
+<link rel="stylesheet" href="css/fonts.css?v=133">
+<link rel="stylesheet" href="css/style.css?v=133">
 </head>
 <body>
 <div id="app">
   <!-- 開場讀取畫面：美術圖載完才收起 -->
-  <div id="loading" class="loading"><div class="ldBox"><div class="ldTitle">山行<small>小日子</small></div><div class="ldTrack"><span id="ldDog" class="ldDog"></span><div class="ldBar"><i id="ldFill"></i></div></div><div class="ldTip">整理背包、準備上山…</div></div></div>
+  <div id="loading" class="loading"><div class="ldBox"><div class="ldTitle">森呼吸</div><div class="ldTrack"><span id="ldDog" class="ldDog"></span><div class="ldBar"><i id="ldFill"></i></div></div><div class="ldTip">整理背包、準備上山…</div></div></div>
+
+  <!-- 封面：讀取畫面跑完後出現（每次打開遊戲一次），輕點任何地方進入。有 cover_portrait 美術圖就換成那張，沒有就是這張紙墨風的暫代封面 -->
+  <div id="cover" class="cover" role="button" tabindex="0" aria-label="輕點畫面，進入山林"><div class="cvPh"><div class="cvTitle">森呼吸</div><svg class="cvMt" viewBox="0 0 360 120" aria-hidden="true"><path d="M0 104 52 58l26 20 46-50 40 40 30-22 50 44 34-24 46 38v20H0z" fill="#c9b48a" stroke="#3a2a20" stroke-width="2.4" stroke-linejoin="round"/><path d="M0 112 70 82l44 18 58-30 64 34 44-16 80 26v20H0z" fill="#8fae78" stroke="#3a2a20" stroke-width="2.4" stroke-linejoin="round"/><circle cx="286" cy="30" r="14" fill="#f2c35a" stroke="#3a2a20" stroke-width="2.2"/></svg><i class="cvGd"></i></div><div class="cvTap">輕點畫面，進入山林</div></div>
 
   <!-- 地圖 -->
   <section id="scrMap" class="scr on">
     <div class="sea"></div>
     <header class="mapTop">
-      <div class="logo"><span>山行</span><small>小日子</small></div>
+      <div class="logo"><span>森呼吸</span></div>
       <div class="topBtns">
         <button class="cbtn sm" data-go="lobby">大廳</button>
         <button class="cbtn sm" data-go="daily">每日</button>
@@ -90,23 +93,23 @@
   <input type="file" id="upFile" accept="image/*" hidden>
 </div>
 
-<script src="js/data.js?v=132"></script>
-<script src="js/motion.js?v=132"></script>
-<script src="js/audio.js?v=132"></script>
-<script src="js/clay.js?v=132"></script>
-<script src="js/artgroups.js?v=132"></script>
-<script src="js/art.js?v=132"></script>
-<script src="js/gl2d.js?v=132"></script>
-<script src="js/look.js?v=132"></script>
-<script src="js/trail.js?v=132"></script>
-<script src="js/worldmap.js?v=132"></script>
-<script src="js/hud.js?v=132"></script>
-<script src="js/mtload.js?v=132"></script>
-<script src="js/game.js?v=132"></script>
-<script src="js/config.js?v=132"></script>
-<script src="js/plaza.js?v=132"></script>
-<script src="js/social.js?v=132"></script>
-<script src="js/maint.js?v=132"></script>
+<script src="js/data.js?v=133"></script>
+<script src="js/motion.js?v=133"></script>
+<script src="js/audio.js?v=133"></script>
+<script src="js/clay.js?v=133"></script>
+<script src="js/artgroups.js?v=133"></script>
+<script src="js/art.js?v=133"></script>
+<script src="js/gl2d.js?v=133"></script>
+<script src="js/look.js?v=133"></script>
+<script src="js/trail.js?v=133"></script>
+<script src="js/worldmap.js?v=133"></script>
+<script src="js/hud.js?v=133"></script>
+<script src="js/mtload.js?v=133"></script>
+<script src="js/game.js?v=133"></script>
+<script src="js/config.js?v=133"></script>
+<script src="js/plaza.js?v=133"></script>
+<script src="js/social.js?v=133"></script>
+<script src="js/maint.js?v=133"></script>
 <script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));</script>
 </body>
 </html>

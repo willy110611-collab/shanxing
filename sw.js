@@ -2,7 +2,7 @@
 // 三個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
 // 玩家只會下載有換過的圖和新圖（美術圖網址帶 ?v=檔案指紋，圖換了網址才會變）。
 // FONT_CACHE 放手寫字型（fonts/ 底下，檔名帶內容指紋，由 tools/fonts.js 產生），一樣永遠不變名字，改版時只補新檔、清掉沒用的舊檔。
-const CACHE = 'shanxing-v132';
+const CACHE = 'shanxing-v133';
 const ART_CACHE = 'shanxing-art';
 const FONT_CACHE = 'shanxing-fonts';
 // PREP_CACHE：js/art.js 存的「量好的格子、鏡射補光圖、網頁用裁邊小圖」，每張圖只在第一次（或圖換了）做；改版不清掉（art.js 自己清掉沒用的）
@@ -63,7 +63,7 @@ self.addEventListener('push', e => {
   e.waitUntil((async () => {
     let notes = [];
     try { const sub = await self.registration.pushManager.getSubscription(); if (sub) notes = (await (await fetch(self.SX_API + '/push/pending?e=' + encodeURIComponent(sub.endpoint))).json()).notes || []; } catch (x) {}
-    if (!notes.length) notes = [{ title: '山行小日子', body: '山上有新消息，打開看看吧。' }];
+    if (!notes.length) notes = [{ title: '森呼吸', body: '山上有新消息，打開看看吧。' }];
     for (const n of notes) await self.registration.showNotification(n.title, { body: n.body, tag: n.tag || undefined, icon: 'icons/shiba-192.png', badge: 'icons/shiba-192.png' });
   })());
 });

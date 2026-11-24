@@ -194,7 +194,7 @@
     if (showFollowLog()) return;   // 好友跟隨：「隊長帶你走了什麼」先看
     const L = $('#loading');
     const diary = screen === 'climb' && st && st.away;   // 「你不在的時候」日記等一下就會打開：等它看完
-    if (!noticeQ.length || (L && !L.classList.contains('done')) || diary || $('#modal').classList.contains('on') || $('#badgePop') || $('#toast').classList.contains('on')) return;
+    if (!noticeQ.length || (L && !L.classList.contains('done')) || $('#cover').classList.contains('on') || diary || $('#modal').classList.contains('on') || $('#badgePop') || $('#toast').classList.contains('on')) return;
     const n = noticeQ.shift(); toast(n[0], n[1]); bgNote = n;
   }
   function holdNotice(){ if (!bgNote || !$('#toast').classList.contains('on')) return; noticeQ.unshift(bgNote); bgNote = null; MO.toastOff(); }
@@ -977,7 +977,7 @@
       .noteP>div{position:absolute;left:calc(100% * 124.75 / 314);top:calc(100% * 275.5 / 438);width:var(--p);height:calc(var(--p) * 280 / 168);margin:calc(var(--p) * -140 / 168) 0 0 calc(var(--p) / -2);box-sizing:border-box;padding:34px 9px 10px;font-size:15px;line-height:1.6;transform:rotate(16deg);overflow-wrap:anywhere}
       .noteP small{font-size:10.5px!important;line-height:1.4;margin-top:6px!important;text-wrap:balance}`);   // 署名一行放得下「— 你在嘉明湖留下的願望」，放不下時兩行平均分，不會剩一個字
     if (css.length) { const st = document.createElement('style'); st.textContent = css.join('\n'); document.head.appendChild(st); }
-    if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="山行小日子">`; } }
+    if (u('title_logo')) { const l = $('.logo'); if (l) { l.classList.add('artLogo'); l.innerHTML = `<img src="${u('title_logo')}" alt="森呼吸">`; } }
   });
   function trSvg(tr){ return SX.art.img(tr.id, trSvgDrawn(tr)); }
   function trSvgDrawn(tr){
@@ -2196,8 +2196,24 @@
   function enterNow(){
     if (entered) return; entered = true; clearTimeout(slowLoadT);
     const L = $('#loading'); if (L) { const f = $('#ldFill'), d = $('#ldDog'); if (f) f.style.width = '100%'; if (d) d.style.left = '100%'; L.classList.add('done'); }
-    const tr = onTrail(); if (tr) startClimb(tr, true); else go('lobby');
-    pumpNotice();
+    showCover(() => { const tr = onTrail(); if (tr) startClimb(tr, true); else go('lobby'); });
+  }
+  // 封面：讀取畫面跑完後蓋在最上面（每次打開遊戲一次），輕點任何地方才進去。
+  // 點下去就先切到要去的畫面（登山畫面的「你不在的時候」日記照常打開），封面再淡出；淡出完才開始跳排隊的背景通知
+  // 有 cover_portrait（直版）就用那張；橫的螢幕有 cover_key（橫版）就用橫版；都沒有就是 index.html 裡紙墨風的暫代封面
+  function showCover(enter){
+    const c = $('#cover'); if (!c) { enter(); pumpNotice(); return; }
+    const id = innerWidth > innerHeight && SX.art.url('cover_key') ? 'cover_key' : 'cover_portrait', u = SX.art.url(id);
+    if (u) { c.insertAdjacentHTML('afterbegin', `<img class="cvArt" src="${u}" alt="" draggable="false">`); c.classList.add('art'); c.querySelector('.cvArt').onerror = e => { e.target.remove(); c.classList.remove('art'); }; }   // 圖讀不到就回到暫代封面
+    let tapped = false;
+    const tap = e => {
+      if (tapped || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
+      tapped = true; enter(); c.classList.add('off');
+    };
+    const gone = e => { if (e.target !== c || !c.classList.contains('off')) return; c.classList.remove('on', 'off'); pumpNotice(); };
+    c.addEventListener('click', tap); c.addEventListener('keydown', tap);
+    c.addEventListener('transitionend', gone); c.addEventListener('transitioncancel', gone);
+    c.classList.add('on'); c.focus({ preventScroll:true });
   }
   // 網路太慢：讀取超過 LOAD_TIMEOUT_MS 還沒好，在讀取畫面告訴玩家，讓他選「再試一次」或「先進去看看」（小柴犬繼續跑）
   const LOAD_TIMEOUT_MS = 30000;
