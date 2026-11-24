@@ -2665,16 +2665,21 @@ function grassVisT(nS){
 const SEAM_Y = 1.5;   // 以前 0.7：2D 畫布有貼圖的那段遠端往內縮 1 像素（gIn），0.7 蓋不滿，每段交界留 0.3 像素的縫透出後面（2026-11-24 掃描）
 // 坡面底色、土坎切面（不透明、負責蓋滿）的近端：不是一律往下多蓋 SEAM_Y，而是往「前一段（更近的那段）的近端」那個方向多蓋（往下至少 SEAM_Y 像素，最多伸出 SEAM_EXT 像素、不超過前一段）。
 // 急轉彎時遠處的路橫著走，一段一段的坡面在畫面上是往旁邊排、交界是斜的陡線：一律往下推等於往這段自己裡面縮，每段交界留一條斜縫透出後面的天空，
-// 遠處山坡一條條斜紋（2026-11-24 轉彎巡檢：玉山 3091、9199、10119，玉山前峰 851，玉山西峰 4525…）。用前一段真正的位置定方向：橫著走、翻過坡頂摺回來都蓋得到
+// 遠處山坡一條條斜紋（2026-11-24 轉彎巡檢：玉山 3091、9199、10119，玉山前峰 851，玉山西峰 4525…）。用前一段真正的位置定方向：橫著走、翻過坡頂摺回來都蓋得到。
+// 前一段路中心沒有高度（y1 - y2 不到 0.2，整段不畫）時，那一段兩旁的坡面也沒畫：改成伸到再前一段的近端，把沒畫的那一段一起蓋住（只跨一段；
+// 連著好幾段都不畫是翻過坡頂背著鏡頭的一大片，不去蓋，2026-11-24 轉彎巡檢：玉山東峰 857、玉山 3523 公尺）
 // tX1、tY1 本身不動（貼圖、陰影、霧照舊扣掉 SEAM_Y 用真正的邊）
 const SEAM_EXT = 3, EX1 = new Float64Array(16), EY1 = new Float64Array(16), tXP = new Float64Array(16), tYP = new Float64Array(16), tDP = new Float64Array(16), tHP = new Float64Array(16);
+const gSkip = q => q >= 0 && !(pY[q] - pY[q + 1] > 0.2);   // 第 q 段的地面因為路中心沒有高度整段不畫
 // jp、ip：前一段近端是第幾段（畫面上）、哪一段的地形（-1＝沒有前一段，照舊往下）
 function nearExt(nS, side, DS, jp, ip){
+  let span = false;
+  if (gSkip(jp)) { span = true; jp--; ip--; if (gSkip(jp)) jp = -1; }
   if (jp >= 0) bandEnd(ip, side, DS, nS, rwAt(ip) - RW, gwAt(pZ[jp]), DS === TDN ? tdMorph(pZ[jp]) : 0, pX[jp], pY[jp], pS[jp], tXP, tYP, tDP, tHP);
   for (let k = 0; k < nS; k++) {
     const x = tX1[k], y = tY1[k] - SEAM_Y, vx = jp >= 0 ? tXP[k] - x : 0, vy = jp >= 0 ? tYP[k] - y : 1, L = Math.hypot(vx, vy);
     if (jp < 0 || L < 0.05) { EX1[k] = tX1[k]; EY1[k] = tY1[k]; continue; }
-    const f = Math.min(SEAM_Y / Math.max(Math.abs(vy), 1e-3), SEAM_EXT / L, 1);
+    const f = span ? 1 : Math.min(SEAM_Y / Math.max(Math.abs(vy), 1e-3), SEAM_EXT / L, 1);
     EX1[k] = x + vx * f; EY1[k] = y + vy * f;
   }
 }
@@ -3595,10 +3600,7 @@ function drawWorld(b, t, jHi, jLo, far){
     const fx = clamp((pZ[j] - fogD0) / (fogD - fogD0), 0, 1), fq = 1 - (1 - fx * (2 - fx)) * ease01((fz - FAR_FADE_H) / (1 - FAR_FADE_H)), fi = (fq * (FOGN - 1)) | 0;   // 空氣透視：中景就開始變淡（先快後慢），山坡才會融進遠山
     if (fade < 0.005) { if (lod) { lodRestore(j); lodSkip = false; } continue; }
     ctx.globalAlpha = fade;
-    // 路中心那條線在畫面上幾乎沒有高度（y1 - y2 很小）不一定是看不到的一段：急轉彎時遠處的路橫著走，路中心前後兩端差不多一樣高、卻往旁邊移了好幾像素，
-    // 兩旁的坡面照樣是看得到的一大片；路中心不動、遠近比例不一樣時，離路遠的坡面也會往外移好幾像素（gwAt × 比例差）。以前只看高度就整段跳過，那一段的坡面沒畫，
-    // 前後兩段之間留一條縫透出後面的天空（2026-11-24 轉彎巡檢：玉山東峰 857 公尺、玉山 3523 公尺）
-    if (!below && !skipG && (y1 - y2 > 0.2 || Math.abs(x1 - x2) > 0.5 || gwAt(pZ[j]) * (s1 - s2) > 0.5)) {
+    if (!below && !skipG && y1 - y2 > 0.2) {
       gmk(1);
       if (HS.on && fade > 0.05 && y2 < HS.y) HS.y = y2;   // 遠處地面最高到畫面哪裡（地平線霧帶的位置）
       const yb = y1 + SEAM_Y + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
@@ -3673,7 +3675,6 @@ function drawWorld(b, t, jHi, jLo, far){
         gmk(0); skirtEdge(tX1[n1], tY1[n1], tX2[n1], tY2[n1], n1, dq * SKIRT.a); gmk(1); skirtIn(n1, dq * SKIRT.a);   // 稜線外緣：往外一段霧（順著帶子方向）、地面那邊最外面幾公尺淡進霧，地面淡進雲海，不是一條硬邊
         ctx.globalAlpha = fade;
       }
-      if (y1 - y2 > 0.2) {   // 路面、階梯、路緣、路上的小東西：路中心那條線有高度才畫（只是兩旁坡面往旁邊移的那一段，路本身看不到，照舊不畫）
       const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road;
       // 步道
       const cw = isWood ? 1.07 : 1, w1 = rw * s1, w2 = rwAt(i + 1) * s2, e1 = w1 * cw + 0.6, e2 = w2 * cw + 0.6, stp = sAt(i) === 1;   // cw：路面底下多墊出去的那一圈（木棧道是看得到的深色木板邊；其他路面只墊 0.6 像素補反鋸齒的縫，以前墊出 7% 路寬，就是那條筆直的深灰路緣帶）   // 路面底色整條同一色（以前一段深一段淺，像一格一格的磁磚）
@@ -3868,7 +3869,6 @@ function drawWorld(b, t, jHi, jLo, far){
           const gl = Math.sin(curT * 2.3 + Hh(i, 43) * TAU); if (gl > 0.6 && pr > 3) { ctx.globalAlpha = dA * (gl - 0.6) * 2; ctx.drawImage(GLOW, px + pr * 0.3 - pr * 0.25, gy - pr * fl * 0.3 - pr * 0.25, pr * 0.5, pr * 0.5); ctx.globalAlpha = dA; }
         }
         ctx.globalAlpha = fade; gmk(1);
-      }
       }
       if (farA(j, turfJ(), 8) > 0 && TURF.length && snowAmt < 0.9) { gmk(2); drawTurf(i, j, y1, y2, s1, fq, fade, DS, dW1, Math.min(gw1, rw + lerp(30, 7, wallAt(i)))); gmk(1); } if (lightA > 0.01) groundLight(i, j, t, fq, fade * lightA);   // 森林步道外側被植物牆擋住，草叢只蓋到路邊幾公尺（省效能）   // 畫在路面之後：路邊第一排草會垂到土坎上
     }
