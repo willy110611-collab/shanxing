@@ -46,7 +46,8 @@ const SHEETS = [
   [/^pet_leopardcat(_rain)?_step8$/, 8, 1, { order:PET_ORDER.leopardcat, air:true, wide:true }],
   [/^pet_magpie(_rain)?_fly12$/, 6, 2, { order:PET_ORDER.magpie, air:true, wide:true }],
   [/_step8$/, 8, 1, { order:STEP8 }],    // hiker_step8、hiker_rain_step8
-  [/_stairs16$/, 8, 2, { order:STAIRS16 }] // hiker_stairs16、hiker_rain_stairs16（兩張姿勢相同）
+  [/_stairs16$/, 8, 2, { order:STAIRS16 }], // hiker_stairs16、hiker_rain_stairs16（兩張姿勢相同）
+  [/_turn16$/, 8, 2]   // hiker_turn16、hiker_rain_turn16：斜後方往右前方走，16 格就是完整的左右兩步，照原順序播（左彎整張鏡射）
 ];
 const POSE = /^hiker_/;   // 登山客的圖：單張動作也用上半身置中（見 prep）
 function sheetOf(id){ for (let i = 0; i < SHEETS.length; i++) if (SHEETS[i][0].test(id)) return SHEETS[i]; return null; }
@@ -188,7 +189,7 @@ function put(ctx, e, f, img, oy, k, cx, by, h, flip, u0, v0, u1, v1){
   else ctx.drawImage(img, sx, sy, sw, sh, cx + dx, dy, dw, dh);
 }
 A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
-  const e = lib[id]; if (!e) return false;
+  const e = lib[id]; if (!e || e.lazy) return false;   // 用到才下載的圖（lazy）沒有格子，不能畫在畫布上：照 A.get 一樣當作沒有圖，讓呼叫的人用程式畫
   const f = frameOf(e, i), mir = f.mx ? !flip : flip, img = fl ? filtered(e, fl) : mir && e.imgM ? e.imgM : e.img;   // 鏡射畫的用 imgM（光照樣從右邊來，見 relit）
   put(ctx, e, f, img, 0, 1, cx, by, h, mir, 0, 0, 1, 1);   // f.mx：這一格本身是鏡射格（SHEETS 的 order 用 ~i）
   return true;
@@ -206,7 +207,7 @@ A.drawOver = function(ctx, id, i, cx, by, h, flip, img, oy, k, part){
 const FULL = [0, 0, 1, 1];
 // 把第一格裁成單獨一張 canvas（給需要整張圖的地方）
 A.crop = function(id, i){
-  const e = lib[id]; if (!e) return null;
+  const e = lib[id]; if (!e || e.lazy) return null;
   const f = e.frames[i || 0], c = document.createElement('canvas'); c.width = f.w; c.height = f.h;
   c.getContext('2d').drawImage(e.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
   return c;
