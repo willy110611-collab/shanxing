@@ -147,6 +147,10 @@ function clean(d, w, h, pink){
       if (s > 0 && Math.abs(d[i] - d[i + 2]) <= 40) { d[i + 3] = Math.round(d[i + 3] * cover(1 - spill(i))); gray++; }
     } else if (warm(i, true)) gray++;   // 對不上（被畫成淡紫的登山杖、光暈透出洋紅底，旁邊沒有同色的乾淨點）
   }
+  // 5b. 雜點：跟圖不相連、又小又淡的一小團（Gemini 右下角浮水印、底邊壓縮痕跡去背後的殘渣）整團變透明
+  //    留著的話遊戲裁透明邊（art.js bounds）會把它算進圖的範圍：2026-11-24 選中的分頁木牌右下角 1 顆雜點，整張沒裁到、木框縮小偏左上
+  //    圖裡真的要的小東西（花瓣、光點）都畫得很實，最淡的也比 SPECK_A 濃，不會被清掉
+  speck(d, w, h);
   // 6. 透明處的顏色：靠近圖的 PAD 像素內填成最近的圖的顏色（縮圖、webp 壓縮把透明處混進邊緣時，混進來的是圖自己的顏色，不是洋紅）；
   //    更遠的填黑（縮圖碰不到，整片同色 webp 也比較小）
   qh = qt = 0;
@@ -162,6 +166,32 @@ function clean(d, w, h, pink){
   return { M:M.map(Math.round), K:K.map(Math.round), pink:!!pink, fit, gray };
 }
 
+const SPECK_N = 2000;   // 一團不到這麼多像素（原圖尺寸）……
+const SPECK_A = 160;    // ……而且最濃的一點也不到這個透明度：當成雜點
+// 相連（八方向）的不透明點分團，小又淡的整團清成透明；回傳清掉幾團（tools/artscan.js 用同一套判斷檢查輸出的圖）
+function speck(d, w, h, dry){
+  const N = w * h, lab = new Uint8Array(N), q = new Int32Array(N); let gone = 0;
+  for (let p = 0; p < N; p++) {
+    if (lab[p] || !d[p * 4 + 3]) continue;
+    let qt = 0, qh = 0, am = 0; q[qt++] = p; lab[p] = 1;
+    while (qh < qt && qt <= SPECK_N) {
+      const s = q[qh++], x = s % w, y = (s - x) / w; if (d[s * 4 + 3] > am) am = d[s * 4 + 3];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+        const t = Y * w + X; if (!lab[t] && d[t * 4 + 3]) { lab[t] = 1; q[qt++] = t; }
+      }
+    }
+    if (qt > SPECK_N) {   // 大團（圖本身）：剩下沒走完的點標起來就好，不用再數
+      while (qh < qt) { const s = q[qh++], x = s % w, y = (s - x) / w;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h) continue; const t = Y * w + X; if (!lab[t] && d[t * 4 + 3]) { lab[t] = 1; q[qt++] = t; } } }
+      continue;
+    }
+    for (let k = 0; k < qt; k++) if (d[q[k] * 4 + 3] > am) am = d[q[k] * 4 + 3];
+    if (am >= SPECK_A) continue;
+    gone++; if (!dry) for (let k = 0; k < qt; k++) d[q[k] * 4 + 3] = 0;
+  }
+  return gone;
+}
 function probe(f){
   const o = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', f]).toString().trim().split(',');
   return [+o[0], +o[1]];
@@ -181,7 +211,7 @@ function run(inp, out, max){
   execFileSync('ffmpeg', args, { input:d, maxBuffer:1 << 24 });
   return info;
 }
-module.exports = { clean, run, PINK_ART };
+module.exports = { clean, run, speck, PINK_ART };
 if (require.main === module) {
   const [inp, out, max] = process.argv.slice(2);
   if (!inp || !out) { console.error('用法：node art/despill.js <原圖> <輸出.webp|.png> [長邊上限]'); process.exit(1); }

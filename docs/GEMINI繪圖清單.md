@@ -603,3 +603,8 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 |---|---|---|
 | `hiker_turn16` | 16:9 | 洋紅底。The hiker (主角設定) seen from **behind and about 30 degrees to the right (three-quarter rear view)**, walking forward and slightly to the right, **16-frame walking cycle in 2 rows of 8**: top row = the RIGHT foot steps forward (frame 4 both feet side by side), bottom row = the LEFT foot steps forward (frame 12 both feet side by side). Same size, same foot baseline, same body center in every frame; trekking poles silver-grey, alternating with the steps. Only a little of the face visible under the hat brim. |
 | `hiker_rain_turn16` | 16:9 | 洋紅底。Exactly the same 16 poses and angle as hiker_turn16, wearing the rain outfit (yellow hooded poncho with hood up, dark-green backpack cover), hood identical in all 16 frames. |
+
+**重畫（2026-11-24）**：第一次交的 `hiker_rain_turn16` 上排背包有雨套、下排沒有（露出水壺和網袋），走路時上下兩排輪流播，背包會一閃一閃。晴天版 `hiker_turn16` 第二次交的可以用。重畫雨衣版時上傳晴天版 `hiker_turn16`（姿勢）和 `hiker_rain_step8`（雨衣、雨套）當參考，提示詞在原本那段後面加：
+```
+Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn16. The backpack must wear the SAME dark-green rain cover in ALL 16 frames, both rows: the cover hides the side bottle pockets and mesh, only the orange sleeping mat shows on top. Do not draw any frame without the rain cover. Plain flat magenta background only, no shadows, boxes or color patches behind the figures.
+```

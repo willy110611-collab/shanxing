@@ -14,8 +14,12 @@ $regions = [regex]::Matches($regBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline'
 $mtBlock = [regex]::Match([IO.File]::ReadAllText((Join-Path $here '..\js\data.js')), '(?s)SX\.MOUNTAINS\s*=\s*\[(.*?)\];').Groups[1].Value
 $mts = [regex]::Matches($mtBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline') | ForEach-Object { $_.Groups[1].Value }
 $opaque = '^(sky_|ground_|enc_|scene_|plaza_|ui_page$|summit_(' + ($mts -join '|') + ')$|map_(' + ($regions -join '|') + ')$)'
-# 只在網頁上顯示、不畫在畫布上的大插圖：不在開遊戲時下載，跳出卡片時才載（manifest 標 lazy）
-$lazy = '^(enc_|scene_|summit_(' + ($mts -join '|') + ')$)'
+# 只在網頁上顯示、不畫在畫布上的圖：寶物卡、集印、介面木框和按鈕、圖示、天氣、稀有度、徽章、表情、標題
+# 2026-11-24 iPhone「重複發生問題」：開遊戲時把所有圖都解開放在記憶體（約 540 MB）整頁當掉。這些圖改成用到才下載、由網頁自己顯示，
+# 透明邊在轉檔時就裁掉（art\trim.js），遊戲不再先解成畫布再裁。要畫在畫布上的圖（face_ 狀態臉、map_ 地圖）不能放進來
+$htmlOnly = '^(t_|stamp_|ui_|icon_|wx_|rarity_|badge_|emo_|title_logo$|encounter_frame$)'
+# 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖
+$lazy = '^(enc_|scene_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
 
 # 合法的名字只有一個來源：docs\GEMINI繪圖清單.md 裡用反引號標起來的英文名
 $doc = [IO.File]::ReadAllText((Join-Path $here '..\docs\GEMINI繪圖清單.md'))
@@ -50,6 +54,7 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
     # 遊戲載入時不再處理，所以洋紅一定要在這裡清乾淨（tools\artscan.js 會檢查）
     & $node (Join-Path $here 'despill.js') $_.FullName $tmp $max | Out-Null
     if ($LASTEXITCODE) { throw "去背失敗：$($_.Name)" }
+    if ($name -match $htmlOnly) { & $node (Join-Path $here 'trim.js') $tmp | Out-Null; if ($LASTEXITCODE) { throw "裁透明邊失敗：$($_.Name)" } }
   }
   if ((Test-Path $out) -and ((PixelSum $out) -eq (PixelSum $tmp))) { Remove-Item $tmp; Write-Host "沒變 $name"; return }
   # 圖真的換了：同名的舊輸出刪掉（換格式時才不會留下兩張同名圖），換上新的

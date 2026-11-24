@@ -840,3 +840,11 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .pfFit b{display:block;font-weight:normal;font-size:16px;white-space:nowrap}
 .pfFit p{margin:2px 0 0;font-size:12.5px;line-height:1.5;color:var(--wood2)}
 .summitBig.fitUp{font-size:13px;color:var(--wood2);margin-top:-4px}
+
+/* 山屋整修中（js/maint.js）：蓋住整個遊戲，比讀取畫面、視窗都高 */
+.maint{position:absolute;inset:0;z-index:98;display:grid;place-items:center;padding:calc(20px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom));background:var(--paperBg,#f3e3c3)}
+.maintCard{text-align:center;color:var(--ink);max-width:320px}
+.maintArt{width:220px;height:160px;margin:0 auto 14px;background:center/contain no-repeat}
+.maintCard h2{font-size:26px;font-weight:normal;margin-bottom:10px}
+.maintCard p{font-size:16px;line-height:1.7}.maintCard .tiny{font-size:13px;color:var(--ink2);margin-top:4px}
+.maintForm{display:grid;gap:8px;margin:10px 0}.maintForm label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:15px}.maintForm input{font:inherit;padding:4px 6px;border:2px solid var(--ink);border-radius:8px;background:#fffaf0;color:var(--ink)}

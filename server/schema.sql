@@ -114,3 +114,5 @@ CREATE TABLE IF NOT EXISTS team_trips (team TEXT NOT NULL, trip INTEGER NOT NULL
 CREATE TABLE IF NOT EXISTS team_runs (team TEXT NOT NULL, trip INTEGER NOT NULL, player TEXT NOT NULL, dist REAL NOT NULL DEFAULT 0, at INTEGER NOT NULL, eta INTEGER NOT NULL DEFAULT 0, summited INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team, trip, player));
 CREATE INDEX IF NOT EXISTS team_runs_player ON team_runs (player);
 CREATE INDEX IF NOT EXISTS team_runs_open ON team_runs (summited, eta);
+-- 維修模式（migrate8）：只有一列，start 幾點開始、eta 預計幾點好；沒有這一列＝沒有維修
+CREATE TABLE IF NOT EXISTS maint (id INTEGER PRIMARY KEY CHECK (id = 1), start INTEGER NOT NULL, eta INTEGER NOT NULL);
