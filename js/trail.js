@@ -2494,9 +2494,9 @@ function tdMorph(z){ return clamp((z / SEG - (TDF_J - 1 - TD_MORPH)) / TD_MORPH,
 const FAR_FADE = 30, FAR_FADE_A = 0.65, FAR_FADE_H = 0.35;   // 最遠幾段淡出；透明度在最遠的 65% 裡變、霧色在最遠 35% 以內已經全是霧
 // 地面的外緣一律淡進霧裡（2026-11-24 回報：遠處山坡像硬邊貼紙浮在雲海上、灰綠色的多邊形浮在天空）：
 // 以前稜線外緣接一片 10×16 公尺的深色「往下掉的山坡」，下緣又是一條硬邊，底下直接露出雲海；往上長的山壁外緣也是一條硬邊貼著天空。
-// 現在兩側地面的最外緣（離路 gwAt 公尺那條線）上下各蓋一段霧色漸層：往上 up 公尺從透明到霧、往下 dn 公尺從霧到透明（畫面上最多幾像素），
+// 現在兩側地面的最外緣（離路 gwAt 公尺那條線）上下各蓋一段霧色漸層：往上 up 公尺從透明到霧（畫面上最多幾像素）、地面那邊往內 in 公尺從霧到透明，
 // 地面不論往下掉還是往上長，邊緣都融進霧和雲海。霧色貼圖一張（換霧色才重做），每段每邊只多貼兩次，WebGL 同一批
-const SKIRT = { up:2.2, dn:9, upPx:34, dnPx:110, a:0.85 };
+const SKIRT = { up:2.2, upPx:34, in:2, a:0.85 };   // in：地面那邊從最外緣往內幾公尺淡進霧（skirtIn）
 let skirtC = null;
 function skirtTex(){
   if (skirtC && skirtC.hk === hazeCss) return skirtC;
@@ -2504,16 +2504,39 @@ function skirtTex(){
   for (let h = 0; h < 2; h++) { const gr = g.createLinearGradient(0, h * 32, 0, h * 32 + 32); for (let q = 0; q <= 8; q++) gr.addColorStop(q / 8, rgba(hazeRgb, ease01(h ? 1 - q / 8 : q / 8).toFixed(3))); g.fillStyle = gr; g.fillRect(0, h * 32, 4, 32); }
   c.hk = hazeCss; return (skirtC = c);
 }
-// 一段外緣 (xa, ya)→(xb, yb)（畫面像素）、這裡每公尺幾像素 s、不透明度 a：上下兩塊斜的平行四邊形（setTransform 把貼圖斜貼上去）
+// 一段外緣 (xa, ya)→(xb, yb)（畫面像素；ya 是這段近端往下多蓋 SEAM_Y 的那個點，這裡扣回真正的邊，不然每段跟前一段的霧差 SEAM_Y 像素，一階一階）、這裡每公尺幾像素 s、不透明度 a：往上一塊斜的平行四邊形（setTransform 把貼圖斜貼上去），天空那邊淡進霧
+// 往地面那邊的霧不在這裡畫（見 skirtIn）：以前往下也貼一塊左右是直邊的平行四邊形，只蓋得到這段外緣正下方那幾像素寬，
+// 被更近那段地面一蓋，遠處山坡的外緣變成一階一階的樓梯（2026-11-24 掃描：雪山 7630 右邊）
 function skirtEdge(xa, ya, xb, yb, s, a){
+  ya -= SEAM_Y;
   const dx = xb - xa; if (a < 0.01 || Math.abs(dx) < 0.3 || Math.max(xa, xb) < -2 || Math.min(xa, xb) > W + 2) return;
-  const up = Math.min(SKIRT.up * s, SKIRT.upPx * U), dn = Math.min(SKIRT.dn * s, SKIRT.dnPx * U);
-  if (Math.max(ya, yb) + dn < 0 || Math.min(ya, yb) - up > H) return;
+  const up = Math.min(SKIRT.up * s, SKIRT.upPx * U);
+  if (Math.max(ya, yb) < 0 || Math.min(ya, yb) - up > H) return;
   const T = skirtTex(), ax = DPR * dx / 4, ay = DPR * (yb - ya) / 4;
   ctx.globalAlpha = a;
   ctx.setTransform(ax, ay, 0, DPR * up / 32, DPR * xa + OX, DPR * (ya - up) + OY); ctx.drawImage(T, 0, 0, 4, 32, 0, 0, 4, 32);
-  ctx.setTransform(ax, ay, 0, DPR * dn / 32, DPR * xa + OX, DPR * ya + OY); ctx.drawImage(T, 0, 32, 4, 32, 0, 0, 4, 32);
   ctx.setTransform(DPR, 0, 0, DPR, OX, OY);
+}
+// 地面最外緣往內 SKIRT.in 公尺這一條（沿著這段最外面那條帶子）從透明慢慢變成霧：用離路中心幾公尺量，不是畫面上的上下，
+// 前後兩段共用的那條邊兩端是同一個位置、同一個濃淡，一路接得起來。近端用真正的邊（tY1 扣掉 SEAM_Y），不跟前一段的霧疊兩次
+const SKUV = new Float64Array(8);
+function skirtIn(n1, a){
+  const k = n1 - 1, Dk1 = tD1[k], Dn1 = tD1[n1], Dk2 = tD2[k], Dn2 = tD2[n1];
+  if (a < 0.01 || !(Dn1 > Dk1) || !(Dn2 > Dk2)) return;
+  const xo1 = tX1[n1], yo1 = tY1[n1] - SEAM_Y, xo2 = tX2[n1], yo2 = tY2[n1];
+  if (Math.max(xo1, xo2, tX1[k], tX2[k]) < -2 || Math.min(xo1, xo2, tX1[k], tX2[k]) > W + 2 || Math.max(yo1, yo2, tY1[k], tY2[k]) < 0 || Math.min(yo1, yo2, tY1[k] - SEAM_Y, tY2[k]) > H) return;
+  const D1 = Math.max(Dk1, Dn1 - SKIRT.in), D2 = Math.max(Dk2, Dn2 - SKIRT.in), u1 = (D1 - Dk1) / (Dn1 - Dk1), u2 = (D2 - Dk2) / (Dn2 - Dk2);
+  const xi1 = lerp(tX1[k], xo1, u1), yi1 = lerp(tY1[k] - SEAM_Y, yo1, u1), xi2 = lerp(tX2[k], xo2, u2), yi2 = lerp(tY2[k], yo2, u2);
+  // 貼圖第二半（第 32～64 列）：上緣是霧、往下淡到透明。外緣對到第 32.5 列、往內 SKIRT.in 公尺對到第 63.5 列（不夠寬就照比例）
+  const v1 = (32.5 + 31 * (Dn1 - D1) / SKIRT.in) / 64, v2 = (32.5 + 31 * (Dn2 - D2) / SKIRT.in) / 64, T = skirtTex(), o = T.po || (T.po = { c:T });
+  ctx.globalAlpha = a; ctx.fillStyle = patOf(o);
+  if (ctx.gpu) { const U2 = SKUV; U2[0] = 0.5; U2[1] = v1; U2[2] = 0.5; U2[3] = 32.5 / 64; U2[4] = 0.5; U2[5] = 32.5 / 64; U2[6] = 0.5; U2[7] = v2; ctx.uvs = U2; }
+  else {   // Canvas 2D：三個角（內近、外近、外遠）決定一個仿射
+    const m = TEX_MTX || new DOMMatrix(), cy = (yo1 - yi1) / (64 * (32.5 / 64 - v1)), cx = (xo1 - xi1) / (64 * (32.5 / 64 - v1));
+    m.a = (xo2 - xo1) / 4; m.b = (yo2 - yo1) / 4; m.c = cx; m.d = cy; m.e = xi1 - cx * v1 * 64; m.f = yi1 - cy * v1 * 64; o.p2.setTransform(m);
+  }
+  ctx.beginPath(); ctx.moveTo(xi1, yi1); ctx.lineTo(xo1, yo1); ctx.lineTo(xo2, yo2); ctx.lineTo(xi2, yi2); ctx.closePath(); ctx.fill();
+  ctx.uvs = null;
 }
 // 遠處地面和天空的交界（2026-11-24 回報：開闊草原跟天空之間一條筆直的地平線）：離鏡頭 HZB.z 公尺以外的地面畫完時，
 // 在那些地面最高的地方（畫面上最上面那條，通常是翻過坡頂那條線）蓋一條起伏的霧帶：往上淡進天空、往下淡進遠處的地面。
@@ -3521,7 +3544,7 @@ function drawWorld(b, t, jHi, jLo, far){
           ctx.stroke(); ctx.globalAlpha = fade;
         }
         const dq = fade * fade;   // 最遠那幾段：外緣的霧跟著淡掉（不會一片一片半透明的霧板疊在遠方）
-        skirtEdge(tX1[n1], tY1[n1], tX2[n1], tY2[n1], (s1 + s2) * 0.5, dq * SKIRT.a);   // 稜線外緣：上下各一段霧，地面淡進雲海，不是一條硬邊
+        skirtEdge(tX1[n1], tY1[n1], tX2[n1], tY2[n1], (s1 + s2) * 0.5, dq * SKIRT.a); skirtIn(n1, dq * SKIRT.a);   // 稜線外緣：天空那邊一段霧、地面那邊最外面幾公尺淡進霧，地面淡進雲海，不是一條硬邊
         ctx.globalAlpha = fade;
       }
       const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road;
