@@ -169,11 +169,14 @@ P.upload = function(img, kind){
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, kind !== 'u');
   if (!img) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
   else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-  const rep = kind === 'p', mipm = kind === 's' && img;
+  // 重複的地面貼圖也做縮小版（兩級之間線性混）：草地每個角自己的貼圖座標（trail.js grassUV）在急彎、斜著看過去的坡面上，畫面上下一個像素跨過十幾個貼圖像素，
+  // 沒有縮小版時每一列各自跳著取樣，整片坡面變成一條條橫的亮暗細紋（2026-11-24 地面縫掃描：七星山 1100、1400…；Canvas 2D 自己會縮小，沒有這個問題）。
+  // 不會斜著看的地方 trail.js 已經挑好縮小不到兩倍的那一級（texLevel），顯示卡用的還是那一級本身
+  const rep = kind === 'p', mipm = (kind === 's' || rep) && img;
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, rep ? gl.REPEAT : gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, rep ? gl.REPEAT : gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mipm ? gl.LINEAR_MIPMAP_NEAREST : gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mipm ? (rep ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR_MIPMAP_NEAREST) : gl.LINEAR);
   if (mipm) gl.generateMipmap(gl.TEXTURE_2D);
   this.st.uploads++;
   this.slots.length = 0;   // 綁定換過了：下一批重新綁
