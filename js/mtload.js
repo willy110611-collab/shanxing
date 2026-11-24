@@ -45,8 +45,10 @@ function shape(m){
 
 // 先開始下載這座山的讀取圖（按下出發就開始；真的要蓋讀取畫面時才用）
 ML.prep = function(m){
-  const id = 'load_' + m.id, h = { bmp:null, cancelled:false };
-  h.p = SX.art && SX.art.has(id) && SX.art.lazyBitmap ? SX.art.lazyBitmap(id).then(b => { if (h.cancelled && b) { b.close(); return null; } h.bmp = b; return b; }) : Promise.resolve(null);
+  // 這座山自己的 load_<山>；沒有就用 load_default（暫時大家共用的那張）；兩張都讀不到才照真實輪廓用程式畫
+  const A = SX.art, h = { bmp:null, cancelled:false }, ids = ['load_' + m.id, 'load_default'].filter(id => A && A.has(id) && A.lazyBitmap);
+  const next = i => i >= ids.length ? Promise.resolve(null) : A.lazyBitmap(ids[i]).then(b => b || next(i + 1));
+  h.p = next(0).then(b => { if (h.cancelled && b) { b.close(); return null; } h.bmp = b; return b; });
   h.cancel = () => { h.cancelled = true; if (h.bmp) { h.bmp.close(); h.bmp = null; } };
   return h;
 };
