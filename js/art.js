@@ -105,8 +105,8 @@ function prep(name, img){
 // （t：中線 0、最右 1、最左 −1），g、c 用這一格每一直行的亮度直接解：鏡射畫出來左半平均＝Lo、右半平均＝Ro（左右亮暗、整格亮度都跟原本那格一樣）
 // 2026-11-24 晚上爬階梯還是一步左一步右亮：以前變亮那邊是「相加一層灰」（照整格平均估），連墨線、暗處都加亮，
 // 階梯圖左右差大，鏡射格整格亮約 6%、右半又多亮約一成。現在是真的「乘倍數」：變暗疊一層黑（source-atop，透明度不動）、變亮把原圖再加一次（lighter）
-// 只做登山畫面會鏡射畫的圖：廣場的正面／側面／背面動作、寵物大頭照不在登山畫面畫，不做（2026-11-24 iPhone 記憶體不夠整頁當掉，這份鏡射圖每張都多佔一倍）
-const RELIT = /^(hiker|pet)_(?!(front|side|back)_|(bow|cheer|wave)$|.*_face$)/, RELIT_S = 16;   // RELIT_S：左右漸層分幾段
+// 寵物大頭照只在網頁上顯示、不會鏡射畫，不做（2026-11-24 iPhone 記憶體：這份鏡射圖每張都多佔一倍）。廣場的動作會鏡射畫，照樣做（光線才不會跟著人翻過來）
+const RELIT = /^(hiker|pet)_(?!.*_face$)/, RELIT_S = 16;   // RELIT_S：左右漸層分幾段
 function relit(c, px, Wd, Hd, fr){
   const m = document.createElement('canvas'); m.width = Wd; m.height = Hd; const g = m.getContext('2d'); g.drawImage(c, 0, 0);
   const t = document.createElement('canvas'), seen = {}, blk = v => 'rgba(0,0,0,' + Math.max(0, Math.min(1, v)).toFixed(4) + ')';
