@@ -2895,24 +2895,19 @@ const SEAM_Y = 1.5;   // 以前 0.7：2D 畫布有貼圖的那段遠端往內縮
 // 彎道裡翻過一個小坡頂，路中心連著好幾段沒有高度、兩旁的坡面卻還看得到（2026-11-24 轉彎巡檢：玉山東峰 857、3933，玉山 3523，玉山北峰 6643 公尺）
 // tX1、tY1 本身不動（貼圖、陰影、霧照舊扣掉 SEAM_Y 用真正的邊）
 const EX1 = new Float64Array(16), EY1 = new Float64Array(16), tXP = new Float64Array(16), tYP = new Float64Array(16), tDP = new Float64Array(16), tHP = new Float64Array(16);
-const tXQ = new Float64Array(16), tYQ = new Float64Array(16), tDQ = new Float64Array(16), tHQ = new Float64Array(16), tFF = new Uint8Array(16), tLY = new Float64Array(16), tDV = new Float64Array(16), BRIDGE_DEV = 7;   // nearExt 檢查中間沒畫的那幾段用
+const tXQ = new Float64Array(16), tYQ = new Float64Array(16), tDQ = new Float64Array(16), tHQ = new Float64Array(16), tFF = new Uint8Array(16), tLY = new Float64Array(16);   // nearExt 檢查中間沒畫的那幾段用
 const gSkip = q => q >= 0 && !(pY[q] - pY[q + 1] > 0.2);   // 第 q 段的地面因為路中心沒有高度整段不畫
 // jp、ip：前一段近端是第幾段（畫面上）、哪一段的地形（-1＝沒有前一段，照舊往下）
 function nearExt(nS, side, DS, jp, ip){
   const j0 = jp, i0 = ip; let span = 0;
   while (gSkip(jp)) { span++; jp--; ip--; }   // 一路往近處找到第一段真的有畫的（找不到 jp 變 -1，照舊往下）
   if (jp >= 0) bandEnd(ip, side, DS, nS, rwAt(ip) - RW, gwAt(pZ[jp]), DS === TDN ? tdMorph(pZ[jp]) : 0, pX[jp], pY[jp], pS[jp], tXP, tYP, tDP, tHP);
-  if (span > 1) {   // 連著好幾段沒畫：每一點只在「中間那幾段都朝著鏡頭（越近的邊在畫面上越低）」或「直直蓋過去跟中間那幾段的邊差不到 BRIDGE_DEV 像素」時才蓋過去，而且近一段的那點要在下面；
-    // 翻過坡頂背著鏡頭的一大片，中間的邊離直線幾十到上百像素，不蓋（不然遠處坡面接著坡頂浮在天空：三叉山 2588、玉山北峰 649、玉山西峰 745 量到 14～135 像素；彎道裡的小坡頂玉山東峰 3933、3938 只差 1～4 像素）
-    for (let k = 0; k < nS; k++) { tFF[k] = 1; tLY[k] = tY1[k]; tDV[k] = 0; }
+  if (span > 1) {   // 連著好幾段沒畫：每一點只在中間那幾段都朝著鏡頭（越近的邊在畫面上越低）時才蓋過去；翻過坡頂背著鏡頭的那一面不蓋（不然遠處坡面接著坡頂浮在天空）
+    for (let k = 0; k < nS; k++) { tFF[k] = 1; tLY[k] = tY1[k]; }
     for (let q = j0, iq = i0; q >= jp && q >= 0; q--, iq--) {
-      if (q === jp) { for (let k = 0; k < nS; k++) { if (tYP[k] < tLY[k] - 0.2) tFF[k] = 0; if ((tFF[k] || tDV[k] <= BRIDGE_DEV) && tYP[k] > tY1[k]) tFF[k] = 1; else tFF[k] = 0; } break; }
+      if (q === jp) { for (let k = 0; k < nS; k++) if (tYP[k] < tLY[k] - 0.2) tFF[k] = 0; break; }
       bandEnd(iq, side, DS, nS, rwAt(iq) - RW, gwAt(pZ[q]), DS === TDN ? tdMorph(pZ[q]) : 0, pX[q], pY[q], pS[q], tXQ, tYQ, tDQ, tHQ);
-      for (let k = 0; k < nS; k++) {
-        if (tYQ[k] < tLY[k] - 0.2) tFF[k] = 0; tLY[k] = tYQ[k];
-        const ax = tX1[k], ay = tY1[k], dx = tXP[k] - ax, dy = tYP[k] - ay, L2 = dx * dx + dy * dy || 1, u = clamp(((tXQ[k] - ax) * dx + (tYQ[k] - ay) * dy) / L2, 0, 1);
-        tDV[k] = Math.max(tDV[k], Math.hypot(tXQ[k] - ax - u * dx, tYQ[k] - ay - u * dy));   // 中間這條邊離「直直蓋過去」那條線多遠
-      }
+      for (let k = 0; k < nS; k++) { if (tYQ[k] < tLY[k] - 0.2) tFF[k] = 0; tLY[k] = tYQ[k]; }
     }
   }
   for (let k = 0; k < nS; k++) {
