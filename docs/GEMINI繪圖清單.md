@@ -638,3 +638,15 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | `load_yushan_west` | 2:1 |
 | `load_yushan_north` | 2:1 |
 | `load_yushan_east` | 2:1 |
+
+## 第 28 批：山腰步道兩種（泥土小徑、碎石路＋石壁；放進 `02.素材`）
+
+一邊約 45 度陡降、看得到山谷遠山，另一邊約 40 度陡升。路面貼圖整張是路面、不用洋紅底；其他三張洋紅底，左右要能無縫接續。完整提示詞在 `_交付/山腰土徑繪圖包/提示詞.md`。
+
+| 檔名 | 比例 | 底 |
+|---|---|---|
+| `ground_dirt_leaf` | 1:1 | 整張路面 |
+| `ground_gravel` | 1:1 | 整張路面 |
+| `grass_tall_slope` | 16:9 | 洋紅 |
+| `canopy_branch` | 16:9 | 洋紅 |
+| `rock_wall_slope` | 16:9 | 洋紅 |

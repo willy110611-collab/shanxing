@@ -20,6 +20,7 @@ const LOBBY = /^(plaza_bg$|emo_|hiker_(front|side)_|hiker_(back_sit|bow|cheer|wa
 // 登山畫面：除了只在地圖、大廳用的圖以外全部（路旁的景物、地面、天空、登山客所有動作、狀態臉、天氣小圖、疊石小遊戲的石頭）
 // 天空四張都要：霧色是用四個時段天空圖地平線的顏色算的（trail.js setHaze），少一張霧色就變了
 // 同山的山友打招呼會用廣場那套背對鏡頭的揮手、鞠躬、歡呼（trail.js drawMates），所以那幾張登山畫面也要
+// 山腰步道（第 28 批：ground_dirt_leaf、ground_gravel、grass_tall_slope、canopy_branch、rock_wall_slope）也在登山畫面這組：只有 theme.contour 的山會畫到
 const NOT_CLIMB = /^(map_|plaza_bg$|emo_|icon_lock$|hiker_(front|side)_|hiker_(rain_)?walk$)/;
 // 寵物的圖：pet_<寵物>_…，柴犬還有第一批的 shiba_walk、shiba_sit；只解開帶著的寵物（和登山畫面上隊友帶的寵物）
 const PET = /^pet_([a-z]+)_|^(shiba)_(walk|sit)$/;
