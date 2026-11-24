@@ -8,19 +8,19 @@
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $raw = Join-Path $here 'raw'
-# 不去背的整張圖：天空、路面、奇遇／登頂插圖、廣場背景、頁面背景、區域立體地圖（map_ 加上 data.js SX.REGIONS 的代號；map_pin 這類是去背小圖）
+# 不去背的整張圖：天空、路面、奇遇／登頂插圖、廣場背景、出發前的小山讀取圖（load_，2:1 米色紙底：左半線稿、右半上色）、頁面背景、區域立體地圖（map_ 加上 data.js SX.REGIONS 的代號；map_pin 這類是去背小圖）
 $regBlock = [regex]::Match([IO.File]::ReadAllText((Join-Path $here '..\js\data.js')), '(?s)SX\.REGIONS\s*=\s*\[(.*?)\];').Groups[1].Value
 $regions = [regex]::Matches($regBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline') | ForEach-Object { $_.Groups[1].Value }
 $mtBlock = [regex]::Match([IO.File]::ReadAllText((Join-Path $here '..\js\data.js')), '(?s)SX\.MOUNTAINS\s*=\s*\[(.*?)\];').Groups[1].Value
 $mts = [regex]::Matches($mtBlock, "^\s*\{\s*id:'([a-z0-9_]+)'", 'Multiline') | ForEach-Object { $_.Groups[1].Value }
-$opaque = '^(sky_|ground_|enc_|scene_|plaza_|ui_page$|summit_(' + ($mts -join '|') + ')$|map_(' + ($regions -join '|') + ')$)'
+$opaque = '^(sky_|ground_|enc_|scene_|plaza_|load_|ui_page$|summit_(' + ($mts -join '|') + ')$|map_(' + ($regions -join '|') + ')$)'
 # 只在網頁上顯示、不畫在畫布上的圖：寶物卡、集印、介面木框和按鈕、圖示、稀有度、徽章、標題
 # 2026-11-24 iPhone「重複發生問題」：開遊戲時把所有圖都解開放在記憶體（約 540 MB）整頁當掉。這些圖改成用到才下載、由網頁自己顯示，
 # 透明邊在轉檔時就裁掉（art\trim.js），遊戲不再先解成畫布再裁。
 # 要畫在畫布上的圖不能放進來（tools/check.js 會擋）：face_ 狀態臉、wx_ 右上天氣、emo_ 廣場頭上的表情、map_ 地圖、icon_lock 地圖木牌上的鎖
 $htmlOnly = '^(t_|stamp_|ui_|icon_(?!lock$)|rarity_|badge_|title_logo$|encounter_frame$)'
-# 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖
-$lazy = '^(enc_|scene_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
+# 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖＋出發前的小山讀取圖（load_<山>，按下出發才下載那一座的，js/mtload.js）
+$lazy = '^(enc_|scene_|load_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
 # 介面的按鈕、木框、圖示每個畫面都看得到：讀取畫面時就先下載好（manifest 標 pre），只下載、不解開放記憶體
 # （2026-11-24 改成用到才下載後，更新完第一次打開按鈕透明到圖下載完，決定先下載好）。寶物卡、集印照樣打開背包才下載
 $pre = '^(ui_|icon_|rarity_|badge_|title_logo$|encounter_frame$)'

@@ -257,6 +257,7 @@ function sprite(wm, hm, ppm, fn, sink){
 }
 // Gemini 美術圖做成同樣格式的貼圖；hm 是實際高度（公尺）。沒有這張圖就回 null
 const ART = SX.art || { get(){ return null; }, crop(){ return null; }, drawFrame(){ return false; }, drawOver(){ return false; }, mirrored(){ return false; }, onLoad(){} };
+if (ART.onFree) ART.onFree(function(img){ if (glc) glc.drop(img); });   // 美術圖放掉時（一分鐘沒在用，見 js/artgroups.js）WebGL 的貼圖一起刪
 // 跟哪座山無關的貼圖（美術圖裁好、底部壓暗的版本、路面貼圖）只做一次，換山時重複用
 // 以前每換一座山就重做一百多張大畫布（約 50 MB），手機要等回收才放掉，越玩越吃記憶體、越卡
 const KEEP = {};
@@ -1598,7 +1599,7 @@ S.setMountain = function(m){
   tileSets = {}; lutKey = -1; hero.st = -1; hitN = 0; initFlyers(); gaitReset(); warmBuild(); farReset();
 };
 // 美術圖晚一點才載完：已經在山上的話，把路旁貼圖換成美術圖
-ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); warmBuild(); farReset(); } });
+ART.onLoad(function(){ FGRIM = {}; if (M && TH) { setHaze(); freePlx(); lutKey = -1; buildProps(); buildSprites(); warmBuild(); farReset(); } }, 'climb');   // 登山畫面的圖第一次解開好時（js/artgroups.js）
 // 空氣透視的霧色：取白天天空圖「地平線那一條」的平均色（暖金／淡青），遠處的樹、草、地面才會融進遠山和雲海
 // 沒有天空圖就用這座山的遠山色調淡
 // 霧色跟著時段（白天、夕陽、清晨、晚上）換：遠處的地面、樹淡進去的顏色要跟背後的遠山、雲海（PAL 的地平線色）一樣，

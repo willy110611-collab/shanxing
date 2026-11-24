@@ -2,14 +2,16 @@
 // 三個快取：CACHE 放程式和頁面，每次改版換新名字；ART_CACHE 放美術圖和聲音，名字永遠不變，改版也不清掉，
 // 玩家只會下載有換過的圖和新圖（美術圖網址帶 ?v=檔案指紋，圖換了網址才會變）。
 // FONT_CACHE 放手寫字型（fonts/ 底下，檔名帶內容指紋，由 tools/fonts.js 產生），一樣永遠不變名字，改版時只補新檔、清掉沒用的舊檔。
-const CACHE = 'shanxing-v125';
+const CACHE = 'shanxing-v126';
 const ART_CACHE = 'shanxing-art';
 const FONT_CACHE = 'shanxing-fonts';
+// PREP_CACHE：js/art.js 存的「量好的格子、鏡射補光圖、網頁用裁邊小圖」，每張圖只在第一次（或圖換了）做；改版不清掉（art.js 自己清掉沒用的）
+const PREP_CACHE = 'shanxing-prep';
 const isArt = u => /\/(audio|art)\//.test(u.pathname) && !/manifest\.json$/.test(u.pathname);
 const isFont = u => /\/fonts\/[^/]+\.woff2$/.test(u.pathname);
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== ART_CACHE && k !== FONT_CACHE).map(k => caches.delete(k))))
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== ART_CACHE && k !== FONT_CACHE && k !== PREP_CACHE).map(k => caches.delete(k))))
     .then(() => self.clients.claim()).then(() => Promise.all([pruneArt().catch(() => {}), syncFonts().catch(() => {})])));   // 先接手畫面，整理快取慢慢做，網路慢也不會卡住
 });
 // 字型快取：css/fonts.css 列著的字型檔全部先存好（沒顯示過的字離線也是手寫字），沒列著的舊檔清掉

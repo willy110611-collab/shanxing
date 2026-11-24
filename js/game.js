@@ -116,7 +116,47 @@
 
   // ───────── 畫面切換 ─────────
   let screen = 'map', prevScreen = 'map';
-  function go(name){
+  // 美術圖：每個畫面只解開自己用得到的圖（js/artgroups.js），切過去之前先解開好，不會先看到程式畫的備用圖。
+  // 通常已經好了（剛剛去過、或按下按鈕時就先解開），馬上切；還沒好就先停在原本的畫面，超過 ART_WAIT_MS 才蓋上讀取畫面
+  // （登山畫面是那座山的小山讀取畫面 js/mtload.js，地圖、大廳是開場那個讀取畫面）
+  const ART_WAIT_MS = 500;
+  const RAIN_AHEAD_MS = 3 * 60000;   // 登山畫面：之後這麼久內會下雨就先把雨衣版解開（天氣每分鐘才看一次）
+  // pet：要換成哪隻寵物（還沒存進存檔時用），m：要去的山（還沒出發時用）
+  function artOpts(name, pet, m){
+    const p = pet === undefined ? SV.pet : pet, mm = m || M, pets = p ? [p] : [];
+    if (name === 'map') return { pets, rain: wx.kind === 'rain' };
+    if (name !== 'climb') return {};
+    const f = st && M === mm ? st.dist / mm.dist : 0, now = M === mm ? wx : wxOverride || (mm ? calcWx(mm.id, 0, f) : wx);   // 登山畫面畫的就是 wx
+    const soon = !wxOverride && mm ? [calcWx(mm.id, 0, f), calcWx(mm.id, Date.now() + RAIN_AHEAD_MS, f)] : [];
+    return { pets, rain: now.kind === 'rain' || soon.some(w => w.kind === 'rain') };
+  }
+  // 天氣、寵物換了：現在這個畫面要的圖重新算（下雨了／快下雨了先解開雨衣版，雨停一分鐘後放掉）
+  const artRefresh = () => { if (!goWait && (screen === 'climb' || screen === 'map')) SX.art.want(screen, artOpts(screen)); };
+  let goWait = null;
+  function go(name, then){
+    if (name === screen && !goWait) { if (then) then(); return; }
+    artWait(name, null, () => { goNow(name); if (then) then(); });
+  }
+  // 等這個畫面的圖解開好再做 run（好了就馬上做）；m：要去爬的山（還沒出發時）
+  function artWait(name, m, run){
+    if (goWait) { clearTimeout(goWait.t); if (goWait.ld) goWait.ld.cancel(); else if (goWait.pre) goWait.pre.cancel(); }   // 還在等上一個畫面：改去這裡
+    goWait = null;
+    const o = artOpts(name, undefined, m), sw = () => { SX.art.want(name, o); run(); };
+    if (!SX.art.ready() || SX.art.isReady(name, o)) { sw(); return; }   // 開場的圖還沒載完（玩家按了「先進去看看」）：照以前直接進去，圖到了各畫面自己換上
+    const my = goWait = { name };
+    const mm = m || M, pre = name === 'climb' && mm && SX.mtload ? SX.mtload.prep(mm) : null; my.pre = pre;   // 這座山的讀取圖（load_<山>）現在就開始下載
+    my.t = setTimeout(() => { if (goWait === my) my.ld = artLoader(name, m, pre); }, ART_WAIT_MS);
+    SX.art.prefetch(name, o, true).then(() => { if (goWait !== my) return; goWait = null; clearTimeout(my.t); if (my.ld) my.ld.done(sw); else { if (pre) pre.cancel(); sw(); } });
+  }
+  // 切畫面要等美術圖時蓋上的讀取畫面：登山畫面用那座山的小山（js/mtload.js），其他用開場的讀取畫面
+  function artLoader(name, m, pre){
+    if (name === 'climb' && (m || M) && SX.mtload) return SX.mtload.show(m || M, () => SX.art.progress('climb', artOpts('climb', undefined, m)), pre);
+    const L = $('#loading'), f = $('#ldFill'), d = $('#ldDog'); if (!L) return null;
+    const set = () => { const p = Math.round(SX.art.progress(name, artOpts(name)) * 100) + '%'; if (f) f.style.width = p; if (d) d.style.left = p; };
+    set(); L.classList.remove('done'); const iv = setInterval(set, 100);
+    return { done(fn){ clearInterval(iv); set(); L.classList.add('done'); fn(); }, cancel(){ clearInterval(iv); L.classList.add('done'); } };
+  }
+  function goNow(name){
     if (name === screen) return;
     if (name === 'album' || name === 'settings') prevScreen = screen;
     if (screen === 'map') { try { WM.stop(); } catch(e){} }
@@ -136,6 +176,12 @@
     const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else if (g.dataset.go === 'find') findMt(); else go(g.dataset.go); }
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
+  // 手指一按下切畫面的按鈕就先開始解開那個畫面的圖（放開才切過去，多一點時間）
+  document.addEventListener('pointerdown', e => {
+    const g = e.target.closest && e.target.closest('[data-go],[data-back]'); if (!g) return;
+    const n = g.dataset.go || (prevScreen === 'climb' && !st ? 'map' : prevScreen);
+    if (n !== screen) SX.art.prefetch(n, artOpts(n));
+  }, { passive:true });
 
   let bgNote = null;   // 正在顯示的那則背景通知 [文字, 毫秒]；玩家按出來的提示是 null
   function toast(msg, ms = 2200){ bgNote = null; MO.toast(msg, ms); }
@@ -195,7 +241,7 @@
   const WX_CYCLE = [{kind:'sunny',time:'day'},{kind:'cloudy',time:'day'},{kind:'fog',time:'day'},{kind:'rain',time:'day'},{kind:'snow',time:'day'},{kind:'sunny',time:'dusk'},{kind:'sunny',time:'night'},{kind:'rain',time:'night'},{kind:'sunny',time:'dawn'}];
   function cycleWx(){
     const i = WX_CYCLE.findIndex(w => w.kind === wx.kind && w.time === wx.time);
-    wxOverride = WX_CYCLE[(i + 1) % WX_CYCLE.length]; wx = wxOverride; moodNow();
+    wxOverride = WX_CYCLE[(i + 1) % WX_CYCLE.length]; wx = wxOverride; moodNow(); artRefresh();
     toast('天氣改成：' + (wxText(wx) || '晴'));
   }
   function moodNow(){
@@ -303,6 +349,7 @@
     const p = SV.prog[id], done = SV.done[id] || 0, ok = unlocked(m);
     const going = p && p.dist > 0 && p.dist < m.dist && !p.fin;
     const tr = onTrail(), busy = ok && tr && tr !== id, trN = tr && SX.M[tr].name;
+    if (ok && !busy) SX.art.prefetch('climb', artOpts('climb', undefined, m));   // 打開能爬的山的路線卡：登山畫面的圖先在背景解開，按「出發」通常不用等
     const w = wxOverride || calcWx(id), nPh = SV.photos.filter(x => x.id === id).length, nUp = SV.userPhotos.filter(x => x.mountainId === id).length;
     const pet = SX.PETS.find(x => x.id === SV.pet) || PET_NONE;
     const stars = [1,2,3,4,5].map(i => `<i${i <= m.diff ? '' : ' class="off"'}></i>`).join('');
@@ -462,9 +509,9 @@
     $$('#mCard .pet').forEach(b => b.onclick = () => {
       const p = list.find(x => x.id === b.dataset.pet); A.pop();
       if (!hasPet(p)) { $('#petMsg').textContent = `${p.name}還沒來：${p.unlockText || '還在山裡等你'}`; return; }
-      SV.pet = p.id || null; save();
-      $$('#mCard .pet').forEach(x => x.classList.toggle('on', x === b));
-      $('#petMsg').textContent = p.desc;
+      // 正在爬山：新寵物的圖先解開好再換（不會先閃一下程式畫的寵物）
+      const apply = () => { SV.pet = p.id || null; save(); artRefresh(); $$('#mCard .pet').forEach(x => x.classList.toggle('on', x === b)); $('#petMsg').textContent = p.desc; };
+      if (screen === 'climb' && p.id) SX.art.prefetch('climb', artOpts('climb', p.id), true).then(apply); else apply();
     });
     $('#petOk').onclick = () => { A.pop(); closeModal(); if (backId && screen === 'map') showRoute(backId); };
   }
@@ -473,13 +520,14 @@
   let M = null, st = null, t = 0, arrived = false, paused = false, ptrHold = false, keyHold = false;
   let lineT = 8, coldT = 0, lastEnc = null;
   // quotaOk：入園名額已經登記好了（quotaGate 登記完再叫回來）
-  function startClimb(id, force, quotaOk){
+  function startClimb(id, force, quotaOk, artOk){
     const m = SX.M[id]; if (!m) return;
     if (!force && !unlocked(m)) { toast('這座山還不能爬'); return; }
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const tb = !force && tr !== id && SX.social && SX.social.teamBlock && SX.social.teamBlock(); if (tb) { toast(tb, 3600); return; }   // 好友跟隨：在隊伍裡就跟著隊長選的山走
     const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
     if (!force && !quotaOk && tr !== id) { quotaGate(id, () => startClimb(id, false, true)); return; }   // 熱門山：先登記今天的入園名額
+    if (!artOk) { artWait('climb', m, () => startClimb(id, force, quotaOk, true)); return; }   // 登山畫面的圖先解開好（要等的話蓋上這座山的小山讀取畫面）
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
     M = m; SV.cur = id; st = P(id); etaV = 0; etaT = 0;   // 換山：預計時間的平均速度重算
     if (!cont) Object.assign(st, newProg());
@@ -1502,7 +1550,7 @@
         <div class="mBtns"><button class="cbtn go" id="aMap">${tq ? '好' : nxt ? '看下一座' : '回地圖'}</button></div>`, true);
       // 好友跟隨：看登頂卡片的時候隊長已經帶大家出發了（SV.cur 換成新的那座），按了就接著走新的那座
       // 好友跟隨：按「好」就留在山頂等隊友（登山畫面上看得到隊友走到哪）；隊長已經選了下一座的話，closeModal 會換過去（followSwitch）
-      $('#aMap').onclick = () => { closeModal(); if (SV.cur === m.id && !tq) SV.cur = null; save(); if (tq || onTrail()) return; go('map'); if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } };
+      $('#aMap').onclick = () => { closeModal(); if (SV.cur === m.id && !tq) SV.cur = null; save(); if (tq || onTrail()) return; go('map', () => { if (nxt) { try { WM.focus(SX.groupOf(nxt.id)); } catch(e){} showRoute(nxt.id); } }); };
       checkQuests();
     }, 1400);
   }
@@ -1682,7 +1730,7 @@
     lineT -= dt;
     if (lineT <= 0 && moving && !paused) { lineT = 18 + Math.random()*16;
       say(pick(wx.time === 'night' ? SX.LINES.night : wx.kind === 'snow' ? SX.LINES.snow : wx.kind === 'rain' ? SX.LINES.rain : wx.kind === 'fog' ? SX.LINES.fog : SX.LINES.walk)); }
-    wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } }
+    wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } artRefresh(); }   // 每分鐘看一次之後會不會下雨：會的話先把雨衣版解開
     SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, vBase: baseSpeed(M) * devX(), boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam, ft:ftNow, fps:fpsNow });   // ft、fps：給自動畫質量真正每格花多久
     if ($('#bubble').classList.contains('on')) placeBubble();
     if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
@@ -1864,7 +1912,7 @@
         <div><span>狀態</span><b>${state}</b></div></div>
       <div class="mBtns" style="margin-top:12px">${m ? '<button class="cbtn" id="byMap">到地圖看看</button>' : ''}<button class="cbtn go" id="byOk">好</button></div>`);
     $('#byOk').onclick = () => { A.pop(); closeModal(); };
-    if (m) $('#byMap').onclick = () => { A.pop(); closeModal(); go('map'); try { WM.focus(SX.groupOf(m.id)); } catch(e){} showRoute(m.id); };
+    if (m) $('#byMap').onclick = () => { A.pop(); closeModal(); go('map', () => { try { WM.focus(SX.groupOf(m.id)); } catch(e){} showRoute(m.id); }); };
   }
 
   // ───────── 徽章與奇遇圖鑑 ─────────
@@ -2060,7 +2108,7 @@
       $('#dNext').onclick = () => { if (!need()) return; st.dist = Math.min(M.dist - 1, (Math.floor(st.dist / 500) + 1) * 500 - 2); st.stam = 100; st.temp = 100; st.sleep = false; st.rest = false; st.stopAt = null; st.last = Date.now(); go('climb'); };
       $('#dTop').onclick = () => { if (!need()) return; st.dist = M.dist - 3; st.ms = Math.floor((M.dist - 1) / 500) * 500; st.stam = 100; st.temp = 100; st.sleep = false; st.rest = false; st.stopAt = null; st.last = Date.now(); go('climb'); };
       $('#dFull').onclick = () => { if (st) { st.stam = 100; st.temp = 100; st.sleep = false; } toast('體力和體溫都滿了'); };
-      $('#dEnc').onclick = () => { if (!need()) return; st.last = Date.now(); go('climb'); openEncounter(); };
+      $('#dEnc').onclick = () => { if (!need()) return; st.last = Date.now(); go('climb', openEncounter); };
       $('#dTr').onclick = () => gainTreasure(rollTreasure(M ? M.id : 'xiangshan'), 'show');
       $('#dUnlock').onclick = () => { SV.unlockAll = !SV.unlockAll; save(); renderSettings(); toast(SV.unlockAll ? '全部的山都開放了' : '恢復原本的解鎖規則'); };
       $('#dWx').onclick = () => cycleWx();
@@ -2113,6 +2161,8 @@
 
   // ───────── 啟動 ─────────
   renderMap();
+  // 美術圖：只解開開場要進去的那個畫面的圖（正在爬山的人進登山畫面，其他人進山友大廳；跟下面 enterNow 同一個判斷）
+  { const tr0 = onTrail(); SX.art.boot(tr0 ? 'climb' : 'lobby', artOpts(tr0 ? 'climb' : 'lobby', undefined, tr0 && SX.M[tr0])); }
   if (SV.set.gps) setGps(true);
   // 開場讀取畫面：美術圖全部載完才收起來（玩家不會看到程式畫的備用圖）
   // 讀取進度：進度條和上面跑的小柴犬用同一個百分比
@@ -2180,6 +2230,6 @@
     stones:() => { if (st && M) stoneGame(); },
     date:s => { testDate = s ? new Date(s + 'T12:00:00+08:00') : null; dailyNow = 0; return seasonNow().map(x => x.id); },   // 假裝今天是某一天（台灣時間），不帶參數就回到真實日期
     roll:mid => rollTreasure(mid).id,
-    wx:(kind, time) => { wxOverride = kind ? { kind, time:time || 'day' } : null; wx = wxOverride || wxHere(); moodNow(); return wx; },
+    wx:(kind, time) => { wxOverride = kind ? { kind, time:time || 'day' } : null; wx = wxOverride || wxHere(); moodNow(); artRefresh(); return wx; },
     get st(){ return st; }, get M(){ return M; }, get SV(){ return SV; } };
 })();

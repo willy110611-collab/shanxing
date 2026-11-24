@@ -605,7 +605,15 @@
   }
   // 登山畫面上畫的人：隊友（teamDraw，partyBox 算）＋同山遇見的山友（strangerDraw 算），一起交給 trail.js（每秒一次）
   let teamDraw = [];
-  function drawMates(){ if (SX.scene && SX.scene.setMates) SX.scene.setMates(teamDraw.concat(strangerDraw())); }
+  // 隊友帶的寵物：那隻寵物的圖解開好才把名單交出去（不會先閃一下程式畫的寵物；js/artgroups.js 只解開有帶的寵物）
+  let mateWait = false;
+  function drawMates(){
+    if (!SX.scene || !SX.scene.setMates) return;
+    const list = teamDraw.concat(strangerDraw()), pets = [...new Set(list.map(m => m.pet).filter(Boolean))];
+    const a = SX.art && SX.art.pets ? SX.art.pets('mates', pets) : { ready:true };
+    if (a.ready) { SX.scene.setMates(list); return; }
+    if (!mateWait) { mateWait = true; a.p.then(() => { mateWait = false; drawMates(); }); }
+  }
 
   // ───────── 爬山聊天泡泡（隊伍聊天）─────────
   // 走隊伍房間（party:隊伍代號）的 chat，規則跟廣場同一套：字數上限是伺服器 hello 給的 sayMax（SAY_MAX）、每秒一句、伺服器過濾；

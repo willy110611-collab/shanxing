@@ -6,8 +6,6 @@
 'use strict';
 const SX = window.SX = window.SX || {};
 const A = SX.art = {};
-const lib = {};            // 名字 → { img, w, h, frames:[{x,y,w,h}] }
-const listeners = [];
 let loaded = false;
 // 多格動作圖怎麼切：名字符合哪一條就切成 欄 × 列 格（由左到右、上排再下排）。新的動作圖只改這張表
 // air：有跳起來的格子（hiker_hop4）：每格保留離地的高度、不把腳底拉到同一條線；畫的高度以最後一格（站直）為準
@@ -66,11 +64,17 @@ function toBitmap(c){
   if (typeof createImageBitmap !== 'function') return Promise.resolve(c);
   return createImageBitmap(c).then(b => { c.width = c.height = 0; return b; }, () => c);
 }
+const isBitmap = x => typeof ImageBitmap !== 'undefined' && x instanceof ImageBitmap;
+// 鏡射補光圖存成 PNG（無損：下次開遊戲解開來跟這次做的一模一樣）
+const pngOf = c => new Promise(res => { try { c.toBlob(b => res(b || null), 'image/png'); } catch (e) { res(null); } });
+// 量一張圖：每一格的範圍、腳底和身體對齊，要鏡射畫的再做一份補光圖（relit）。
+// 只在這張圖第一次載入（或圖換了、這裡的算法改了）時做，結果存起來（見下面「存起來」），之後開遊戲直接用、不再讀像素。
+// img：解開的圖（ImageBitmap；不支援的舊瀏覽器是 <img>）。回傳 { img, imgM?, w, h, frames, opaque, hk?, relitPng? }
 function prep(name, img){
-  const opaque = /\.jpg$/i.test(name.file);
-  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const opaque = /\.jpg$/i.test(name.file), bmp = isBitmap(img);
+  const c = document.createElement('canvas'); c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+  if (opaque) { const e = { img:c, w:c.width, h:c.height, frames:[{ x:0, y:0, w:c.width, h:c.height }], opaque }; if (bmp) { e.img = img; c.width = c.height = 0; return Promise.resolve(e); } c.getContext('2d').drawImage(img, 0, 0); return toBitmap(c).then(b => { e.img = b; return e; }); }
   const g = c.getContext('2d', { willReadFrequently:true }); g.drawImage(img, 0, 0);
-  if (opaque) { const e = { img:c, w:c.width, h:c.height, frames:[{ x:0, y:0, w:c.width, h:c.height }], opaque }; return toBitmap(c).then(b => { e.img = b; return e; }); }
   const e = { img:c, w:c.width, h:c.height, frames:[], opaque };
   // 洋紅底在轉檔時（art/despill.js）就清乾淨了，這裡只讀像素來找每格的範圍
   const px = g.getImageData(0, 0, c.width, c.height).data;
@@ -97,7 +101,9 @@ function prep(name, img){
   }
   e.frames = sh && sh[3] && sh[3].order ? sh[3].order.map(i => i < 0 ? Object.assign({}, fr[~i], { mx:true }) : fr[i]) : fr;
   const m = RELIT.test(name.id) ? relit(c, px, c.width, c.height, fr) : null;
-  return Promise.all([toBitmap(c), m && toBitmap(m)]).then(([b, bm]) => { e.img = b; if (bm) e.imgM = bm; return e; });
+  const mb = m ? pngOf(m).then(p => { e.relitPng = p; return toBitmap(m); }) : null;
+  const b0 = bmp ? (c.width = c.height = 0, img) : toBitmap(c);   // 已經是 ImageBitmap：直接用（量完的畫布馬上釋放）
+  return Promise.all([b0, mb]).then(([b, bm]) => { e.img = b; if (bm) e.imgM = bm; return e; });
 }
 // 鏡射畫的時候光要照樣從右上來：Gemini 的人物、寵物光都從右上照，背影右半邊比左半邊亮（約一成，階梯圖約三成）。
 // 走路的左腳那步是右腳那步左右鏡射（STEP8、PET_ORDER 的 ~i），直接鏡射亮面就跑到左邊，每一步亮面左右換一次（晚上沒有輪廓光時最明顯）。
@@ -144,24 +150,33 @@ function torsoX(d, Wd, f){
 }
 function clampN(v, a, b){ return b < a ? a : Math.max(a, Math.min(b, v)); }
 
-A.get = function(id){ const e = lib[id]; return e && !e.lazy ? e : null; };   // 用到才下載的插圖不能畫在畫布上
+// 解開的圖（e.live）才拿得到；離開畫面一分鐘後放掉的圖拿不到（跟還沒載到一樣），回到那個畫面前會先解開（js/game.js 的 go）
+A.get = function(id){ const e = lib[id]; return e && e.live ? e : null; };
 // 給 HTML 用的圖片網址（背包、寵物選擇等）；沒有這張圖回 null
-// 去背圖用「裁掉透明邊」的版本（第一次用到才產生），不然格子裡的圖會很小
+// 去背圖用「裁掉透明邊」的版本，不然格子裡的圖會很小。js/artgroups.js 的 HTML 那些圖第一次做好就存起來（見「存起來」），
+// 之後開遊戲直接讀，不用為了一個小圖示把整張圖解開；其他的圖第一次用到才做
 const urls = {}, trimmed = {};
 const OUT = (() => { try { const c = document.createElement('canvas'); c.width = c.height = 1; return c.toDataURL('image/webp').startsWith('data:image/webp') ? 'image/webp' : 'image/png'; } catch (e) { return 'image/png'; } })();
 A.url = function(id){
-  const e = lib[id]; if (!e || !urls[id]) return null;
+  const e = lib[id]; if (!urls[id]) return null;
+  if (e && e.lazy) return urls[id];
+  if (trimmed[id]) return trimmed[id];
+  if (!e || !e.live) return null;
   if (e.opaque) return urls[id];
-  if (!trimmed[id]) { const c = A.crop(id, 0); trimmed[id] = c.toDataURL(OUT, 0.9); c.width = c.height = 0; }   // 暫用的畫布馬上釋放
+  const c = A.crop(id, 0); trimmed[id] = c.toDataURL(OUT, 0.9); c.width = c.height = 0;   // 暫用的畫布馬上釋放
   return trimmed[id];
 };
 // 有圖就回 <img>，沒有就回 fallback（原本程式畫的 SVG）
 A.img = function(id, fallback, cls){ const u = A.url(id); return u ? `<img class="${cls || 'artImg'}" src="${u}" alt="" draggable="false">` : fallback; };
-A.has = function(id){ return !!lib[id]; };
+A.has = function(id){ return !!items[id]; };
 A.ready = function(){ return loaded; };
 // 圖到了之後通知畫面重建（例如步道的樹、石頭貼圖）
-A.onLoad = function(fn){ listeners.push(fn); if (loaded && Object.keys(lib).length) fn(); };
-// 開場讀取畫面用：whenReady 在圖全部處理完（或沒有圖、清單讀不到）時呼叫一次；onProgress(已完成, 總數)
+// screen 省略：開遊戲的圖處理完時叫一次；給 'map'／'lobby'／'climb'：那個畫面的圖第一次解開好時叫一次（之後再解開不會再叫）
+const listeners = [], firstDone = {};
+function callL(L){ try { L.fn(); } catch (e) {} }
+A.onLoad = function(fn, screen){ const L = { fn, s:screen || null }; listeners.push(L); if (screen ? firstDone[screen] : loaded) callL(L); };
+function screenDone(s){ if (firstDone[s]) return; firstDone[s] = true; listeners.filter(L => L.s === s).forEach(callL); }
+// 開場讀取畫面用：whenReady 在開遊戲要的圖處理完（或沒有圖、清單讀不到）時呼叫一次；onProgress(已完成, 總數)
 const readyFns = [], progFns = []; let prog = [0, 0];
 A.whenReady = function(fn){ if (loaded) fn(); else readyFns.push(fn); };
 A.onProgress = function(fn){ progFns.push(fn); fn(prog[0], prog[1]); };
@@ -175,7 +190,7 @@ function filtered(e, fl){
   return fx[fl];
 }
 // 給別的畫面用：某張圖套了濾鏡的版本（例如地圖上還不能爬的山路標褪色）；沒有這張圖回 null
-A.filtered = function(id, fl){ const e = lib[id]; return e && !e.lazy ? filtered(e, fl) : null; };
+A.filtered = function(id, fl){ const e = A.get(id); return e ? filtered(e, fl) : null; };
 // 把某一格畫到 ctx：(cx, by) 是腳底中心，h 是要畫的高度（像素）；fl：要套的濾鏡（可省略）
 function frameOf(e, i){ return e.frames[((i % e.frames.length) + e.frames.length) % e.frames.length]; }
 // 畫一格（drawFrame、drawOver 共用，位置、大小、鏡射只算在這裡）：來源圖 img 是「原圖的 k 倍大、往下偏 oy」的同樣排法；
@@ -188,17 +203,17 @@ function put(ctx, e, f, img, oy, k, cx, by, h, flip, u0, v0, u1, v1){
   else ctx.drawImage(img, sx, sy, sw, sh, cx + dx, dy, dw, dh);
 }
 A.drawFrame = function(ctx, id, i, cx, by, h, flip, fl){
-  const e = lib[id]; if (!e) return false;
+  const e = A.get(id); if (!e) return false;
   const f = frameOf(e, i), mir = f.mx ? !flip : flip, img = fl ? filtered(e, fl) : mir && e.imgM ? e.imgM : e.img;   // 鏡射畫的用 imgM（光照樣從右邊來，見 relit）
   put(ctx, e, f, img, 0, 1, cx, by, h, mir, 0, 0, 1, 1);   // f.mx：這一格本身是鏡射格（SHEETS 的 order 用 ~i）
   return true;
 };
 // 這一格畫出來是不是左右鏡射的（自己要鏡射、或這一格本身是鏡射格）：疊光線貼圖時挑「朝哪邊的輪廓光」用
-A.mirrored = function(id, i, flip){ const e = lib[id]; return !!(e && (frameOf(e, i).mx ? !flip : flip)); };
+A.mirrored = function(id, i, flip){ const e = lib[id]; return !!(e && e.frames.length && (frameOf(e, i).mx ? !flip : flip)); };
 // 在同一格的位置疊一張「跟原圖同樣排法」的圖（trail.js 的光線貼圖：剪影、輪廓光）：img 是原圖的 k 倍大、這一組從 oy 開始；
 // part：[u0, v0, u1, v1] 只疊這一格的一小塊（省略＝整格）
 A.drawOver = function(ctx, id, i, cx, by, h, flip, img, oy, k, part){
-  const e = lib[id]; if (!e || !img) return false;
+  const e = A.get(id); if (!e || !img) return false;
   const f = frameOf(e, i), p = part || FULL;
   put(ctx, e, f, img, oy, k, cx, by, h, f.mx ? !flip : flip, p[0], p[1], p[2], p[3]);
   return true;
@@ -206,30 +221,206 @@ A.drawOver = function(ctx, id, i, cx, by, h, flip, img, oy, k, part){
 const FULL = [0, 0, 1, 1];
 // 把第一格裁成單獨一張 canvas（給需要整張圖的地方）
 A.crop = function(id, i){
-  const e = lib[id]; if (!e) return null;
+  const e = A.get(id); if (!e) return null;
   const f = e.frames[i || 0], c = document.createElement('canvas'); c.width = f.w; c.height = f.h;
   c.getContext('2d').drawImage(e.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
   return c;
 };
 
-function load(){
-  fetch('art/manifest.json', { cache:'no-cache' }).then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
-    if (!Array.isArray(list) || !list.length) { finish(); return; }
-    // lazy：只在卡片上顯示的大插圖（奇遇、登頂），開遊戲時不下載，<img> 顯示時瀏覽器才去拿
-    list.filter(it => it.lazy).forEach(it => { const id = it.file.replace(/\.[a-z]+$/i, ''); lib[id] = { img:null, w:0, h:0, frames:[], opaque:true, lazy:true }; urls[id] = 'art/' + it.file + '?v=' + it.v; });
-    const todo = list.filter(it => !it.lazy), pre = list.filter(it => it.lazy && it.pre); let done = 0; setProg(0, todo.length + pre.length);
-    // pre：介面的按鈕、木框、圖示（lazy 但每個畫面都看得到）：讀取畫面時就先下載進快取（sw.js 的美術快取），只下載、不解開放記憶體，進遊戲時馬上顯示
-    const preDone = pre.map(it => fetch('art/' + it.file + '?v=' + it.v).then(r => r.blob(), () => null).catch(() => null).then(() => setProg(++done, todo.length + pre.length)));
-    return Promise.all(preDone.concat(todo.map(it => new Promise(res => {
-      const file = it.file, id = file.replace(/\.[a-z]+$/i, ''), img = new Image();
-      const u = 'art/' + file + '?v=' + it.v;      // v 是檔案內容指紋：圖換了網址才變，沒換的圖手機不用重新下載
-      const end = () => { setProg(++done, todo.length + pre.length); res(); };
-      img.onload = () => { let p; try { p = prep({ id, file }, img); } catch (e) { end(); return; }
-        p.then(e => { lib[id] = e; e.fit = it.fit || null; urls[id] = u; }, () => {}).then(end); };   // fit：立體地圖的對齊結果（tools/mapfit.js）
-      img.onerror = end;
-      img.src = u;
-    })))).then(() => { listeners.forEach(fn => { try { fn(); } catch (e) {} }); finish(); });   // 先讓各畫面換上美術圖，再收起讀取畫面
+// ───────── 存起來：量好的格子、鏡射補光圖、網頁用的裁邊小圖（Cache Storage，sw.js 改版時不清掉）─────────
+// 2026-11-24：以前每次開遊戲都把 157 張圖讀一次像素、量格子、做補光圖（電腦上約 3 秒 CPU，手機更久、發燙）。
+// 現在每張圖只在第一次（或圖換了、這支程式量圖的算法改了）做一次：KEY 是量圖相關程式碼和瀏覽器版本的指紋，
+// 圖的指紋是 manifest 的 v，兩個都一樣才用存起來的結果；不一樣就重新量（照樣是 prep、relit 這一套，沒有第二份算法）
+const STORE = 'shanxing-prep';
+const KEY = (() => {
+  const src = [prep, relit, torsoX, bounds, sheetOf, A.crop].map(String).join('\n') + JSON.stringify(SHEETS.map(s => [s[0].source, s[1], s[2], s[3]]))
+    + POSE.source + RELIT.source + RELIT_S + OUT + (navigator.userAgent || '');
+  let h = 0x811c9dc5; for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16);
+})();
+const sk = (kind, id, v) => 'art-prep/' + KEY + '/' + kind + '/' + id + '?v=' + v;
+let storeP = null, meta = {}, metaDirty = 0;
+function store(){
+  if (!storeP) storeP = (typeof caches !== 'undefined' && caches.open ? caches.open(STORE).catch(() => null) : Promise.resolve(null));
+  return storeP;
+}
+function sGet(k){ return store().then(c => c ? c.match(k) : null).then(r => r ? r.blob() : null).catch(() => null); }
+function sPut(k, blob, type){ return store().then(c => c && blob ? c.put(k, new Response(blob, { headers:{ 'Content-Type':type } })) : null).catch(() => null); }
+// 量好的格子全部放一份 meta.json：開遊戲讀一次就有全部
+function saveMeta(){ if (metaDirty) return; metaDirty = setTimeout(() => { metaDirty = 0; sPut('art-prep/' + KEY + '/meta.json', new Blob([JSON.stringify(meta)]), 'application/json'); }, 800); }
+
+// ───────── 解開、釋放 ─────────
+const items = {}, lib = {};    // items：manifest 的每一張圖；lib：量好的圖 { img, imgM, w, h, frames, opaque, hk, fit, live }
+let all = [];                  // 開遊戲會用到的圖名（不含 lazy）
+const GR = SX.ART_GROUPS;
+const IDLE_MS = 60000;         // 不在用的圖放多久才釋放（回到剛剛的畫面不用重新解開）
+const st = { prepMs:0, hits:0, miss:0, decodes:0, boot:0, bootAt:0 };
+let EMPTY = null;              // 釋放後換上的 1×1 透明圖：手上還拿著舊 e 的畫面畫到也只是什麼都沒有，不會出錯
+const frees = [];              // 釋放時通知（trail.js 刪掉 WebGL 貼圖）
+A.onFree = function(fn){ frees.push(fn); };
+function dropImg(img){ if (!img) return; frees.forEach(fn => { try { fn(img); } catch (e) {} }); if (img.close) img.close(); else { img.width = img.height = 0; } }
+function release(id){
+  const e = lib[id]; if (!e || !e.live) return;
+  dropImg(e.img); dropImg(e.imgM); if (e.fx) for (const k in e.fx) dropImg(e.fx[k]);
+  if (!EMPTY) { EMPTY = document.createElement('canvas'); EMPTY.width = EMPTY.height = 1; }
+  e.img = EMPTY; e.imgM = null; e.fx = null; e.live = false; e.off = 0;
+}
+const decodeBlob = b => createImageBitmap(b, { premultiplyAlpha:'premultiply' }).catch(() => createImageBitmap(b));
+// 舊瀏覽器（沒有 createImageBitmap）：照以前用 <img> 解
+const viaImg = u => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
+function install(id, m, img, imgM){
+  const e = lib[id] || (lib[id] = { fit:items[id].fit || null });
+  e.w = m.w; e.h = m.h; e.frames = m.frames; e.opaque = m.opaque; if (m.hk) e.hk = m.hk;
+  e.img = img; e.imgM = imgM || null; e.fx = null; e.live = true; e.off = needed.has(id) ? 0 : performance.now();
+}
+// 解開一張圖：量過的直接解開（補光圖也是存好的那張）；沒量過的照 prep 量一次、存起來
+function decode1(id){
+  const it = items[id], u = urls[id], m0 = meta[id] && meta[id].v === it.v ? meta[id] : null, wantM = RELIT.test(id) && !/\.jpg$/i.test(it.file);
+  const bmpOK = typeof createImageBitmap === 'function';
+  const src = bmpOK ? fetch(u).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(decodeBlob) : viaImg(u);
+  return src.then(img => {
+    st.decodes++;
+    if (m0 && bmpOK && (!wantM || m0.rel)) {
+      const mp = wantM ? sGet(sk('relit', id, it.v)).then(b => b ? decodeBlob(b) : null) : Promise.resolve(null);
+      return mp.then(imgM => { if (wantM && !imgM) return measure(id, it, img); st.hits++; install(id, m0, img, imgM); });
+    }
+    return measure(id, it, img);
+  }).then(() => trimFor(id), () => { failed[id] = 1; });
+}
+function measure(id, it, img){
+  const t0 = performance.now(); let p;
+  try { p = prep({ id, file:it.file }, img); } finally { st.prepMs += performance.now() - t0; }
+  st.miss++;
+  return p.then(e => {
+    const m = { v:it.v, w:e.w, h:e.h, frames:e.frames, opaque:e.opaque }; if (e.hk) m.hk = e.hk;
+    if (e.relitPng) { m.rel = 1; sPut(sk('relit', id, it.v), e.relitPng, 'image/png'); }
+    meta[id] = m; saveMeta(); install(id, m, e.img, e.imgM);
   });
+}
+// 網頁用的裁邊小圖（js/artgroups.js 的 HTML）：做一次存起來
+// 就是 A.url 那一個 data: 網址（toDataURL；toBlob 編出來的 webp 跟它不一樣，不用），整串存起來
+function trimFor(id){
+  const e = lib[id]; if (!GR.HTML.test(id) || trimmed[id] || !e || !e.live || e.opaque) return;
+  const t0 = performance.now(), u = A.url(id);
+  st.prepMs += performance.now() - t0;
+  if (u) sPut(sk('trim', id, items[id].v), new Blob([u]), 'text/plain');
+}
+// 排隊解開：開遊戲時一次 4 張；進遊戲以後每一格最多開始 2 張（在背景解開，不讓畫面頓一下）
+const queue = [], pending = {}, failed = {};
+let running = 0, booting = true, rush = 0;   // rush：有畫面停著在等（切畫面、出發），一次多解開幾張
+function want(id, hi){
+  if (lib[id] && lib[id].live || failed[id] || !items[id] || items[id].lazy) return Promise.resolve();
+  let p = pending[id];
+  if (!p) { let r; const pr = new Promise(res => { r = res; }); p = pending[id] = { pr, res:r, started:false }; }
+  if (!p.started) { const q = queue.indexOf(id); if (q >= 0) queue.splice(q, 1); if (hi) queue.unshift(id); else queue.push(id); }
+  pump();
+  return p.pr;
+}
+const later = fn => (booting || rush || document.hidden || typeof requestAnimationFrame !== 'function') ? setTimeout(fn, 0) : requestAnimationFrame(fn);
+function pump(){
+  while (queue.length && running < (booting || rush ? 6 : 2)) {
+    const id = queue.shift(), p = pending[id]; if (!p || p.started) continue; p.started = true; running++;
+    decode1(id).then(() => { running--; delete pending[id]; p.res(); later(pump); });
+  }
+}
+// 每一組「要用的圖」（screen：現在的畫面、prefetch：馬上可能要去的畫面、mates：登山畫面上隊友帶的寵物）
+const needs = {}; let needed = new Set();
+function recompute(){
+  const now = performance.now(); needed = new Set();
+  for (const k in needs) needs[k].forEach(id => needed.add(id));
+  for (const id in lib) { const e = lib[id]; if (!e.live) continue; if (needed.has(id) || GR.WARM.test(id)) e.off = 0; else if (!e.off) e.off = now; }
+}
+function need(key, ids){
+  needs[key] = ids.filter(id => items[id] && !items[id].lazy); recompute();
+  return Promise.all(needs[key].map(id => want(id, key !== 'prefetch'))).then(() => {});
+}
+const isReady = ids => ids.every(id => !items[id] || items[id].lazy || failed[id] || (lib[id] && lib[id].live));
+// 不在用、超過 IDLE_MS 的圖放掉（常駐的 WARM 不放）
+function sweep(){ const now = performance.now(); for (const id in lib) { const e = lib[id]; if (e.live && e.off && now - e.off > IDLE_MS && !needed.has(id) && !GR.WARM.test(id)) release(id); } }
+// ───────── 給畫面用 ─────────
+let rainNow = false;
+// 某個畫面要解開哪些圖（o：{ pets:[寵物 id], rain }）
+A.ids = function(screen, o){ return GR.ids(screen, all, o); };
+// 這個畫面的圖都解開好了沒
+A.isReady = function(screen, o){ return isReady(A.ids(screen, o)); };
+// 切到某個畫面：宣告要用哪些圖（其他的一分鐘後放掉），回傳全部解開好的 Promise。已經好了的話同步通知「第一次好」
+A.want = function(screen, o){
+  if (screen === 'climb') rainNow = !!(o && o.rain);
+  const ids = GR.SCREENS.includes(screen) ? A.ids(screen, o) : [];
+  needs.prefetch = []; needs.next = []; const p = need('screen', ids);
+  if (isReady(ids)) { if (GR.SCREENS.includes(screen)) screenDone(screen); return Promise.resolve(); }
+  return p.then(() => { if (GR.SCREENS.includes(screen)) screenDone(screen); });
+};
+// 馬上可能要去的畫面：先在背景解開（按下按鈕、打開路線卡時），沒去的話一分鐘後放掉。
+// urgent：正在等著切過去（排在最前面）；現在這個畫面的圖照樣留著，等真的切過去（A.want）才開始算一分鐘
+A.prefetch = function(screen, o, urgent){
+  if (!GR.SCREENS.includes(screen)) return Promise.resolve();
+  if (screen === 'climb' && urgent) rainNow = !!(o && o.rain);
+  if (!urgent) return need('prefetch', A.ids(screen, o));
+  rush++; const p = need('next', A.ids(screen, o)); p.then(() => { rush--; }); return p;
+};
+// 登山畫面上隊友帶的寵物（js/social.js 給隊友清單時）：解開好才回
+A.pets = function(key, pets){ const ids = all.filter(id => GR.petOf(id) && GR.on('climb', id, pets, rainNow)); return { ready:isReady(ids), p:need(key, ids) }; };
+// 解開進度（0～1）：登山前的小山讀取畫面用
+A.progress = function(screen, o){ const ids = A.ids(screen, o); return ids.length ? ids.filter(id => isReady([id])).length / ids.length : 1; };
+// 用到才下載的圖（例如 load_<山>）：下載、解開一張，用完由呼叫的人 close()
+A.lazyBitmap = function(id){
+  const u = urls[id]; if (!u || typeof createImageBitmap !== 'function') return Promise.resolve(null);
+  return fetch(u).then(r => r.ok ? r.blob() : null).then(b => b ? decodeBlob(b) : null).catch(() => null);
+};
+// 測試、量測用（不顯示在玩家畫面）：解開了多少 MB（原圖＋鏡射補光圖，跟 tools/check.js 同一種算法）、量圖花了多少 CPU
+A.stats = function(){
+  let mb = 0, n = 0; for (const id in lib) { const e = lib[id]; if (e.live) { n++; mb += e.w * e.h * 4 * (e.imgM ? 2 : 1); } }
+  return { live:n, liveMB:Math.round(mb / 1e6), prepMs:Math.round(st.prepMs), hits:st.hits, miss:st.miss, decodes:st.decodes, bootMs:Math.round(st.boot), key:KEY };
+};
+
+// 開遊戲：先讀 manifest 和存起來的結果，等 game.js 說要進哪個畫面（A.boot），只解開那個畫面的圖
+let bootReq = null, bootGo = null;
+A.boot = function(screen, o){ bootReq = { screen, o }; if (bootGo) bootGo(); };
+function load(){
+  const T0 = performance.now(); try { performance.mark('art-boot-start'); } catch (e) {}
+  const man = fetch('art/manifest.json', { cache:'no-cache' }).then(r => r.ok ? r.json() : []).catch(() => []);
+  const mp = sGet('art-prep/' + KEY + '/meta.json').then(b => b ? b.text() : null).then(t => { if (t) meta = JSON.parse(t) || {}; }).catch(() => {});
+  Promise.all([man, mp]).then(([list]) => {
+    if (!Array.isArray(list) || !list.length) { finish(); return; }
+    list.forEach(it => { const id = it.file.replace(/\.[a-z]+$/i, ''); items[id] = it; urls[id] = 'art/' + it.file + '?v=' + it.v; });   // v 是檔案內容指紋：圖換了網址才變，沒換的圖手機不用重新下載
+    // lazy：只在卡片上顯示的大插圖（奇遇、登頂），開遊戲時不下載，<img> 顯示時瀏覽器才去拿
+    list.filter(it => it.lazy).forEach(it => { const id = it.file.replace(/\.[a-z]+$/i, ''); lib[id] = { img:null, w:0, h:0, frames:[], opaque:true, lazy:true }; });
+    all = list.filter(it => !it.lazy).map(it => it.file.replace(/\.[a-z]+$/i, ''));
+    // 網頁用的裁邊小圖：存過的直接讀；沒存過的開遊戲時解開做一次（做完不在這個畫面用的就馬上放掉）
+    const html = all.filter(id => GR.HTML.test(id) && !/\.jpg$/i.test(items[id].file));
+    const tr = Promise.all(html.map(id => sGet(sk('trim', id, items[id].v)).then(b => b ? b.text() : null).then(u => { if (u && u.startsWith('data:')) trimmed[id] = u; })));
+    return Promise.all([tr, new Promise(res => { bootGo = res; if (bootReq) res(); })]).then(() => {
+      const pre = list.filter(it => it.lazy && it.pre), bootIds = A.ids(bootReq.screen, bootReq.o), extra = html.filter(id => !trimmed[id] && bootIds.indexOf(id) < 0);
+      if (bootReq.screen === 'climb') rainNow = !!(bootReq.o && bootReq.o.rain);
+      const total = bootIds.length + extra.length + pre.length; let done = 0; const tick = () => setProg(++done, total);
+      setProg(0, total);
+      // pre：介面的按鈕、木框、圖示（lazy 但每個畫面都看得到）：讀取畫面時就先下載進快取（sw.js 的美術快取），只下載、不解開放記憶體，進遊戲時馬上顯示
+      const preDone = pre.map(it => fetch('art/' + it.file + '?v=' + it.v).then(r => r.blob(), () => null).catch(() => null).then(tick));
+      needs.screen = bootIds.slice(); recompute();
+      const a = bootIds.map(id => want(id, true).then(tick));
+      const b = extra.map(id => want(id, false).then(() => { if (!needed.has(id)) release(id); tick(); }));
+      return Promise.all(preDone.concat(a, b));
+    }).then(() => {
+      booting = false; st.boot = performance.now() - T0;
+      try { performance.mark('art-boot-end'); performance.measure('art-boot', 'art-boot-start', 'art-boot-end'); } catch (e) {}
+      firstDone[bootReq.screen] = true;
+      listeners.filter(L => !L.s || L.s === bootReq.screen).forEach(callL);   // 先讓各畫面換上美術圖，再收起讀取畫面
+      finish();
+      setInterval(sweep, 10000);
+      idleWork(list);
+    });
+  });
+}
+// 進遊戲以後慢慢做：別的畫面的圖先下載進美術快取（離線也看得到、切畫面不用等網路），舊的存檔結果清掉
+function idleWork(list){
+  const rest = all.filter(id => !lib[id]).map(id => urls[id]);
+  const next = () => { const u = rest.shift(); if (!u) return; fetch(u).then(r => r.blob()).catch(() => null).then(() => setTimeout(next, 50)); };
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) setTimeout(next, 2000);
+  setTimeout(() => store().then(c => c && c.keys().then(ks => {
+    const ok = new Set(); all.forEach(id => { ok.add(sk('relit', id, items[id].v)); ok.add(sk('trim', id, items[id].v)); });
+    ks.forEach(r => { const u = new URL(r.url), p = u.pathname.slice(u.pathname.indexOf('art-prep/')) + u.search; if (p !== 'art-prep/' + KEY + '/meta.json' && !ok.has(p)) c.delete(r); });
+  })).catch(() => {}), 5000);
 }
 load();
 })();

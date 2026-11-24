@@ -848,3 +848,9 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .maintCard h2{font-size:26px;font-weight:normal;margin-bottom:10px}
 .maintCard p{font-size:16px;line-height:1.7}.maintCard .tiny{font-size:13px;color:var(--ink2);margin-top:4px}
 .maintForm{display:grid;gap:8px;margin:10px 0}.maintForm label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:15px}.maintForm input{font:inherit;padding:4px 6px;border:2px solid var(--ink);border-radius:8px;background:#fffaf0;color:var(--ink)}
+/* 出發前的小山讀取畫面（js/mtload.js）：米色紙底，小山、百分比、前往哪座山 */
+.mtLoad{position:absolute;inset:0;z-index:95;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 35%,#fbf4e3 0%,#f6ecd6 55%,#ecdcbc 100%);padding-top:env(safe-area-inset-top)}   /* 淡入淡出用 SX.motion.run */
+.mlBox{display:flex;flex-direction:column;align-items:center;gap:6px}
+.mlCv{display:block}
+.mlPct{font-family:var(--fontB);font-size:26px;color:#5a3a22;letter-spacing:1px}
+.mlTo{font-family:var(--fontB);font-size:17px;color:#6a4e3a;white-space:nowrap}

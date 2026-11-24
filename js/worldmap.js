@@ -825,7 +825,7 @@ if (SX.art) SX.art.onLoad(() => {
   if (S.sprites) makeSprites();
   if (!artMap() || (S.T && S.T.art)) return;
   S.dirty = true; ensure(); if (S.vw){ S.base = Math.max(S.vw / (S.bx.x1 - S.bx.x0), S.vh / (S.bx.y1 - S.bx.y0)); reset(true); }
-});
+}, 'map');   // 地圖的圖第一次解開好時（js/artgroups.js：只在要看地圖時才解開）
 
 // ───────── 公開 API ─────────
 SX.worldmap = {

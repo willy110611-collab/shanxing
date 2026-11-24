@@ -76,7 +76,7 @@
   }
 
   // 美術圖晚一點才載完：重畫一次臉
-  if (SX.art) SX.art.onLoad(() => { if (H.els.faceCv) drawFace(H.mood || 'happy'); H.wxKey = null; });   // 天氣圖示下次更新時改畫美術圖
+  if (SX.art) SX.art.onLoad(() => { if (H.els.faceCv) drawFace(H.mood || 'happy'); H.wxKey = null; }, 'climb');   // 天氣圖示下次更新時改畫美術圖
 
   /* ───────── 表情臉 ───────── */
   function drawFace(mood) {
