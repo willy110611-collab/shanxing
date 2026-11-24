@@ -1329,13 +1329,29 @@ function buildLUT(sn, wet){
   }
   // 草地坡面的連續明暗（-GRS_L～GRS_L 共 2×GRS_L+1 階 × 霧階；以前只有 -10～10、每階一跳 14%，相鄰兩段坡面差一階就看得到一條橫的明暗分界）：背光往暗色、向陽往暖色，越陡越深；底色直接用這個顏色，不用另外蓋一層
   GRS.length = 0;
-  const g0 = tone(base[0], 0), g1 = tone(base[0], 1), g2 = tone(base[0], 2);
+  const g0 = tone(base[0], 0), g1 = tone(base[0], 1), g2 = tone(base[0], 2); GRS_RAW[0] = g0; GRS_RAW[1] = g1; GRS_RAW[2] = g2; GRB.clear();
   for (let f = 0; f < FOGN; f++) for (let q = -GRS_L; q <= GRS_L; q++) GRS.push(css(mix(q < 0 ? mix(g1, g0, Math.min(1, -q / GRS_L * 1.4)) : mix(g1, g2, Math.min(1, q / GRS_L * 1.4)), hazeRgb, f / (FOGN - 1))));
 }
 const GRS = [], GRS_L = 20;
 // 草地第 fi 階霧、明暗 c（-GRS_L～GRS_L）的底色；grsC：坡面明暗（-1～1）換成第幾階
 function grs(fi, c){ return GRS[fi * (GRS_L * 2 + 1) + clamp(c, -GRS_L, GRS_L) + GRS_L]; }
 function grsC(v){ return Math.round(v * GRS_L); }
+// 草地貼圖這一段畫多濃（0～1）：路緣那條線在畫面上 h 像素，低於 TEX_MINPX 不畫、兩倍以上全畫。texSide 和底色（grb）都用這一個
+function texF(h){ return clamp((h - TEX_MINPX) / TEX_MINPX, 0, 1); }
+// 遠處貼圖淡掉的坡面底色：把「少掉的那幾成貼圖」的平均色、和沒蓋上去的坡面陰影（shcBand）直接混進底色，
+// 看起來跟旁邊貼好貼圖、蓋好陰影的那段一樣深（2026-11-24 掃描抓到：地平線附近有貼圖和沒貼圖的兩段中間一條亮的細線，三叉山、合歡西峰、太平山…）
+// fi 霧階、c 明暗階（grsC）、q 要併進來的陰影（shcQ，0＝不併）、m 少掉幾成貼圖（0～1）；結果記起來，不每格產生新字串
+const GRS_RAW = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], GRB = new Map(), GRB_M = 8;
+function grb(fi, c, q, m){
+  const mq = Math.round(m * GRB_M), key = ((fi * (GRS_L * 2 + 1) + c + GRS_L) * 81 + q + 40) * (GRB_M + 1) + mq;
+  let v = GRB.get(key); if (v) return v;
+  const f = fi / (FOGN - 1), cc = clamp(c, -GRS_L, GRS_L), ga = texAvg('ground_grass');
+  let col = cc < 0 ? mix(GRS_RAW[1], GRS_RAW[0], Math.min(1, -cc / GRS_L * 1.4)) : mix(GRS_RAW[1], GRS_RAW[2], Math.min(1, cc / GRS_L * 1.4));
+  col = mix(col, hazeRgb, f);
+  if (ga && mq) col = mix(col, ga, GRASS_A * TEX_A * (1 - f) * mq / GRB_M);
+  if (q) col = mix(col, q < 0 ? [34, 40, 80] : [255, 236, 186], Math.abs(q) / 40 * (q < 0 ? 0.42 : 0.34) * (1 - f * 0.8));
+  v = css(col); GRB.set(key, v); return v;
+}
 // 明暗三階：0 背光（偏藍紫）、1 原色、2 向陽（暖黃）。地面色表和草叢貼圖共用，草才會跟地面同色
 function tone(c, lv){ return lv === 0 ? mix(c, '#2c3560', 0.27) : lv === 2 ? mix(c, '#fff0b4', 0.2) : rgb(c); }
 function addPoly(L, pts, ox){ L.moveTo(pts[0] + ox, pts[1]); for (let i = 2; i < pts.length; i += 2) L.lineTo(pts[i] + ox, pts[i + 1]); L.closePath(); }
@@ -2546,7 +2562,7 @@ function grassVisT(nS){
   return t;
 }
 // 坡面帶子的近端（tY1）往下多畫了 SEAM_Y 像素（yb：底色跟前一段之間不留縫）；半透明的貼圖、陰影照這個畫會跟前一段疊兩次，每段交界一條橫線，畫的時候扣回來
-const SEAM_Y = 0.7;
+const SEAM_Y = 1.5;   // 以前 0.7：2D 畫布有貼圖的那段遠端往內縮 1 像素（gIn），0.7 蓋不滿，每段交界留 0.3 像素的縫透出後面（2026-11-24 掃描）
 function grassPath(a, b){
   if (a <= TR_A0 + 1e-6) a = 0; if (b >= TR_B1 - 1e-6) b = 1;   // 頭尾那條一定從這段的近端畫到遠端：跟前後段的邊完全同一條線（對齊像素的那一點點差，會留一條透出底色的細縫）
   for (let k = 1; k < gNS - 1; k++) { ctx.moveTo(lerp(tX1[k], tX2[k], a), lerp(tY1[k] - SEAM_Y, tY2[k], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], a), lerp(tY1[k + 1] - SEAM_Y, tY2[k + 1], a)); ctx.lineTo(lerp(tX1[k + 1], tX2[k + 1], b), lerp(tY1[k + 1] - SEAM_Y, tY2[k + 1], b)); ctx.lineTo(lerp(tX1[k], tX2[k], b), lerp(tY1[k] - SEAM_Y, tY2[k], b)); ctx.closePath(); }
@@ -2854,7 +2870,7 @@ function shadeBands(side, lvS, nS){
 }
 function shcBand(k, q, qp){
   if (!q && !qp) return;
-  const y0 = tY1[k] - SEAM_Y, y1 = tY1[k + 1] - SEAM_Y;   // 近端不多蓋那 0.7 像素：半透明的陰影跟前一段疊兩次，每段交界一條深色的橫線
+  const y0 = tY1[k] - SEAM_Y, y1 = tY1[k + 1] - SEAM_Y;   // 近端不多蓋那 SEAM_Y 像素：半透明的陰影跟前一段疊兩次，每段交界一條深色的橫線
   let u0 = 0;
   if (Math.abs(q - qp) >= SHC_RAMP_MIN) {
     for (let m = 0; m < SHC_RAMP_N; m++) {
@@ -3110,7 +3126,7 @@ function gaSet(sd, kC){
 // 跟 texRun 一樣切薄橫條（用第 1 條帶子那條線的高度切，每條上下緣對齊整數像素），每條用 sideAff 對齊
 function texSide(T, sd, sA, sB, zA, a, path, sub, tv){
   const o = sd * 12, yA = GA[o + 1], yB = GA[o + 3], h = yA - yB;
-  a *= clamp((h - TEX_MINPX) / TEX_MINPX, 0, 1);
+  a *= texF(h);
   if (!T || a < 0.01) return;
   const yc = Math.min(yA, H + 2), y0 = tv == null ? yc : Math.min(yA, Math.max(yc, lerp(yA, yB, clamp(tv, 0, 1))));
   if (y0 <= yB) return;
@@ -3441,7 +3457,7 @@ function drawWorld(b, t, jHi, jLo, far){
     ctx.globalAlpha = fade;
     if (!below && !skipG && y1 - y2 > 0.2) {
       if (HS.on && fade > 0.05 && y2 < HS.y) HS.y = y2;   // 遠處地面最高到畫面哪裡（地平線霧帶的位置）
-      const yb = y1 + 0.7 + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
+      const yb = y1 + SEAM_Y + (far && j === jLo ? FAR_BLEED : 0), lvL = lvc(i, -1), lvR = lvc(i, 1), zA = zAt(j);   // 光影斑塊用連續的值（以前每段 0／1／2 三階跳，相鄰兩段亮暗一格一格）；zA：這段近端的世界位置（貼圖接得起來）
       const g1 = gwAt(pZ[j]) * s1, g2 = gwAt(pZ[j + 1]) * s2, gl1 = x1 - g1, gl2 = x2 - g2, gr1 = x1 + g1, gr2 = x2 + g2;
       // 兩側山坡：沿著離路的距離切幾條帶子，每條依地形高度抬升或下降，依坡向（光從右上來）分亮暗
       const ta = fade * (1 - fq) * TEX_A, DS = j < TDF_J ? TDN : TDF, nS = DS.length, gw1 = gwAt(pZ[j]), gw2 = gwAt(pZ[j + 1]);
@@ -3474,10 +3490,11 @@ function drawWorld(b, t, jHi, jLo, far){
         // 遠端往內縮 1 像素只在這段會貼草地貼圖時：貼圖畫不出來的遠處陡坡（路緣那條線不到兩像素高、坡面卻很高）改成往外多蓋 0.6 像素，
         // 不然每段交界留一條細縫露出後面的天空，遠處陡坡上一條條橫線（2026-11-24 玩家意見：草地一條條的縫）
         // WebGL（多重取樣）兩段的邊完全同一條線就不會有縫，遠端不內縮；Canvas 2D 的反鋸齒邊會蓋到後面那段的草地貼圖，照舊內縮 1 像素
-        const texOn = TEX.grass && ta > 0.03 && tY1[1] - tY2[1] > TEX_MINPX * 2, gIn = texOn ? (ctx.gpu ? 0 : 1) : -0.6;
+        // tf：這段草地貼圖畫多濃（texF，跟 texSide 同一個算法）；texOn：全畫（坡面陰影另外蓋一層 shcBand）。沒全畫的那幾成貼圖、沒蓋的陰影併進底色（grb）
+        const gT = TEX.grass && ta > 0.03, tf = gT ? texF(tY1[1] - SEAM_Y - tY2[1]) : 0, texOn = gT && tf >= 1, gIn = texOn && !ctx.gpu ? 1 : 0, tm = gT ? 1 - tf : 0;
         for (k = 1; k < nS - 1;) {
-          const e = side * 0.8, c = grsC(texOn ? tSh[k] : clamp(tSh[k] * SHC_BAKE, -1, 1)); ctx.fillStyle = grs(fi, c); ctx.beginPath();
-          do { ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + gIn); ctx.lineTo(tX2[k] - e, tY2[k] + gIn); k++; } while (k < nS - 1 && grsC(texOn ? tSh[k] : clamp(tSh[k] * SHC_BAKE, -1, 1)) === c);
+          const e = side * 0.8, c = grsC(texOn ? tSh[k] : clamp(tSh[k] * SHC_BAKE, -1, 1)), q = gT && !texOn ? shcQ(tSh[k]) : 0; ctx.fillStyle = q || tm > 0 ? grb(fi, c, q, tm) : grs(fi, c); ctx.beginPath();
+          do { ctx.moveTo(tX1[k] - e, tY1[k]); ctx.lineTo(tX1[k + 1] + e, tY1[k + 1]); ctx.lineTo(tX2[k + 1] + e, tY2[k + 1] + gIn); ctx.lineTo(tX2[k] - e, tY2[k] + gIn); k++; } while (k < nS - 1 && grsC(texOn ? tSh[k] : clamp(tSh[k] * SHC_BAKE, -1, 1)) === c && (gT && !texOn ? shcQ(tSh[k]) : 0) === q);
           ctx.fill();
         }
         if (TEX.grass && ta > 0.03) {   // 草地貼圖：近處切成薄橫條各自對齊透視，跟前後段接得起來（下雪時淡掉，露出底下積雪的白色坡面）
