@@ -611,6 +611,12 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn16. The backpack must wear the SAME dark-green rain cover in ALL 16 frames, both rows: the cover hides the side bottle pockets and mesh, only the orange sleeping mat shows on top. Do not draw any frame without the rain cover. Plain flat magenta background only, no shadows, boxes or color patches behind the figures.
 ```
 
+**重畫（2026-11-25）**：`hiker_turn16`、`hiker_rain_turn16` 兩張的右手登山杖常常伸出自己那一格（每格 1/8 寬），遊戲照格子切圖時杖子被切斷，伸進下一格的那一截又出現在下一格左邊，轉彎走路時杖子一下斷一下多一截。兩張都要重畫：上傳現在的 `hiker_turn16`（姿勢）當參考，雨衣版再加上傳 `hiker_rain_step8`（雨衣、雨套）。提示詞在原本那段後面加：
+```
+Redraw this sprite sheet with the SAME 16 poses, but make every figure smaller so that it fits completely inside its own cell. The sheet is an exact grid of 8 columns x 2 rows of equal-size cells. In every frame the whole figure, including BOTH trekking poles from the grip to the tip, must stay inside its own cell with a clear empty magenta gap of at least 8% of the cell width on the left and on the right. No pole, foot, hat brim or backpack may touch or cross the cell border, and nothing from one frame may reach into the next cell. Keep the same foot baseline and the same body center in every frame. Plain flat magenta background only, no grid lines, shadows or boxes.
+```
+交圖後我會把 16 格的切法畫成對照圖（紅框＝遊戲切的範圍），確認每一格的杖子都完整、旁邊沒有別格伸過來的杖子。
+
 ## 第 26 批：出發前的小山載入畫面（放進 `02.素材`，2:1，不用洋紅底，米色紙底）
 
 每座山一張：左半只有墨線、右半上好色，兩半構圖一模一樣；遊戲把兩半疊起來，顏色從山腳像水位一樣往上漲。完整提示詞和每座山的山形在 `_交付/小山載入繪圖包/提示詞.md`。
