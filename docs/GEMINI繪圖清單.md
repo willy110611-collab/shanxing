@@ -686,5 +686,7 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | `gear_pole_carbon` | 1:1 | 洋紅底。A pair of sleek dark charcoal carbon-fibre trekking poles with cork grips and small gold lever locks, crossed. |
 | `gear_crampons` | 1:1 | 洋紅底。A pair of steel hiking crampons with orange straps and short spikes, placed side by side, a little snow on the spikes. |
 | `icon_coin` | 1:1 | 洋紅底。A single round game coin of warm honey-coloured wood with a gold rim, a tiny mountain peak and a leaf engraved in the centre. |
+| `gear_tent` | 1:1 | 洋紅底。A small two-person dome hiking tent in warm orange with a cream rain fly, door flap tied open, tiny guy lines and pegs. |
+| `gear_stove` | 1:1 | 洋紅底。A compact camping gas stove with a small dented aluminium pot on top, a tiny blue flame and a wisp of steam. |
 
-之後才畫（等裝備清單確定不再改）：組隊的帳篷、爐具小圖 2 張；帽子、背包、登山杖穿在身上的疊圖（步道 24 張、裝備欄正面 6 張）。
+之後才畫（等裝備清單確定不再改）：帽子、背包、登山杖穿在身上的疊圖（步道 24 張、裝備欄正面 6 張）。
