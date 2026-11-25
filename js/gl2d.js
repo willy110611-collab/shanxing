@@ -227,8 +227,8 @@ P.upload = function(img, kind){
   // 重複的地面貼圖也做縮小版（兩級之間線性混）：草地每個角自己的貼圖座標（trail.js grassUV）在急彎、斜著看過去的坡面上，畫面上下一個像素跨過十幾個貼圖像素，
   // 沒有縮小版時每一列各自跳著取樣，整片坡面變成一條條橫的亮暗細紋（2026-11-24 地面縫掃描：七星山 1100、1400…；Canvas 2D 自己會縮小，沒有這個問題）。
   // 不會斜著看的地方 trail.js 已經挑好縮小不到兩倍的那一級（texLevel），顯示卡用的還是那一級本身
-  const rep = kind === 'p', mipm = (kind === 's' || rep) && img;
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, rep ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+  const rep = kind === 'p' || kind === 'm', mipm = (kind === 's' || rep) && img;
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, kind === 'm' ? gl.MIRRORED_REPEAT : rep ? gl.REPEAT : gl.CLAMP_TO_EDGE);   // m：橫向鏡射重複（立體階梯的立面圖：圖左右兩邊接不起來，照原樣重複會在每一階兩端切出一塊顏色不一樣的方塊）
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, rep ? gl.REPEAT : gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mipm ? (rep ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR_MIPMAP_NEAREST) : gl.LINEAR);
@@ -237,7 +237,7 @@ P.upload = function(img, kind){
   this.slots.length = 0; this.bound[0] = null;   // 綁定換過了：下一批重新綁
   return t;
 };
-const texBytes = (img, kind) => img ? img.width * img.height * 4 * (kind === 's' || kind === 'p' ? 4 / 3 : 1) : 4;
+const texBytes = (img, kind) => img ? img.width * img.height * 4 * (kind === 's' || kind === 'p' || kind === 'm' ? 4 / 3 : 1) : 4;
 // 拿到某張圖的貼圖（沒有就傳上去）；圖的寬或高是 0（已經釋放）回 null。小張的一般圖放進圖集（e.at：在圖集裡的位置）
 P.tex = function(img, kind){
   if (this.lost || !img || !img.width || !img.height) return null;
@@ -260,7 +260,7 @@ P.drop = function(img){
   const e = img && this.texs.get(img); if (!e) return;
   if (this.n) this.flush();
   if (e.at) { this.atFree(e.at); e.s = null; }
-  for (const k of ['s', 'p', 'g', 'u']) if (e[k]) { this.gl.deleteTexture(e[k]); this.bytes -= e['b' + k] || 0; }
+  for (const k of ['s', 'p', 'm', 'g', 'u']) if (e[k]) { this.gl.deleteTexture(e[k]); this.bytes -= e['b' + k] || 0; }
   this.texs.delete(img); this.list.delete(img); this.slots.length = 0;
 };
 // 卸下 age 毫秒以上沒畫到的貼圖（畫布、美術圖本身留著，再用到時重新傳上去；畫面不變）
@@ -613,7 +613,7 @@ P.mesh = function(m){
   gl.useProgram(this.mprog); gl.bindVertexArray(this.mvao);
   gl.bindBuffer(gl.ARRAY_BUFFER, this.mvbo); gl.bufferData(gl.ARRAY_BUFFER, m.v.subarray(0, m.nv * 9), gl.STREAM_DRAW);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.mibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.idx.subarray(0, m.ni), gl.STREAM_DRAW);
-  const tS = m.riser ? this.tex(m.riser, 'p') : null, tP = m.post ? this.tex(m.post, 'p') : null, tB = m.bar ? this.tex(m.bar, 'p') : null;   // 階梯立面、立體欄杆的圖（沒有就不用）
+  const tS = m.riser ? this.tex(m.riser, 'm') : null, tP = m.post ? this.tex(m.post, 'p') : null, tB = m.bar ? this.tex(m.bar, 'p') : null;   // 階梯立面、立體欄杆的圖（沒有就不用）
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tR); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tG);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tS || this.white); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, tP || this.white);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, tB || this.white); gl.activeTexture(gl.TEXTURE0);
