@@ -2636,6 +2636,14 @@ const LIP_FEATHER = 0.75, LIP_FEATHER_J = 10, MOSS_SOIL = 37, MOSS_SHADE = 36, S
 // STAIR_PAD：木頭階梯兩端墊的土（色表第 14 種「路緣的土」原色）：跟土坎切面同一個褐色系，不用苔蘚陰影的深青綠（2026-11-24 回報看起來像一條漆上去的深綠帶）
 // 某一段 f 處那一邊蜿蜒路緣離路中心幾公尺（路面、階梯本身照 rwF 畫，路緣的土邊、草唇、苔蘚帶從這裡量，蓋過路面的邊）
 function rwSide(i, side, f){ const g = Math.max(0, Math.min((N + 2) * SOFT_K, Math.round((i + f) * SOFT_K))); return rwF(i, f) - softE[(g * 2 + (side > 0 ? 1 : 0)) * SOFT_V + 11]; }
+// 立體地面的山的草地小起伏（G3B：這座山這一格用立體地面才有）：路緣土坎外半公尺內慢慢長出來，幾公尺一個的小凸小凹（約 ±0.2 公尺），網格明暗照坡面朝向就有深淺陰影；
+// 加在 terrH 本身，所以路旁植物、欄杆、座位也跟著站在同一個起伏上。舊畫法（Canvas 2D）的山不加，畫面不變
+let G3B = false;
+const G3_BUMP = [0.3, 0.12];
+function vn2(x, y, k){ const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), r = iy * 7919;
+  return lerp(lerp(Hh(ix + r, k), Hh(ix + 1 + r, k), u), lerp(Hh(ix + r + 7919, k), Hh(ix + 1 + r + 7919, k), u), v); }
+function gBump(i, side, d, e){ const k = side > 0 ? 61 : 67; return ease01(e) * (G3_BUMP[0] * (vn2(i * 0.36, d * 0.42, k) * 2 - 1) + G3_BUMP[1] * (vn2(i * 0.9, d * 1.1, k + 2) * 2 - 1)); }
+function g3b(i, side, d){ if (!G3B) return 0; const e = (d - rwAt(i) - bankWd(i, side)) / 0.5; return e > 0 ? gBump(i, side, d, e) : 0; }
 function terrH(i, side, d){
   const rw = rwAt(i);   // 這一段的路半寬（每段不一樣，地形從路緣量起）
   if (d <= rw) return 0;
@@ -2648,11 +2656,11 @@ function terrH(i, side, d){
   let r = sh + terrAmp(i, side) * sm + cr + dr + nz;
   // 山腰步道：上坡那邊離開土坎頂以後約 40 度往上（CT.rise）；陡降那邊路緣外 CT.rim 公尺平的（長高草）、再約 45 度往下（CT.drop），一路掉到稜線外緣（不在 14 公尺停住變成谷底平地）
   if (cw > 0) { const de = d - rw - bw; r = lerp(r, sh + (up ? CT.rise * de : -CT.drop * Math.max(0, de - CT.rim)) + nz * 0.5, cw); }
-  if (r <= 0) return bh + r;
+  if (r <= 0) return bh + r + g3b(i, side, d);
   // 路邊幾公尺內的山坡不高過眼睛（2026-11-24 玩家意見：山坡上一塊塊邊是直線的貼片）：近處的坡一高過登山客的視線，就會把後面那段坡上的灌木下半截蓋掉，
   // 蓋住的那條邊是每段地面的直邊。往上的部分用平滑的上限壓住（tanh，不會出現折角），離路越遠上限越高，森林步道兩旁的山壁照樣在遠一點的地方長高
   const hv = shelfHi(i, side), cap = lerp(lerp(WALL_CAP[3], WALL_CAP[0], hv) + lerp(WALL_CAP[4], WALL_CAP[1], hv) * Math.max(0, d - rw - WALL_CAP[2]), CT.cap[0] + CT.cap[1] * Math.max(0, d - rw - CT.cap[2]), up ? c : 0);   // 低的那一邊（或兩邊差不多高）壓得很低：兩邊不會同時高起來；山腰步道的上坡壓得鬆一點（約 40 度的山坡）
-  return bh + cap * Math.tanh(r / cap);
+  return bh + cap * Math.tanh(r / cap) + g3b(i, side, d);
 }
 // 每段的橫坡（正的＝右邊往上）、稜線邊緣程度（0～1）、往下掉的是哪一邊：每座山算一次存起來，畫的時候直接查
 let xSlope = new Float32Array(1), edgeK = new Float32Array(1), dropS = new Int8Array(1);
@@ -3113,7 +3121,7 @@ const G3_NS = G3_ROAD.length + 2 + G3_SIDE.length + G3_EXT.length, G3_NC = 1 + G
 const G3C = { id:null, m:new Map() };
 function g3Seg(i){
   let e = G3C.m.get(i); if (e) return e;
-  e = new Float32Array(G3_NC * 2); const rw = rwAt(i);
+  e = new Float32Array(G3_NC * 3); const rw = rwAt(i);
   for (let c = 0; c < G3_NC; c++) {
     const k = c - G3_NS, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1;
     let d, h = 0;
@@ -3124,7 +3132,7 @@ function g3Seg(i){
       if (ext < 0) { d = r === 0 ? rw + bw * 0.5 : r === 1 ? rw + bw : rw + bw + G3_SIDE[r - 2]; h = terrH(i, side, d); }
       else { const ge = rw + bw + G3_SIDE[G3_SIDE.length - 1], h1 = terrH(i, side, ge), h0 = terrH(i, side, ge * 0.85); d = GW * G3_EXT[ext]; h = h1 + (h1 - h0) / (ge * 0.15) * (d - ge); }   // 外緣延伸：照最外那段的坡度
     }
-    e[c * 2] = d; e[c * 2 + 1] = h;
+    e[c * 2] = d; e[c * 2 + 1] = h; e[G3_NC * 2 + c] = G3B && k !== 0 && q >= G3_ROAD.length ? g3b(i, side, d) : 0;   // 草地小起伏多高（低窪處壓暗用）
   }
   if (G3C.m.size > 600) for (const key of G3C.m.keys()) if (key < bG - 4) G3C.m.delete(key);
   G3C.m.set(i, e); return e;
@@ -3146,7 +3154,7 @@ function meshGround(b){
       const d = lerp(A[c * 2], B[c * 2], f), h = road ? hr : ht + lerp(A[c * 2 + 1], B[c * 2 + 1], f);
       const w = k === 0 ? 1 : road ? (q === G3_ROAD.length - 1 ? 0.5 : 1) : 0;
       V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && road ? 2 : 0); V[o + 6] = 1;
-      V[o + 7] = fade;
+      V[o + 7] = fade; G3BV[nv] = lerp(A[nc * 2 + c], B[nc * 2 + c], f);
       nv++;
     }
     if (prev >= 0) for (let c = 0; c < nc - 1; c++) { const a = prev + c, a2 = a + 1, d0 = base + c, d1 = d0 + 1; I[ni++] = a; I[ni++] = a2; I[ni++] = d1; I[ni++] = a; I[ni++] = d1; I[ni++] = d0; }
@@ -3165,7 +3173,7 @@ function meshGround(b){
     const o = (r * nc + c) * 8, oL = (r * nc + Math.max(0, c - 1)) * 8, oR = (r * nc + Math.min(nc - 1, c + 1)) * 8, oB = (Math.max(0, r - 1) * nc + c) * 8, oF = (Math.min(rows - 1, r + 1) * nc + c) * 8;
     const dx = V[oR] - V[oL], dy = V[oR + 1] - V[oL + 1], gx = Math.abs(dx) > 1e-4 ? dy / dx : 0, dz = V[oF + 2] - V[oB + 2], gz = dz > 0.02 ? (V[oF + 1] - V[oB + 1]) / dz : 0;   // 階梯立面那幾排（同一個遠近）：明暗交給著色器（立面整面暗）
     const nl = 1 / Math.sqrt(gx * gx + 1 + gz * gz), dt = (-gx * Lx + Ly) * nl;
-    V[o + 6] = V[o + 5] >= 1.5 ? G3_RISER : clamp(1 + 0.6 * (dt - Ly), 0.42, 1.25);
+    V[o + 6] = V[o + 5] >= 1.5 ? G3_RISER : clamp((1 + 0.6 * (dt - Ly)) * (1 + G3_AO * G3BV[r * nc + c]), 0.42, 1.25);   // 草地小起伏：凹下去的地方暗一點、凸起來的亮一點
   }
   const hz = hazeRgb;
   ctx.mesh({ v:V, nv, idx:I, ni, road:RT.c, grass:GT.c, rs:[1 / RT.m, RT.c.width / (RT.m * RT.c.height), 1 / GT.m, GT.c.width / (GT.m * GT.c.height)],
@@ -3181,6 +3189,7 @@ function meshGround(b){
   }
   if (yT < H) horizonBand(yT, HZB.a, SK, zT);
 }
+const G3BV = new Float32Array(60000), G3_AO = 1.5;
 const G3SK = new Float32Array(HZK + 1), G3PX = new Float32Array(G3_NC), G3PY = new Float32Array(G3_NC);
 function farA(j, J, n){ return clamp((J * SEG - pZ[j]) / (n * SEG), 0, 1); }
 // 樹影與光斑：右上來的陽光被路邊的樹擋住，路上落下一片一片柔和的樹影（往左下斜）；森林段再有幾個慢慢飄動的光斑
@@ -4707,6 +4716,7 @@ function heroDapUpd(t){
 S.render = function(s){
   if (!ctx || !M || !s) return;
   if (!RAYS) S.resize();
+  { const g = !!g3On(); if (g !== G3B) { G3B = g; G3C.m.clear(); } }   // 草地小起伏跟著立體地面開關（換山、退回 Canvas 2D 時）；地形快取一起清掉
   const t = s.t || 0, dt = clamp(s.dt || 0.016, 0, 0.05), dist = Math.max(0, s.dist || 0), sp = s.speed || 0, wx = s.wx || DEFWX;
   const frac = s.frac != null ? s.frac : dist / total;
   curS = s; curT = t;
