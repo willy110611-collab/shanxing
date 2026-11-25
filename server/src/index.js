@@ -60,6 +60,7 @@ const AFF = {
   LV: [0, 10, 30, 60, 100, 160, 240, 340, 470, 640],   // Lv1～Lv10 的累計好感門檻
   WALK_M: 3000, WALK_PTS: 1, WALK_CAP: 8,              // 一起走（同一隊、同一座山、兩人都在走）：每 3 公里 +1，每天每位好友最多 +8
   TOP_PTS: 5,                                          // 一起登頂（同一隊、同一座山，兩人都登頂）：+5，同一座山一天一次
+  GIFT_PTS: 2,                                         // 幫同隊的好友修裝備：+2，每位好友每天一次（gear_gifts 的唯一鍵擋）
   LIKE_PTS: 1, LIKE_CAP: 3,                            // 按對方照片的愛心：+1，每天最多 +3（同一張照片只算一次）
   DAY_CAP: 20,                                         // 每天每位好友最多 +20（台灣日期換日）
   WALK_CALL_MAX: 6000,                                 // 一次回報跟一位隊友一起走最多算幾公尺（遊戲端滿 WALK_M 就送，多的當怪資料丟掉）
@@ -89,7 +90,7 @@ const AFF_SQL = `UPDATE affinity SET pts = pts + c.g, day = ?3,
   WHERE affinity.lo = ?1 AND affinity.hi = ?2 RETURNING pts, d_tot`;
 async function affGain(env, me, mate, kind, day, meters = 0){
   const [lo, hi] = affPair(me, mate), mine = me === lo, m = kind === 'walk' ? meters : 0;
-  const fixed = kind === 'top' ? AFF.TOP_PTS : kind === 'like' ? AFF.LIKE_PTS : 0;
+  const fixed = kind === 'top' ? AFF.TOP_PTS : kind === 'like' ? AFF.LIKE_PTS : kind === 'gift' ? AFF.GIFT_PTS : 0;
   const kindCap = kind === 'walk' ? AFF.WALK_CAP : kind === 'like' ? AFF.LIKE_CAP : AFF.DAY_CAP;
   // 只有好友才有這一列（第一次加分時才建）；不是好友就什麼都不做
   await env.DB.prepare('INSERT INTO affinity (lo, hi) SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM friends WHERE a = ?1 AND b = ?2) ON CONFLICT(lo, hi) DO NOTHING').bind(lo, hi).run();
@@ -143,8 +144,17 @@ function teamPick(members){
   }
   return { ok, lack };
 }
+// 裝備系統（試作）：隊員回報自己的裝備狀況 { warn:[{ id, dur }] 該修理的, carry:[id] 帶著的隊伍裝備 }，存在 team_members.gear；只收代號和數字，裝備清單和價格在遊戲端 js/data.js
+const GEAR_ID = /^[a-z_]{2,24}$/;
+function gearClean(x){
+  if (!x || typeof x !== 'object') return null;
+  const warn = (Array.isArray(x.warn) ? x.warn : []).filter(w => w && typeof w.id === 'string' && GEAR_ID.test(w.id)).slice(0, 8).map(w => ({ id: w.id, dur: Math.max(0, Math.min(100, Math.round(+w.dur || 0))) }));
+  const carry = (Array.isArray(x.carry) ? x.carry : []).filter(s => typeof s === 'string' && GEAR_ID.test(s)).slice(0, 4);
+  return JSON.stringify({ warn, carry });
+}
+const gearRead = s => { try { const g = s ? JSON.parse(s) : null; return g && Array.isArray(g.warn) && Array.isArray(g.carry) ? g : null; } catch (e) { return null; } };
 const myTeam = (env, pid) => env.DB.prepare('SELECT t.* FROM team_members m JOIN teams t ON t.id = m.team WHERE m.player = ?').bind(pid).first();
-const teamMembers = (env, team) => env.DB.prepare('SELECT p.id, p.name, p.mountain, p.dist, p.unlocks, m.joined FROM team_members m JOIN players p ON p.id = m.player WHERE m.team = ? ORDER BY m.joined').bind(team).all().then(r => r.results);
+const teamMembers = (env, team) => env.DB.prepare('SELECT p.id, p.name, p.mountain, p.dist, p.unlocks, m.joined, m.gear FROM team_members m JOIN players p ON p.id = m.player WHERE m.team = ? ORDER BY m.joined').bind(team).all().then(r => r.results);
 // 這一趟全員登頂了：done 從 0 變時間只會成功一次，成功的那一次通知隊長
 async function teamDone(env, team, t){
   const r = await env.DB.prepare(`UPDATE team_trips SET done = ?2 WHERE team = ?1 AND done = 0 AND trip = (SELECT trip FROM teams WHERE id = ?1)
@@ -185,9 +195,10 @@ async function teamPayload(env, me, t){
   const trips = (await env.DB.prepare('SELECT trip, mountain, day, started, done, members FROM team_trips WHERE team = ? ORDER BY trip DESC LIMIT ?').bind(tm.id, TEAM.TRIPS).all()).results;
   const runs = trips.length ? (await env.DB.prepare('SELECT trip, player, dist, at, eta, summited FROM team_runs WHERE team = ? AND trip >= ?').bind(tm.id, trips[trips.length - 1].trip).all()).results : [];
   const cur = trips.find(x => x.trip === tm.trip) || null;
-  return { team: {
+  const gifts = (await env.DB.prepare('SELECT g.id, g.item, p.name AS from_name FROM gear_gifts g JOIN players p ON p.id = g.frm WHERE g.dst = ? AND g.taken = 0 ORDER BY g.at LIMIT 10').bind(me.id).all()).results;   // 隊友幫我修好的裝備（還沒收到的）
+  return { gifts, team: {
     id: tm.id, leader: tm.leader, trip: tm.trip,
-    members: mem.map(p => ({ id: p.id, name: p.name, mountain: p.mountain, dist: p.dist, run: (cur && runs.find(r => r.trip === cur.trip && r.player === p.id)) || null })),
+    members: mem.map(p => ({ id: p.id, name: p.name, mountain: p.mountain, dist: p.dist, gear: gearRead(p.gear), run: (cur && runs.find(r => r.trip === cur.trip && r.player === p.id)) || null })),
     trips: trips.map(x => ({ trip: x.trip, mountain: x.mountain, day: x.day, started: x.started, done: x.done, members: JSON.parse(x.members || '[]'), mine: runs.find(r => r.trip === x.trip && r.player === me.id) || null })),
     pick: tm.leader === me.id && (!cur || cur.done) ? teamPick(mem) : null,   // 隊長要選下一座山時才算
   }, invites, max: TEAM.MAX, now: t, handover };
@@ -691,6 +702,7 @@ export default {
         const b = await req.json().catch(() => ({})), t = clock(env, req);
         if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
         const tm = await myTeam(env, me.id), trip = Math.floor(+b.trip) || 0;
+        if (tm && b.gear !== undefined) await env.DB.prepare('UPDATE team_members SET gear = ? WHERE player = ?').bind(gearClean(b.gear), me.id).run();   // 遊戲端只在裝備狀況變了才送
         if (tm && trip > 0) {
           const eta = +b.eta > 0 ? Math.max(t, Math.min(t + 3 * 864e5, +b.eta)) : 0;
           await env.DB.prepare(`UPDATE team_runs SET dist = MAX(dist, ?4), at = ?5, eta = CASE WHEN ?6 > 0 THEN ?6 ELSE eta END,
@@ -698,6 +710,24 @@ export default {
             .bind(tm.id, trip, me.id, Math.max(0, Math.min(1e5, +b.dist || 0)), t, eta, b.top ? 1 : 0).run();
         }
         return J(env, req, await teamPayload(env, me, t));
+      }
+      // 幫隊友修裝備：同一隊、他回報過這件該修理了才行；每位隊友每天一次。記一筆 gear_gifts，對方下次拿隊伍資料時收到、修好、回報收到（ack）；兩人是好友的話好感 +GIFT_PTS
+      if (path === '/api/team/gearfix' && M === 'POST') {
+        const b = await req.json().catch(() => ({})), t = clock(env, req), to = String(b.to || ''), item = String(b.item || '');
+        if (await teamLimited(env, me)) return E(env, req, '按太快了，等幾分鐘再試', 429);
+        const tm = await myTeam(env, me.id), dst = tm && to !== me.id ? (await teamMembers(env, tm.id)).find(p => p.id === to) : null, g = dst && gearRead(dst.gear);
+        if (!g || !g.warn.some(w => w.id === item)) return E(env, req, '這位山友的裝備已經沒問題了', 409);
+        const day = twDay(t), r = await env.DB.prepare('INSERT INTO gear_gifts (id, frm, dst, item, day, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(frm, dst, day) DO NOTHING').bind(crypto.randomUUID(), me.id, to, item, day, t).run();
+        if (!r.meta.changes) return E(env, req, '今天已經幫過這位山友了，明天再來', 409);
+        g.warn = g.warn.filter(w => w.id !== item);
+        await env.DB.prepare('UPDATE team_members SET gear = ? WHERE player = ?').bind(JSON.stringify(g), to).run();
+        await affGain(env, me.id, to, 'gift', day);
+        return J(env, req, await teamPayload(env, me, t));
+      }
+      if (path === '/api/team/gearfix/ack' && M === 'POST') {
+        const b = await req.json().catch(() => ({})), ids = (Array.isArray(b.ids) ? b.ids : []).map(String).filter(x => /^[0-9a-f-]{36}$/.test(x)).slice(0, 10);
+        for (const id of ids) await env.DB.prepare('UPDATE gear_gifts SET taken = 1 WHERE id = ? AND dst = ?').bind(id, me.id).run();
+        return J(env, req, { ok: true });
       }
       // 隊長選下一座山，全隊一起出發：上一趟要全員登頂、這座山要全隊都能爬（teamPick）、熱門山幫全隊一次登記名額（不夠全隊用就不能出發）
       if (path === '/api/team/go' && M === 'POST') {

@@ -635,9 +635,9 @@
   // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）；dry：只是試算（不記里程、不算每日任務）
   function simulate(p, m, dt, boost, offline, dry, pace, ts){   // pace：登山畫面的步態給的速度倍率（累了慢走、停下來喝水時 0），離線補走不用；ts：這一步是什麼時候（離線補走、試算用，裝備系統照「當時」的天氣和日夜算）
     const gw = SX.gearOn ? (ts ? calcWx(m.id, ts, p.dist / m.dist) : wx) : null, gfx = gw && SX.gearFx(SX.gearSave());   // 裝備系統沒開：gw 是 null，下面每一處都照舊
-    if (gw && gearCamp(p, m, dt, gw, gfx, offline, dry)) return 0;
+    if (gw && gearCamp(p, m, dt, gw, gfx, offline, dry, ts || Date.now())) return 0;
     if (p.sleep) { p.stam = Math.min(100, p.stam + NAP * dt); p.temp = Math.min(100, p.temp + 2 * dt); if (p.stam >= 60 && p.temp >= 50) p.sleep = false; return 0; }
-    if (p.rest) { p.stam = Math.min(100, p.stam + REST * dt); p.temp = Math.min(100, p.temp + 4 * dt); if (offline && p.stam >= 100 && p.temp >= 95) p.rest = false; return 0; }
+    if (p.rest) { p.stam = Math.min(100, p.stam + REST * dt * (gfx ? 1 + gfx.restUp : 1)); p.temp = Math.min(100, p.temp + 4 * dt); if (offline && p.stam >= 100 && p.temp >= 95) p.rest = false; return 0; }
     const dev = devX();
     if (gw) SX.gearWx = gw; let v = baseSpeed(m) * dev; if (gw) SX.gearWx = wx; if (p.temp < 25) v *= 0.7; if (boost) v *= BOOST; if (pace != null) v *= pace;
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
@@ -656,8 +656,11 @@
     return d;
   }
   // 裝備系統：晚上頭燈的時數用完 → 走到前面最近的路標紮營，回體力體溫，天亮自動繼續。回 true＝這一步在紮營、不走
-  function gearCamp(p, m, dt, w, fx, offline, dry){
-    if (w.time !== 'night' || (p.nightSec || 0) < fx.nightH * 3600) { if (p.camp) { p.camp = false; p.sleep = false; } p.campAt = null; return false; }
+  // 帳篷（自己或同一趟的隊友帶）：紮營的人在天亮前 campEarlyH 小時就出發，那一晚不再紮營（campDone）
+  function gearCamp(p, m, dt, w, fx, offline, dry, ts){
+    if (w.time !== 'night') p.campDone = false;
+    else if (p.camp && fx.campEarlyH > 0 && calcWx(m.id, ts + fx.campEarlyH * 3600e3, p.dist / m.dist).time !== 'night') p.campDone = true;
+    if (w.time !== 'night' || p.campDone || (p.nightSec || 0) < fx.nightH * 3600) { if (p.camp) { p.camp = false; p.sleep = false; } p.campAt = null; return false; }
     if (!p.camp) {
       if (p.rest) return false;
       if (p.campAt == null) { const c = SX.campSpot(m, p.dist); p.campAt = c.m; p.campName = c.name; }
@@ -1366,7 +1369,7 @@
   // 買、換上、修理、賣回。正在山上時只有走到山屋才能換裝和修理（山屋修理比較貴）；價錢都問 data.js
   // 版面：登山客站中間，六格裝備圍在兩邊（每格下面一條耐久）；點一格，下面列出這一格的裝備，一件一顆按鈕（買／換上／修理），點名字展開賣回
   let gearSel = null, gearOpenId = null;   // 現在看哪一格、哪一件展開了
-  const GEAR_SIDE = [['hat', 'pack', 'pole'], ['lamp', 'rain', 'extra']], GEAR_GLYPH = { hat:'帽', lamp:'燈', pack:'包', rain:'雨', pole:'杖', extra:'爪' };
+  const GEAR_SIDE = [['hat', 'pack', 'pole'], ['lamp', 'rain', 'extra']], GEAR_GLYPH = { hat:'帽', lamp:'燈', pack:'包', rain:'雨', pole:'杖', extra:'爪', tent:'帳', stove:'爐' };
   // 裝備小圖：美術圖 gear_<代號> 到了就用，還沒到先畫一顆寫著字的圓牌
   const gearIco = it => SX.art.img('gear_' + it.id, `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="23" fill="${it.base ? '#ead9b4' : '#f2c35a'}" stroke="${INK}" stroke-width="2.5"/><text x="30" y="38" text-anchor="middle" font-size="22" fill="${INK}">${GEAR_GLYPH[it.slot]}</text></svg>`);
   function openGear(keep){
@@ -1390,6 +1393,7 @@
     modal(`<button class="cbtn sm mBack" id="grX">← 返回</button><h3>裝備</h3>
       <p class="gearCoin">${SX.art.img('icon_coin', '')}${N} <b>${num(coin)}</b></p>
       <div class="gearDoll"><div class="gearCol">${GEAR_SIDE[0].map(slot).join('')}</div><div class="gearMe">${SX.art.img('hiker_walk', '')}</div><div class="gearCol">${GEAR_SIDE[1].map(slot).join('')}</div></div>
+      <div class="gearTeam"><span>隊伍裝備<small>一個人帶，全隊有效</small></span>${SX.GEAR_SLOTS.filter(s => s.team).map(s => slot(s.id)).join('')}</div>${gearTeamHtml()}
       ${tip ? `<p class="gearTip">${tip}</p>` : ''}
       <div class="grp">${sel.name}</div>${items(gearSel).map(row).join('')}
       <p class="gearTip">點買來的裝備名字，可以賣回（半價）。</p>
@@ -1403,7 +1407,30 @@
     $$('#mCard [data-on]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.on]; A.pop(); g.on[it.slot] = it.id; again(); });
     $$('#mCard [data-fix]').forEach(b => b.onclick = () => { const id = b.dataset.fix; if (!pay(SX.gearRepairCost(g, id, !!hut, day))) return; A.sparkle(); SX.gearRepair(g, id, day); again(); });
     $$('#mCard [data-sell]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.sell]; A.pop(); if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = '確定賣？'; return; } SV.coin = (SV.coin || 0) + SX.gearSellPrice(it.id); delete g.own[it.id]; if (g.on[it.slot] === it.id) delete g.on[it.slot]; gearOpenId = null; again(); });
+    gearTeamBind(redo);
     if ($('#grAll')) $('#grAll').onclick = () => { if (!pay(all.cost)) return; A.sparkle(); all.ids.forEach(id => SX.gearRepair(g, id, day)); again(); };
+  }
+  // 隊伍提醒：隊友回報裝備該修理了（不寫是誰）；可以花山幣幫他修（每位隊友每天一次，伺服器擋），好友好感會加
+  const gearMates = () => SX.social && SX.social.teamGear ? SX.social.teamGear() : [];
+  function gearTeamHtml(){
+    return gearMates().map(x => { const w = x.warn[0], it = SX.GEAR_BY[w.id]; if (!it) return '';
+      return `<div class="gearRow warn"><span class="gearTop"><span class="gearN"><b>隊伍提醒</b><small>隊上有位山友的${SX.GEAR_SLOTS.find(s => s.id === it.slot).name}該修理了</small></span><span class="gearB"><button class="chip" data-help="${x.id}" data-item="${w.id}">幫忙修 ${SX.gearHelpCost(w)}</button></span></span></div>`; }).join('');
+  }
+  function gearTeamBind(done){
+    $$('#mCard [data-help]').forEach(b => b.onclick = () => {
+      const x = gearMates().find(y => y.id === b.dataset.help), w = x && x.warn.find(y => y.id === b.dataset.item), cost = w ? SX.gearHelpCost(w) : 0;
+      if (!w) return; if ((SV.coin || 0) < cost) { toast(`${SX.COIN.NAME}不夠，再多走一點路吧`); return; }
+      b.disabled = true; SV.coin -= cost; save();
+      SX.social.gearHelp(x.id, w.id).then(() => { A.sparkle(); toast('幫山友把裝備修好了，他上線就會知道', 3200); done(); })
+        .catch(e => { SV.coin += cost; save(); toast(e.message || '現在連不上，等一下再試', 3200); done(); });   // 沒修成：山幣還回來
+    });
+  }
+  // 隊友幫我修好的裝備（social.js 拿到隊伍資料時叫）：修好、說一聲，回傳收到的那幾筆給伺服器記
+  function gearGift(list){
+    if (!SX.gearOn) return [];
+    const g = SX.gearSave();
+    list.forEach(x => { const it = SX.GEAR_BY[x.item]; if (it && g.own[it.id] != null) { g.own[it.id] = SX.GEAR_RULE.FULL; notice(`${x.from_name || '山友'}幫你把${it.name}修好了`, 3600); } });
+    save(); gearBadge(); return list.map(x => x.id);
   }
   // 出發前檢查：照現在的裝備試走一遍（跟離線補走同一套 simulate），看天氣、會不會走到晚上、哪件裝備快壞了
   function gearCheck(id){
@@ -1421,9 +1448,11 @@
       ${li(!rain || fx.rainOk, `天氣：${kinds.slice(0, 4).join(' → ')}`, !rain ? '路上應該不會下雨' : fx.rainOk ? '可能下雨，有帶雨衣' : '可能下雨，沒有雨衣會走慢一點')}
       ${li(!camp, night ? `會走到晚上（大約 ${fmtMin(Math.round(night / 60))}）` : '天黑前走得完', !night ? '用不到頭燈' : camp ? `頭燈只夠 ${fx.nightH} 小時，沒電後會紮營等天亮` : '頭燈夠用')}
       ${li(!low.length && !broken.length, '裝備', low.length ? `${low.map(it => it.name).join('、')}快要修理了，這趟還撐得住` : broken.length ? `${broken.join('、')}待修理，這趟先用舊的` : '都沒問題')}
+      ${gearTeamHtml()}
       <div class="mBtns" style="margin-top:12px"><button class="cbtn" id="gcGear">看裝備</button><button class="cbtn go" id="gcGo">出發</button></div>`);
     $('#gcX').onclick = () => { A.pop(); closeModal(); };
     $('#gcGear').onclick = () => { A.pop(); openGear(); };
+    gearTeamBind(() => gearCheck(id));
     $('#gcGo').onclick = () => { A.pop(); gearChecked = id; closeModal(); startClimb(id); };
   }
 
@@ -2362,7 +2391,7 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
   // 給連線模組用：雲端存檔、每日任務
-  SX.game = { daily, updateDailyBadge, follow, teamUnlocks, notice,   // follow、teamUnlocks：好友跟隨（隊伍資料拿回來後補算、我能爬哪幾座山）；notice：背景通知排隊
+  SX.game = { gearGift, gearNote: () => SX.gearOn ? SX.gearNote(SX.gearSave()) : null, daily, updateDailyBadge, follow, teamUnlocks, notice,   // follow、teamUnlocks：好友跟隨（隊伍資料拿回來後補算、我能爬哪幾座山）；notice：背景通知排隊
     getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
     awayPace:m => baseSpeed(m) * devX(),   // 一起爬：遊戲關著時自己走的速度（隊友那邊拿來估離線時走到哪）
     // 好友好感度：好友清單拿回來後，等級到了的稱號（Lv8）收進稱號、一輩子的山友徽章（Lv10）檢查一次；lvs：每位好友的好感等級

@@ -932,3 +932,6 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .gearRow button:disabled,#grAll:disabled{opacity:.45}
 .gearRow .chip.poor{opacity:.55}
 .gearTip{margin:4px 0;font-size:12px;opacity:.75;text-align:center}
+.gearTeam{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 8px}
+.gearTeam>span{flex:1;text-align:left;font-size:13px}
+.gearTeam>span small{display:block;font-size:11px;opacity:.7}

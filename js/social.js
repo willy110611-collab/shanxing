@@ -40,7 +40,7 @@
 
   // ───────── API ─────────
   // 假伺服器（只有 FAKE 時用）：每次拿好友清單，大家本週的公里數都會變一點，看得出下拉更新有重新拿
-  let fakeN = 0, fakeQ = null, fakeMine = []; const fakeGone = [];   // 假伺服器：被移除的好友、假的入園名額
+  let fakeN = 0, fakeQ = null, fakeMine = [], fakeFixed = false; const fakeGone = [];   // 假伺服器：被移除的好友、假的入園名額
   const FAKE_MS = +(location.search.match(/[?&]fakems=(\d+)/) || [])[1] || 800;   // 網址加 &fakems=8000：假伺服器要等 8 秒才回，慢慢看骨架畫面
   const FAKE_PICS = ['scene_descend', 'summit_alishan', 'summit_hehuan', 'summit_jiaming'];
   async function fakeApi(path, opt){
@@ -61,8 +61,10 @@
     if (p === '/invites') return { invites: [] };
     // 假伺服器：沒有隊伍（隊伍要用本機的真伺服器測）。網址再加 &faketeam=1：我是隊長、帶著阿山和雲雀（還沒選山），另外小溪邀我跟隨，看好友視窗和好友分頁的隊伍、邀請長什麼樣子
     const fakeTeam = /[?&]faketeam=1\b/.test(location.search);
+    if (fakeTeam && p === '/team/gearfix/ack') return { ok: true };
+    if (fakeTeam && p === '/team/gearfix') fakeFixed = true;   // 假伺服器：幫阿山修好了，隊伍提醒就不見
     if (fakeTeam && (p.startsWith('/team') || p.startsWith('/invites/'))) return { max: 6, now: Date.now(), invites: [{ id: 'i1', host: 'f2', host_name: '小溪' }],
-      team: { id: 'tdev', leader: acct.id, trip: 0, trips: [], pick: { ok: SX.MOUNTAINS.map(m => m.id), lack: {} }, members: [{ id: acct.id, name: acct.name }, { id: 'f1', name: '阿山' }, { id: 'f3', name: '雲雀' }] } };
+      team: { id: 'tdev', leader: acct.id, trip: 0, trips: [], pick: { ok: SX.MOUNTAINS.map(m => m.id), lack: {} }, members: [{ id: acct.id, name: acct.name }, { id: 'f1', name: '阿山', gear: { warn: fakeFixed ? [] : [{ id: 'lamp_led', dur: 8 }], carry: ['tent'] } }, { id: 'f3', name: '雲雀' }] } };
     if (p.startsWith('/team')) return { team: null, invites: [], max: 6, now: Date.now() };
     if (p.startsWith('/affinity')) return { ok: true };
     if (p === '/me') return opt.body ? { week: 3400 + fakeN * 50, name: acct.name } : acct;
@@ -440,10 +442,15 @@
     return { trip: party.trip, dist: Math.round(q.dist), eta: (e && e.mountain === party.mountain ? e.at : Date.now()) + skew };
   }
   // 拿隊伍：還在走這一趟就順便回報進度（POST /team/sync），不然只拿（GET /team）。大廳每 LOBBY_REFRESH_MS、其他畫面每 45 秒一次，不會每格送
-  let teamP = null;
+  let teamP = null, gearSent = null;   // gearSent：上次送給伺服器的裝備狀況
   function teamFetch(){
     if (!acct) return Promise.resolve();
-    if (!teamP) { const b = teamProgress(); teamP = (b ? api('/team/sync', { json: b }) : api('/team')).then(teamApply).catch(() => {}).finally(() => { teamP = null; }); }
+    if (!teamP) {
+      // 裝備系統：在隊伍裡、裝備狀況變了才順便送（不每次送，省伺服器寫入）
+      const gn = team && SX.game && SX.game.gearNote ? SX.game.gearNote() : null, gs = gn ? JSON.stringify(gn) : null, send = gs && gs !== gearSent;
+      const b = teamProgress() || (send ? {} : null); if (b && send) b.gear = gn;
+      teamP = (b ? api('/team/sync', { json: b }) : api('/team')).then(d => { if (send) gearSent = gs; teamApply(d); }).catch(() => {}).finally(() => { teamP = null; });
+    }
     return teamP;
   }
   // 伺服器回來的隊伍資料：存起來、換這一趟的 party、交給 game.js 補算（新的一趟出發、關著遊戲時隊長帶著走完的那幾趟）
@@ -459,6 +466,10 @@
     if (d.handover) bgNote(`${d.handover}接手當隊長了`, 4200);
     const p = partyOf(T);
     if (JSON.stringify(p) !== JSON.stringify(party)) setParty(p);
+    // 裝備系統：同一趟的隊友帶著的隊伍裝備（帳篷、爐具）我也有效；隊友幫我修好的裝備收下來、回報收到
+    const tripMates = p ? p.mates.map(x => x.id) : [], carry = T ? T.members.filter(x => tripMates.includes(x.id) && x.gear).flatMap(x => x.gear.carry || []) : [];
+    SX.gearTeamCarry = () => carry;
+    if (d.gifts && d.gifts.length && SX.game && SX.game.gearGift) { const ids = SX.game.gearGift(d.gifts); if (ids.length) api('/team/gearfix/ack', { json: { ids } }).catch(() => {}); }
     if (SX.game && SX.game.follow) {
       const lead = !T || T.leader === me ? '' : (T.members.find(x => x.id === T.leader) || {}).name || '隊長';   // 我自己是隊長：空字串
       SX.game.follow(T ? T.trips.filter(x => x.members.includes(me)).sort((a, b) => a.trip - b.trip).map(x => ({ key: T.id + ':' + x.trip, team: T.id, trip: x.trip, mountain: x.mountain, day: x.day,
@@ -552,6 +563,9 @@
   // 雪季組隊看的人數：隊伍有幾個人（自己＋隊友；寵物不算）
   const partySize = () => team ? team.members.length : 1;
   // 在隊伍裡就跟著隊長選的山走：自己從山的卡片出發別座山時，game.js 問這裡要擋下來的原因
+  // 裝備系統：隊友（不含自己）回報該修理的裝備；幫其中一位修
+  const teamGear = () => team && acct ? team.members.filter(x => x.id !== acct.id && x.gear && x.gear.warn && x.gear.warn.length).map(x => ({ id: x.id, warn: x.gear.warn })) : [];
+  const gearHelp = (to, item) => api('/team/gearfix', { json: { to, item } }).then(teamApply);
   const teamBlock = () => !team ? null : team.leader === acct.id ? '你在帶隊：到山友大廳「好友」的「我的隊伍」選山，全隊一起出發' : '你在隊伍裡，跟著隊長選的山走；想自己爬，先到「我的隊伍」離開隊伍';
   // 登頂了（自己看著登頂，或關著遊戲時隊長帶著走完、在背景算的那一趟）：告訴伺服器；背景算的那一趟順便回報一起登頂、一起走的好感
   function teamTop(info, bg){
@@ -1061,7 +1075,7 @@
   async function quickRegister(name){ return register(name); }
 
   SX.social = { open, close, uploadPhoto, fillWall, review, adminApi, isAdminDevice, pushSet, get pushOn(){ return pushOn; }, get acct(){ return acct; }, get party(){ return party; }, partySize, openInvite,
-    teamBlock, teamTop,   // 好友跟隨：在隊伍裡不能自己出發別座山的原因、登頂了告訴伺服器
+    teamBlock, teamTop, teamGear, gearHelp,   // 好友跟隨：在隊伍裡不能自己出發別座山的原因、登頂了告訴伺服器
     strangerCard,         // 同山遇見山友：登山畫面點了他
    
     affMates, affTop, affLike, affNear,   // 好友好感度：同隊好友的等級、登頂回報、按照片愛心、休息時旁邊的好友

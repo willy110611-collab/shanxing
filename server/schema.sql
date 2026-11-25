@@ -106,7 +106,10 @@ CREATE TABLE IF NOT EXISTS eta (player TEXT PRIMARY KEY, mountain TEXT NOT NULL,
 -- 隊伍：隊長、現在是第幾趟（0＝還沒出發過）、隊長交接後原隊長是誰（他回來時告訴他一次）
 CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, leader TEXT NOT NULL, trip INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, handed_from TEXT);
 -- 隊員（隊長也在這裡）：一個人同時只能在一支隊伍，所以用 player 當主鍵
-CREATE TABLE IF NOT EXISTS team_members (player TEXT PRIMARY KEY, team TEXT NOT NULL, joined INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS team_members (player TEXT PRIMARY KEY, team TEXT NOT NULL, joined INTEGER NOT NULL, gear TEXT);   -- gear：裝備系統，這位隊員回報的裝備狀況（JSON）
+-- 幫隊友修裝備：誰幫誰修了哪一件；同一個人一天只能幫同一位隊友一次；taken＝對方收到了
+CREATE TABLE IF NOT EXISTS gear_gifts (id TEXT PRIMARY KEY, frm TEXT NOT NULL, dst TEXT NOT NULL, item TEXT NOT NULL, day TEXT NOT NULL, at INTEGER NOT NULL, taken INTEGER NOT NULL DEFAULT 0, UNIQUE (frm, dst, day));
+CREATE INDEX IF NOT EXISTS gear_gifts_dst ON gear_gifts (dst, taken);
 CREATE INDEX IF NOT EXISTS team_members_team ON team_members (team);
 -- 每一趟：哪座山、哪天出發（台灣日期，寶物分配的亂數種子用）、出發時的隊員名單（寫死，大家照這份算寶物）、全員登頂的時間（0＝還沒）
 CREATE TABLE IF NOT EXISTS team_trips (team TEXT NOT NULL, trip INTEGER NOT NULL, mountain TEXT NOT NULL, day TEXT NOT NULL, started INTEGER NOT NULL, members TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team, trip));
