@@ -376,15 +376,15 @@
     cover.addEventListener('click', skip);
     const end = () => cover.removeEventListener('click', skip);
     if (calm()) { go(); return run(cover, [{ opacity:1 }, { opacity:0 }], { duration:400, fill:'forwards' }).then(end); }
-    const D = cover.querySelector('.cvDawn');
+    const D = cover.querySelector('.cvDawn'), B = cover.querySelector('.cvBase');   // B：四團雲底下共用的霧，合攏時補滿縫、散開時淡掉
     const clouds = [['tl', -1, -1], ['tr', 1, -1], ['bl', -1, 1], ['br', 1, 1]].map(([k, sx, sy]) => [cover.querySelector('.m-' + k), sx, sy]).filter(c => c[0]);
     const at = (sx, sy, k, s) => `translate(${sx * k}%,${sy * k}%) scale(${s})`;
     const inOpt = { duration:t(620), easing:'cubic-bezier(.3,0,.2,1)', fill:'forwards' };
-    return Promise.all(clouds.map(([el, sx, sy]) => run(el, [{ transform:at(sx, sy, 45, 1.25), opacity:0 }, { transform:at(sx, sy, 0, 1), opacity:1 }], inOpt))).then(() => {
+    return Promise.all(clouds.map(([el, sx, sy]) => run(el, [{ transform:at(sx, sy, 45, 1.25), opacity:0 }, { transform:at(sx, sy, 0, 1), opacity:1 }], inOpt)).concat(run(B, [{ opacity:0 }, { opacity:1 }], inOpt))).then(() => {
       go(); cover.classList.add('veil');
       const outOpt = { duration:t(1150), easing:'cubic-bezier(.45,0,.25,1)', fill:'forwards' };
       return Promise.all(clouds.map(([el, sx, sy]) => run(el, [{ transform:at(sx, sy, 0, 1), opacity:1 }, { transform:at(sx, sy, 38, 1.2), opacity:1, offset:.55 }, { transform:at(sx, sy, 80, 1.4), opacity:0 }], outOpt))
-        .concat(run(D, [{ opacity:0, transform:'scale(.85)' }, { opacity:1, transform:'scale(1)', offset:.5 }, { opacity:.9, transform:'scale(1.08)' }], { duration:t(1150), easing:'ease-out', fill:'forwards' })));
+        .concat(run(B, [{ opacity:1 }, { opacity:1, offset:.2 }, { opacity:0 }], outOpt), run(D, [{ opacity:0, transform:'scale(.85)' }, { opacity:1, transform:'scale(1)', offset:.5 }, { opacity:.9, transform:'scale(1.08)' }], { duration:t(1150), easing:'ease-out', fill:'forwards' })));
     }).then(() => run(cover, [{ opacity:1 }, { opacity:0 }], { duration:t(480), easing:'ease-out', fill:'forwards' })).then(end);
   }
   SX.motion = { EASE, mist, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager, fan };

@@ -2227,7 +2227,7 @@
     const id = innerWidth > innerHeight && SX.art.url('cover_key') ? 'cover_key' : 'cover_portrait', u = SX.art.url(id);
     if (u) { c.insertAdjacentHTML('afterbegin', `<img class="cvArt" src="${u}" alt="" draggable="false">`); c.classList.add('art'); c.querySelector('.cvArt').onerror = e => { e.target.remove(); c.classList.remove('art'); }; }   // 圖讀不到就回到暫代封面
     // 散開的四團雲：有 Gemini 畫的 mist_tl／mist_tr／mist_bl／mist_br 就用圖，沒有就是 style.css 的柔邊漸層
-    ['tl', 'tr', 'bl', 'br'].map(k => ['.m-' + k, 'mist_' + k]).forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });
+    ['tl', 'tr', 'bl', 'br'].map(k => ['.m-' + k, 'mist_' + k]).forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });   // 雲之間的縫由底下共用的 .cvBase 補滿
     let tapped = false;
     const tap = e => {
       if (tapped || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
