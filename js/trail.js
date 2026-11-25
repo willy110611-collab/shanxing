@@ -3118,7 +3118,7 @@ const G3_EXT = [1.6, 2.5, 4, 6.5, 10];
 const G3_NS = G3_ROAD.length + 2 + G3_SIDE.length + G3_EXT.length, G3_NC = 1 + G3_NS * 2;   // 每一排幾個點
 // 每一段近端那一排：每個點離路中心多遠（d）、比路面高多少（地形 terrH，跟鏡頭無關）。只在第一次用到那一段時算一次存起來（換山清掉），
 // 每格只做位置換算：以前每格每個點都重算 terrH，整格一半以上的時間花在這裡
-const G3C = { id:null, m:new Map() }, G3_EL = [8, 30];
+const G3C = { id:null, m:new Map() }, G3_EL = [8, 30], G3_FALL = 0.3;
 function g3Seg(i){
   let e = G3C.m.get(i); if (e) return e;
   e = new Float32Array(G3_NC * 3); const rw = rwAt(i);
@@ -3130,7 +3130,7 @@ function g3Seg(i){
     else {
       const bw = bankWd(i, side), r = q - G3_ROAD.length, ext = r - 2 - G3_SIDE.length;
       if (ext < 0) { d = r === 0 ? rw + bw * 0.5 : r === 1 ? rw + bw : rw + bw + G3_SIDE[r - 2]; h = terrH(i, side, d); }
-      else { const ge = rw + bw + G3_SIDE[G3_SIDE.length - 1], h1 = terrH(i, side, ge), h0 = terrH(i, side, ge * 0.85); d = GW * G3_EXT[ext]; const x = d - ge, sl = clamp((h1 - h0) / (ge * 0.15), -1.2, 1.2); let L; L = sl > 0 ? G3_EL[0] : G3_EL[1]; h = h1 + sl * L * (1 - Math.exp(-x / L)) + (vn2(i * 0.03, d * 0.015, side > 0 ? 83 : 89) - 0.65) * 0.2 * x; }   // 外緣延伸：照最外那段的坡度、越外越緩（往上的很快變平，不會在旁邊立起一大片草牆擋住遠山），加上遠處低一點的小山頭
+      else { const ge = rw + bw + G3_SIDE[G3_SIDE.length - 1], h1 = terrH(i, side, ge), h0 = terrH(i, side, ge * 0.85); d = GW * G3_EXT[ext]; const x = d - ge, sl = clamp((h1 - h0) / (ge * 0.15), -1.2, 1.2); let L; L = sl > 0 ? G3_EL[0] : G3_EL[1]; h = h1 + sl * L * (1 - Math.exp(-x / L)) - G3_FALL * x * ease01(x / 60) + (vn2(i * 0.03, d * 0.015, side > 0 ? 83 : 89) - 0.5) * 0.12 * x; }   // 外緣延伸：照最外那段的坡度、越外越緩，再往外慢慢降下去（人在山上，遠處的地在腳下：畫好的遠山、雲海照樣露出來，不會被一大片草地蓋住），加一點小起伏
     }
     e[c * 2] = d; e[c * 2 + 1] = h; e[G3_NC * 2 + c] = G3B && k !== 0 && q >= G3_ROAD.length ? g3b(i, side, d) : 0;   // 草地小起伏多高（低窪處壓暗用）
   }
