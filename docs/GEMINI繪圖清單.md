@@ -146,7 +146,7 @@ The same dog in every image: a small cute red shiba inu with cream underside, cu
 | `title_logo` | 16:9 | A title logo plate: wooden sign with carved Chinese characters 「森呼吸」, small mountain and cloud decorations. （這張可以有字；舊的「山行小日子」木牌已經不用，畫好新的才會出現在地圖左上角） |
 | `cover_portrait` | 9:16 | 不用洋紅底。直版封面（開遊戲讀取完顯示，輕點進入）：森呼吸標題在上方三分之一、登山客和柴犬背影在下方、最下面 12% 只有草和步道（遊戲在那裡放一行字）。提示詞見 `_交付/封面與好友圖示繪圖包/提示詞.md`。 |
 | `cover_key` | 16:9 | 不用洋紅底。橫版封面（森呼吸主視覺），電腦或橫放的螢幕用。 |
-| `mist_left` `mist_right` | 9:16 | 洋紅底。點封面後「撥開迷霧、看到曙光」的左右兩片霧：雲霧占滿圖的左（右）三分之二、靠中間那邊是蓬鬆不規則的雲邊，其餘洋紅。提示詞見 `_交付/封面與好友圖示繪圖包/提示詞.md` 第 3 段。 |
+| `mist_tl` `mist_tr` `mist_bl` `mist_br` | 3:4 | 洋紅底。點封面後「在雲霧裡、雲往四面散開」的四團雲（左上、右上、左下、右下）：雲占滿那個角落約七成、靠畫面中間那邊是蓬鬆不規則的雲邊，其餘洋紅。提示詞見 `_交付/封面與好友圖示繪圖包/提示詞.md` 第 3 段。 |
 
 ## 第七批：奇遇插圖（之後再畫也可以）
 
@@ -612,6 +612,12 @@ Rain outfit, identical in every image: the same bright yellow hooded rain poncho
 Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn16. The backpack must wear the SAME dark-green rain cover in ALL 16 frames, both rows: the cover hides the side bottle pockets and mesh, only the orange sleeping mat shows on top. Do not draw any frame without the rain cover. Plain flat magenta background only, no shadows, boxes or color patches behind the figures.
 ```
 
+**重畫（2026-11-25）**：`hiker_turn16`、`hiker_rain_turn16` 兩張的右手登山杖常常伸出自己那一格（每格 1/8 寬），遊戲照格子切圖時杖子被切斷，伸進下一格的那一截又出現在下一格左邊，轉彎走路時杖子一下斷一下多一截。兩張都要重畫：上傳現在的 `hiker_turn16`（姿勢）當參考，雨衣版再加上傳 `hiker_rain_step8`（雨衣、雨套）。提示詞在原本那段後面加：
+```
+Redraw this sprite sheet with the SAME 16 poses, but make every figure smaller so that it fits completely inside its own cell. The sheet is an exact grid of 8 columns x 2 rows of equal-size cells. In every frame the whole figure, including BOTH trekking poles from the grip to the tip, must stay inside its own cell with a clear empty magenta gap of at least 8% of the cell width on the left and on the right. No pole, foot, hat brim or backpack may touch or cross the cell border, and nothing from one frame may reach into the next cell. Keep the same foot baseline and the same body center in every frame. Plain flat magenta background only, no grid lines, shadows or boxes.
+```
+交圖後我會把 16 格的切法畫成對照圖（紅框＝遊戲切的範圍），確認每一格的杖子都完整、旁邊沒有別格伸過來的杖子。
+
 ## 第 26 批：出發前的小山載入畫面（放進 `02.素材`，2:1，不用洋紅底，米色紙底）
 
 每座山一張：左半只有墨線、右半上好色，兩半構圖一模一樣；遊戲把兩半疊起來，顏色從山腳像水位一樣往上漲。完整提示詞和每座山的山形在 `_交付/小山載入繪圖包/提示詞.md`。
@@ -650,6 +656,7 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | 檔名 | 比例 | 內容 |
 |---|---|---|
 | `icon_locate` | 1:1 | 洋紅底。A small round wooden badge icon in the same style as the other round game icons (icon_map, icon_bag, icon_settings): a thick disc of warm honey-brown wood with visible wood grain and a slightly darker carved rim, delicate thin dark-brown ink outline, soft cel shading lit from the upper right. In the center, a hand-inked locate symbol: a cream-white circle drawn in dark-brown ink with four short crosshair ticks pointing up, down, left and right, and a small red-orange dot in the very middle, like a compass sight on an old trail map. Flat front view, simple and readable at 50 pixels, no text, no letters, no arrow, no map pin. |
+| `icon_friend` | 1:1 | 洋紅底。登山畫面下排「好友」按鈕（.i-friend）。A small game UI icon in exactly the same style as the uploaded icon set (hand-drawn ink outline, soft cel shading, warm colors, same size, line weight and framing): two cheerful hiker heads side by side, each wearing a tan bucket hat, one slightly in front of the other, with a tiny red heart between them. Simple, readable at 40 px. Plain flat magenta (#FF00FF) background only, no shadows, boxes or color patches behind the icon, no text. |
 
 ## 第 28 批：山腰步道兩種（泥土小徑、碎石路＋石壁；放進 `02.素材`）
 

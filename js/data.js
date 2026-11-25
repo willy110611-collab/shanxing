@@ -845,10 +845,10 @@ SX.REGIONS = [
   // { id:'japan', name:'日本', coast:'SX.COAST_JP', mountains:'SX.MOUNTAINS_JP', center:[138.7,35.4], zoom:6 },
 ];
 
-// ───────── 裝備系統（試作：網址加 ?gear=1 才開；沒開時遊戲完全照舊）─────────
+// ───────── 裝備系統（2026-11-25 主人決定開給所有玩家）─────────
 // 企劃在 docs/裝備系統.md。裝備清單、價格、耐久、山幣、所有規則的數字只寫在這裡；game.js 只讀這裡的函式。
 // 三個原則：預設裝備（base:true）不會壞；裝備壞了只會變慢或等天亮；修理便宜。
-SX.gearOn = typeof location !== 'undefined' && /[?&]gear=1\b/.test(location.search);
+SX.gearOn = true;   // 總開關：關掉（false）遊戲就完全照沒有裝備系統時走
 SX.COIN = { NAME:'山幣', PER_KM:10, SUMMIT_PER_DIFF:30, DAILY:20, SIGNIN:20 };   // 怎麼賺山幣：每公里、登頂 × 難度、每日任務每個、簽到
 // RAIN_SLOW 雨天沒雨衣慢多少；REPAIR_RATE 修滿＝原價的幾成；HUT_MUL 山屋修理貴幾倍；FIRST_REPAIR 每天第一次修理打幾折；SELL_RATE 賣回幾成；
 // LOW 耐久剩多少算「快壞了」；LAST 用到剩這麼多就不再掉（撐到這趟結束）；CAMP_MAX_M 頭燈沒電後最多再走多遠找地方紮營；HUT_NEAR_M 離山屋多近算在山屋；GIFT 送的那件雨衣

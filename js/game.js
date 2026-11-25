@@ -210,8 +210,8 @@
   function gearEnd(){ if (!SX.gearOn) return; const L = SX.gearTripEnd(SX.gearSave()); if (L.length) notice(`${L.join('、')}該修理了，先換回舊的`, 3600); gearBadge(); }
   if (SX.gearOn) {
     SX.gearSave = () => { const g = SV.gear && typeof SV.gear === 'object' ? SV.gear : (SV.gear = SX.gearBlank()); if (!g.own || typeof g.own !== 'object') g.own = {}; if (!g.on || typeof g.on !== 'object') g.on = {}; return g; };
-    const first = !SV.gear, qc = location.search.match(/[?&]coin=(\d+)/);
-    SX.gearSave(); SV.coin = qc ? +qc[1] : +SV.coin || 0;
+    const first = !SV.gear;
+    SX.gearSave(); SV.coin = +SV.coin || 0;
     if (first && Object.keys(SV.done).length) gearGive('');   // 本來就在玩的人：直接送雨衣，雨天才不會突然比以前慢
     gearBadge();
   }
@@ -983,7 +983,7 @@
   // 介面美術圖：圖到了就用樣式表蓋過程式畫的圖示（之後才開的視窗也會套用）
   SX.art.onLoad(() => {
     const u = id => SX.art.url(id), css = [];
-    const icons = { icon_map:'.i-map', icon_bag:'.i-bag', icon_album:'.i-photo', icon_settings:'.i-gear', icon_rest:'.i-tent' };
+    const icons = { icon_map:'.i-map', icon_bag:'.i-bag', icon_album:'.i-photo', icon_settings:'.i-gear', icon_rest:'.i-tent', icon_friend:'.i-friend' };
     for (const id in icons) if (u(id)) css.push(`${icons[id]}{background-image:url("${u(id)}")!important;filter:none!important}`);
     // 地圖左下「我的位置」：圖本身就是圓形木牌＋準星，拿掉程式畫的木框和準星
     if (u('icon_locate')) css.push(`.locBtn{background:url("${u('icon_locate')}") center/contain no-repeat!important;border:0!important;box-shadow:none!important}.locBtn svg{display:none}`);
@@ -2364,13 +2364,13 @@
     const c = $('#cover'); if (!c) { enter(); pumpNotice(); return; }
     const id = innerWidth > innerHeight && SX.art.url('cover_key') ? 'cover_key' : 'cover_portrait', u = SX.art.url(id);
     if (u) { c.insertAdjacentHTML('afterbegin', `<img class="cvArt" src="${u}" alt="" draggable="false">`); c.classList.add('art'); c.querySelector('.cvArt').onerror = e => { e.target.remove(); c.classList.remove('art'); }; }   // 圖讀不到就回到暫代封面
-    // 撥開的兩片霧：有 Gemini 畫的 mist_left／mist_right 就用圖，沒有就是 style.css 的柔邊漸層
-    [['.mL', 'mist_left'], ['.mR', 'mist_right']].forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });
+    // 散開的四團雲：有 Gemini 畫的 mist_tl／mist_tr／mist_bl／mist_br 就用圖，沒有就是 style.css 的柔邊漸層
+    ['tl', 'tr', 'bl', 'br'].map(k => ['.m-' + k, 'mist_' + k]).forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });   // 雲之間的縫由底下共用的 .cvBase 補滿
     let tapped = false;
     const tap = e => {
       if (tapped || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
       tapped = true;
-      MO.mist(c, enter).then(() => { c.classList.remove('on', 'veil'); pumpNotice(); });   // 迷霧撥開、看到曙光才收起封面
+      MO.mist(c, enter).then(() => { c.classList.remove('on', 'veil'); pumpNotice(); });   // 雲霧散開、看到曙光才收起封面
     };
     c.addEventListener('click', tap); c.addEventListener('keydown', tap);
     c.classList.add('on'); c.focus({ preventScroll:true });

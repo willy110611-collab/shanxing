@@ -366,8 +366,15 @@
     return Promise.all(ps).then(() => { if (list._fan !== my) return; if (!open) list.classList.remove('on'); els.forEach(el => { if (el._mFan) { el._mFan.cancel(); el._mFan = null; } }); });
   }
 
-  // 封面點下去：迷霧從左右合攏蓋住封面 → 換到遊戲畫面（enter）→ 霧往兩邊撥開、中間透出曙光 → 曙光淡掉。
-  // 再點一下就直接播完。回傳的 Promise 在整段結束時完成（cover 由呼叫的人收起）。減少動態：先換畫面、封面淡出
+  // 封面點下去：四團雲從四個角落湧進來包住畫面（像走進雲霧裡）→ 換到遊戲畫面（enter）→ 雲往四個角落飄散、
+  // 放大變淡，中間透出曙光 → 曙光淡掉。再點一下就直接播完。回傳的 Promise 在整段結束時完成（cover 由呼叫的人收起）。
+  // 減少動態：先換畫面、封面淡出
+  // 等畫面順了：連續 3 格都沒有卡住（每格 SMOOTH_GAP 毫秒內畫出來；省電模式每秒只畫 15 格的手機也算順），或等了 SMOOTH_MAX 毫秒還是卡就不再等。stop() 回 true 就馬上結束（玩家點了跳過）
+  const SMOOTH_GAP = 100, SMOOTH_MAX = 2500;
+  function smooth(stop){
+    return new Promise(res => { let last = performance.now(), ok = 0; const t0 = last;
+      (function f(now){ ok = now - last < SMOOTH_GAP ? ok + 1 : 0; last = now; if (ok >= 3 || now - t0 > SMOOTH_MAX || (stop && stop())) res(); else requestAnimationFrame(f); })(last); });
+  }
   function mist(cover, enter){
     let entered = false, fast = false; const go = () => { if (!entered) { entered = true; enter(); } };
     const t = ms => fast ? 1 : ms;   // 點第二下之後每一段都一下子播完
@@ -375,20 +382,20 @@
     cover.addEventListener('click', skip);
     const end = () => cover.removeEventListener('click', skip);
     if (calm()) { go(); return run(cover, [{ opacity:1 }, { opacity:0 }], { duration:400, fill:'forwards' }).then(end); }
-    const L = cover.querySelector('.mL'), R = cover.querySelector('.mR'), D = cover.querySelector('.cvDawn');
-    const close = { duration:t(560), easing:'cubic-bezier(.4,0,.2,1)', fill:'forwards' };
-    return Promise.all([
-      run(L, [{ transform:'translateX(-102%)', opacity:.6 }, { transform:'translateX(0)', opacity:1 }], close),
-      run(R, [{ transform:'translateX(102%)', opacity:.6 }, { transform:'translateX(0)', opacity:1 }], close),
-    ]).then(() => {
+    const D = cover.querySelector('.cvDawn'), B = cover.querySelector('.cvBase');   // B：四團雲底下共用的霧，合攏時補滿縫、散開時淡掉
+    const clouds = [['tl', -1, -1], ['tr', 1, -1], ['bl', -1, 1], ['br', 1, 1]].map(([k, sx, sy]) => [cover.querySelector('.m-' + k), sx, sy]).filter(c => c[0]);
+    const at = (sx, sy, k, s) => `translate(${sx * k}%,${sy * k}%) scale(${s})`;
+    const inOpt = { duration:t(620), easing:'cubic-bezier(.3,0,.2,1)', fill:'forwards' };
+    return Promise.all(clouds.map(([el, sx, sy]) => run(el, [{ transform:at(sx, sy, 45, 1.25), opacity:0 }, { transform:at(sx, sy, 0, 1), opacity:1 }], inOpt)).concat(run(B, [{ opacity:0 }, { opacity:1 }], inOpt))).then(() => {
+      // 2026-11-25 上線後玩家看到「雲進來了但沒有散開、遊戲畫面沒有慢慢出現」：換到遊戲畫面那一下手機會卡住一兩秒（解開美術圖、畫第一格），
+      // 散開的動畫跟它同時開始，播的時候畫面是卡的，等於沒播。改成：換完畫面後先等畫面順了（smooth）才開始散開，散開放慢、從一開始就慢慢透出遊戲畫面
       go(); cover.classList.add('veil');
-      const open = { duration:t(950), easing:'cubic-bezier(.45,0,.2,1)', fill:'forwards' };
-      return Promise.all([
-        run(L, [{ transform:'translateX(0)' }, { transform:'translateX(-104%)' }], open),
-        run(R, [{ transform:'translateX(0)' }, { transform:'translateX(104%)' }], open),
-        run(D, [{ opacity:0, transform:'scale(.85)' }, { opacity:1, transform:'scale(1)', offset:.55 }, { opacity:.9, transform:'scale(1.08)' }], { duration:t(950), easing:'ease-out', fill:'forwards' }),
-      ]);
-    }).then(() => run(cover, [{ opacity:1 }, { opacity:0 }], { duration:t(520), easing:'ease-out', fill:'forwards' })).then(end);
+      return smooth(() => fast);
+    }).then(() => {
+      const outOpt = { duration:t(1700), easing:'cubic-bezier(.4,0,.3,1)', fill:'forwards' };
+      return Promise.all(clouds.map(([el, sx, sy]) => run(el, [{ transform:at(sx, sy, 0, 1), opacity:1 }, { transform:at(sx, sy, 30, 1.18), opacity:.85, offset:.5 }, { transform:at(sx, sy, 62, 1.36), opacity:0 }], outOpt))
+        .concat(run(B, [{ opacity:1 }, { opacity:.35, offset:.5 }, { opacity:0 }], outOpt), run(D, [{ opacity:0, transform:'scale(.85)' }, { opacity:.9, transform:'scale(1)', offset:.45 }, { opacity:0, transform:'scale(1.08)' }], { duration:t(1700), easing:'ease-out', fill:'forwards' })));
+    }).then(() => run(cover, [{ opacity:1 }, { opacity:0 }], { duration:t(200), easing:'ease-out', fill:'forwards' })).then(end);
   }
   SX.motion = { EASE, mist, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager, fan };
 })();

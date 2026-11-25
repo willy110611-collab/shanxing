@@ -32,28 +32,42 @@ uniform vec2 uR;
 out vec2 vT; out vec4 vC; flat out int vS;
 void main(){ vT = aT; vC = aC; vS = int(aS + 0.5); gl_Position = vec4(aP.x / uR.x * 2.0 - 1.0, 1.0 - aP.y / uR.y * 2.0, aZ * 2.0 - 1.0, 1.0); }`;
 // 立體地面（試作，網址加 ?g3d=1 才開）：一整片地形網格用真正的透視畫（顯示卡算遠近、近的山坡擋住後面的東西），
-// 每個點：相對鏡頭的位置 (X 右、Y 上、Z 往前)、地面座標（公尺）、路面比例、明暗、不透明度
+// 每個點（9 個數）：相對鏡頭的位置 (X 右、Y 上、Z 往前)、地面座標（公尺）、路面比例、明暗、不透明度、立面圖哪一排（欄杆：圖的橫向位置）
 const MVS = `#version 300 es
-in vec3 aP; in vec2 aU; in vec3 aA;
+in vec3 aP; in vec2 aU; in vec4 aA;
 uniform vec3 uK; uniform vec2 uZ;
-out vec2 vU; out vec3 vA; out float vD;
+out vec2 vU; out vec4 vA; out float vD;
 void main(){ vU = aU; vA = aA; vD = aP.z; gl_Position = vec4(aP.x * uK.x, aP.y * uK.y + aP.z * uK.z, aP.z * uZ.x + uZ.y, aP.z); }`;
+// 著色器裡：近處（40 公尺內，110 公尺外完全不分）草地明暗分成四層色塊（相鄰兩層之間一小段柔邊，像插畫上色，不是電腦的平滑漸層）（路緣不描深色線：2026-11-25 試過，看起來不自然，維持原本柔和的路緣）；
+// 最遠那一段（uFar 的 55%～100%）先變霧色、70% 以後再變透明（地平線不會切出一條直的邊，跟 trail.js 舊畫法「最遠幾段先變霧色再淡掉」一樣）；rs＝階梯立面（trail.js 標的，整面暗）；霧照真正的距離（前方和側邊一起算）：兩側地面不變透明，越遠越霧（空氣透視）
+// vA.x 大於 3.5：立體欄杆（4 柱子、5 橫木），貼 Gemini 畫的 rail_post／rail_bar（vA.w 橫、vU.y 直）；階梯立面（rs）有立面圖時貼橫木／石塊立面圖（vA.w：這一階用圖上哪一排）
 const MFS = `#version 300 es
 precision highp float;
-in vec2 vU; in vec3 vA; in float vD;
-uniform sampler2D tR, tG; uniform vec4 uRS; uniform vec4 uFog; uniform vec2 uFD; uniform vec3 uSoil;
+in vec2 vU; in vec4 vA; in float vD;
+uniform sampler2D tR, tG, tS, tP, tB; uniform vec4 uRS; uniform vec2 uSS; uniform vec4 uFog; uniform vec2 uFD; uniform vec3 uSoil; uniform float uGW; uniform float uFar;
 out vec4 o;
 void main(){
-  vec3 r = texture(tR, vec2(vU.x * uRS.x + 0.5, vU.y * uRS.y)).rgb;
-  vec3 g = texture(tG, vec2(vU.x * uRS.z, vU.y * uRS.w)).rgb;
-  float w = clamp(vA.x, 0.0, 1.0), e = clamp(1.0 - abs(vA.x * 2.0 - 1.0), 0.0, 1.0);
-  vec3 c = mix(g, r, w);
-  c = mix(c, uSoil * (0.8 + 0.4 * r), e * 0.55);
-  float rs = 1.0 - smoothstep(0.0, 0.0004 * vD, fwidth(vD));   // 階梯立面（整面同一個遠近）：比踏面暗
-  c *= vA.y * mix(1.0, 0.45, rs);
-  float f = clamp((vD - uFD.x) / (uFD.y - uFD.x), 0.0, 1.0); f = f * (2.0 - f);
+  vec3 c;
+  if (vA.x > 3.5) {
+    vec2 tc = vec2(vA.w, vU.y);
+    vec4 t = vA.x > 4.5 ? texture(tB, tc) : texture(tP, tc);
+    if (t.a < 0.5) discard;
+    c = t.rgb / t.a * vA.y;
+  } else {
+    vec3 r = texture(tR, vec2(vU.x * uRS.x + 0.5, vU.y * uRS.y)).rgb;
+    vec3 g = texture(tG, vec2(vU.x * uRS.z, vU.y * uRS.w)).rgb;
+    float rs = step(1.5, vA.x), w = clamp(vA.x - 2.0 * rs, 0.0, 1.0), e = clamp(1.0 - abs(w * 2.0 - 1.0), 0.0, 1.0), ts = rs * uSS.y;
+    if (ts > 0.5) r = texture(tS, vec2(vU.x * uSS.x + 0.5, vA.w)).rgb;
+    c = mix(g, r, w);
+    c = mix(c, uSoil * (0.8 + 0.4 * r), e * 0.55 * (1.0 - ts));
+    float sb = vA.y * 4.0, sq = (floor(sb) + smoothstep(0.75, 1.0, fract(sb))) / 4.0;
+    c *= mix(vA.y, sq, (1.0 - w) * (1.0 - smoothstep(40.0, 110.0, vD)));
+  }
+  float dd = length(vec2(vD, vU.x)), f = clamp((dd - uFD.x) / (uFD.y - uFD.x), 0.0, 1.0); f = f * (2.0 - f);
   c = mix(c, uFog.rgb, f * uFog.a);
-  o = vec4(c * vA.z, vA.z);
+  float fe = smoothstep(0.55 * uFar, uFar, dd); c = mix(c, uFog.rgb, fe);
+  float a = vA.z * (1.0 - smoothstep(0.7 * uFar, uFar, vD));
+  o = vec4(c * a, a);
 }`;
 const ZN = 0.3, ZF = 420;   // 立體地面的近、遠裁切面（公尺）
 const FS = `#version 300 es
@@ -190,11 +204,11 @@ P.init = function(){
     this.mprog = compile(gl, MVS, MFS); this.mvao = gl.createVertexArray(); gl.bindVertexArray(this.mvao);
     this.mvbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.mvbo); this.mibo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.mibo);
     const ma = n => gl.getAttribLocation(this.mprog, n);
-    gl.enableVertexAttribArray(ma('aP')); gl.vertexAttribPointer(ma('aP'), 3, gl.FLOAT, false, 32, 0);
-    gl.enableVertexAttribArray(ma('aU')); gl.vertexAttribPointer(ma('aU'), 2, gl.FLOAT, false, 32, 12);
-    gl.enableVertexAttribArray(ma('aA')); gl.vertexAttribPointer(ma('aA'), 3, gl.FLOAT, false, 32, 20);
-    gl.useProgram(this.mprog); this.mu = {}; ['tR', 'tG', 'uRS', 'uFog', 'uFD', 'uK', 'uZ', 'uSoil'].forEach(k => { this.mu[k] = gl.getUniformLocation(this.mprog, k); });
-    gl.uniform1i(this.mu.tR, 0); gl.uniform1i(this.mu.tG, 1);
+    gl.enableVertexAttribArray(ma('aP')); gl.vertexAttribPointer(ma('aP'), 3, gl.FLOAT, false, 36, 0);
+    gl.enableVertexAttribArray(ma('aU')); gl.vertexAttribPointer(ma('aU'), 2, gl.FLOAT, false, 36, 12);
+    gl.enableVertexAttribArray(ma('aA')); gl.vertexAttribPointer(ma('aA'), 4, gl.FLOAT, false, 36, 20);
+    gl.useProgram(this.mprog); this.mu = {}; ['tR', 'tG', 'tS', 'tP', 'tB', 'uSS', 'uRS', 'uFog', 'uFD', 'uK', 'uZ', 'uSoil', 'uGW', 'uFar'].forEach(k => { this.mu[k] = gl.getUniformLocation(this.mprog, k); });
+    gl.uniform1i(this.mu.tR, 0); gl.uniform1i(this.mu.tG, 1); gl.uniform1i(this.mu.tS, 2); gl.uniform1i(this.mu.tP, 3); gl.uniform1i(this.mu.tB, 4);
   }
   gl.bindVertexArray(this.vao); gl.useProgram(this.prog);
   gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -590,19 +604,22 @@ P.strokeRect = function(x, y, w, h){ this.beginPath(); this.rect(x, y, w, h); th
 P.depthAt = function(z){ this.zq = z > ZN ? (Math.max(0, Math.min(65535, Math.round(((ZF + ZN) / (ZF - ZN) - 2 * ZF * ZN / (ZF - ZN) / z) * 0.5 * 65535 + 0.5 * 65535))) << 16) >>> 0 : 0; };
 // on：之後畫的東西要比遠近（被比較近的地面擋住，但不寫進遠近）；off：照舊一筆蓋一筆
 P.depth3 = function(on){ if (!this.hasDepth || this.lost) return; this.flush(); const gl = this.gl; if (on) { gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.depthMask(false); } else gl.disable(gl.DEPTH_TEST); };
-// 畫一整片地形網格：m = { v:Float32Array（每點 8 個數）, nv, idx:Uint32Array, ni, road, grass（貼圖畫布）, rs:[路面橫, 路面縱, 草地橫, 草地縱]（每公尺幾張）,
+// 畫一整片地形網格：m = { v:Float32Array（每點 9 個數）, nv, idx:Uint32Array, ni, road, grass（貼圖畫布）, rs:[路面橫, 路面縱, 草地橫, 草地縱]（每公尺幾張）,
 //   k:[2F/W, 2F/H, 1−2·地平線/H], fog:[r,g,b,濃度], fd:[霧開始, 霧最濃]（公尺）, soil:[r,g,b] }
 P.mesh = function(m){
   if (!this.hasDepth || this.lost) return;
   this.flush();
   const gl = this.gl, tR = this.tex(m.road, 'p'), tG = this.tex(m.grass, 'p'); if (!tR || !tG) return;
   gl.useProgram(this.mprog); gl.bindVertexArray(this.mvao);
-  gl.bindBuffer(gl.ARRAY_BUFFER, this.mvbo); gl.bufferData(gl.ARRAY_BUFFER, m.v.subarray(0, m.nv * 8), gl.STREAM_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, this.mvbo); gl.bufferData(gl.ARRAY_BUFFER, m.v.subarray(0, m.nv * 9), gl.STREAM_DRAW);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.mibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.idx.subarray(0, m.ni), gl.STREAM_DRAW);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tR); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tG); gl.activeTexture(gl.TEXTURE0);
+  const tS = m.riser ? this.tex(m.riser, 'p') : null, tP = m.post ? this.tex(m.post, 'p') : null, tB = m.bar ? this.tex(m.bar, 'p') : null;   // 階梯立面、立體欄杆的圖（沒有就不用）
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tR); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tG);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, tS || this.white); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, tP || this.white);
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, tB || this.white); gl.activeTexture(gl.TEXTURE0);
   const U = this.mu;
-  gl.uniform4f(U.uRS, m.rs[0], m.rs[1], m.rs[2], m.rs[3]); gl.uniform3f(U.uK, m.k[0], m.k[1], m.k[2]); gl.uniform2f(U.uZ, (ZF + ZN) / (ZF - ZN), -2 * ZF * ZN / (ZF - ZN));
-  gl.uniform4f(U.uFog, m.fog[0], m.fog[1], m.fog[2], m.fog[3]); gl.uniform2f(U.uFD, m.fd[0], m.fd[1]); gl.uniform3f(U.uSoil, m.soil[0], m.soil[1], m.soil[2]);
+  gl.uniform4f(U.uRS, m.rs[0], m.rs[1], m.rs[2], m.rs[3]); gl.uniform2f(U.uSS, m.ss || 1, tS ? 1 : 0); gl.uniform3f(U.uK, m.k[0], m.k[1], m.k[2]); gl.uniform2f(U.uZ, (ZF + ZN) / (ZF - ZN), -2 * ZF * ZN / (ZF - ZN));
+  gl.uniform4f(U.uFog, m.fog[0], m.fog[1], m.fog[2], m.fog[3]); gl.uniform2f(U.uFD, m.fd[0], m.fd[1]); gl.uniform3f(U.uSoil, m.soil[0], m.soil[1], m.soil[2]); gl.uniform1f(U.uGW, m.gw || 30); gl.uniform1f(U.uFar, m.far || 240);
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); this.setBlend('source-over');
   gl.drawElements(gl.TRIANGLES, m.ni, gl.UNSIGNED_INT, 0);
   gl.depthMask(false); gl.disable(gl.DEPTH_TEST);

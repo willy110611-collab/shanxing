@@ -544,8 +544,11 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .carved{font-family:var(--fontT);letter-spacing:1px}
 .partyBox{position:absolute;left:10px;max-width:calc(100% - 20px);top:calc(var(--hudB) + 6px);display:none;transition:opacity .3s;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
 .partyBox.on{display:flex}
-.partyBox b{flex:none}
-.partyBox span{flex:1;min-width:0;color:var(--ink2)}
+/* 左邊：第一行「和誰一起爬」（名字多了自己換行）、第二行隊友狀態；右邊加油鈕不被擠、不換行（以前三樣排成一橫排，三位隊友時狀態被擠成一個字一行） */
+.partyBox .pbTxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.partyBox b{line-height:1.35}
+.partyBox span{color:var(--ink2);line-height:1.35}
+.partyBox .cbtn{flex:none;white-space:nowrap}
 /* 爬山聊天泡泡：右下「收起畫面資訊」鈕上面一顆小聊天鈕，點開才是輸入框（紀錄、輸入框跟廣場同一套 .plzLog／.chatIn） */
 .tcBtn{position:absolute;right:12px;bottom:calc(132px + env(safe-area-inset-bottom));z-index:5;width:38px;height:38px;padding:0;border-radius:50%;background:rgba(255,247,228,.92);border:2px solid var(--ink);font-size:18px;line-height:1;box-shadow:0 2px 4px rgba(40,25,10,.3);display:none}
 .tcBtn.on{display:block}
@@ -806,19 +809,32 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .ldBtns{display:flex;gap:10px;justify-content:center}
 .ldBtns .cbtn{white-space:nowrap}
 /* 封面（讀取畫面跑完後，輕點進入）：美術圖 cover_portrait 鋪滿；沒有圖時是紙墨風的暫代封面。動態（淡入、字的呼吸、淡出）在「動態效果」段落 */
+/* 好友資訊卡（點好友名單上的名字） */
+.frWho{cursor:pointer}
+.frNow{display:flex;align-items:center;gap:8px;margin:4px 0 10px;font-size:15px}
+.frPet{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.frPet .frPetImg{width:44px;height:44px;object-fit:contain}
+.frStats{margin-bottom:10px}
+.frAff{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;font-size:14px}
+.frAff .cbtn{margin-left:auto;white-space:nowrap}
 .cover{position:fixed;inset:0;z-index:101;display:none;overflow:hidden;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent;background:radial-gradient(ellipse at 70% 20%,#fff4d6 0%,#f3dcae 45%,#d9b47c 100%)}
 .cover.on{display:block}
 .cvArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 50%;pointer-events:none}   /* 窄手機左右會裁掉一點：多裁左邊，登山客（在右邊）和睡墊才完整 */
 .cover.art .cvPh{display:none}
-/* 點封面後撥開迷霧：兩片霧（.mL／.mR）平常在畫面外，合攏蓋住封面、再往兩邊撥開，中間透出曙光（.cvDawn）。
-   有 mist_left／mist_right 美術圖就用圖（game.js 換上），沒有就用下面的柔邊漸層。霧合攏時封面本身藏起來（.veil），撥開後看到的是遊戲畫面 */
+/* 點封面後走進雲霧、雲往四面散開：四團雲（.m-tl 左上、.m-tr 右上、.m-bl 左下、.m-br 右下）平常看不到，
+   先從四個角落湧進來把封面包住，再往四個角落飄散、放大變淡，中間透出曙光（.cvDawn）。
+   有 mist_tl／mist_tr／mist_bl／mist_br 美術圖就用圖（game.js 換上），沒有就用下面的柔邊漸層。雲包住時封面本身藏起來（.veil），散開後看到的是遊戲畫面 */
 .cvMist{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.cvMist i{position:absolute;top:-4%;bottom:-4%;width:78%;display:block}
-.cvMist .mL{left:0;transform:translateX(-102%);background:radial-gradient(15% 8% at 82% 6%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 77% 19%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 8% at 84% 32%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 78% 45%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 8% at 83% 58%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 10% at 76% 71%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 8% at 81% 84%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 79% 97%,#fbf3e2 55%,rgba(255,250,240,0) 100%),linear-gradient(90deg,#f4ead6 0 66%,rgba(244,234,214,0) 86%)}
-.cvMist .mR{right:0;transform:translateX(102%);background:radial-gradient(15% 8% at 18% 6%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 23% 19%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 8% at 16% 32%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 22% 45%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 8% at 17% 58%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 10% at 24% 71%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 8% at 19% 84%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 21% 97%,#fbf3e2 55%,rgba(255,250,240,0) 100%),linear-gradient(270deg,#f4ead6 0 66%,rgba(244,234,214,0) 86%)}
-.cvMist .mL.art,.cvMist .mR.art{background-size:cover;background-repeat:no-repeat}
-.cvMist .mL.art{background-position:right center}.cvMist .mR.art{background-position:left center}
-.cvMist .cvDawn{inset:0;width:auto;opacity:0;background:radial-gradient(70% 45% at 50% 0,rgba(255,238,170,.95) 0,rgba(255,214,140,.6) 38%,rgba(255,240,210,0) 72%),linear-gradient(180deg,rgba(255,236,190,.55),rgba(255,248,230,0) 60%)}
+.cvMist i{position:absolute;display:block}
+.cvMist .m{width:84%;height:64%;opacity:0}
+.cvMist .m-tl{left:-8%;top:-6%;background:radial-gradient(20% 13% at 72% 58%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(22% 12% at 52% 80%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(16% 14% at 86% 34%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(20% 10% at 30% 90%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(14% 12% at 90% 12%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 64% 76%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(13% 11% at 80% 52%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(150% 150% at 0% 0%,#f4ead6 0 62%,rgba(244,234,214,0) 90%)}
+.cvMist .m-tr{right:-8%;top:-6%;background:radial-gradient(20% 13% at 28% 58%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(22% 12% at 48% 80%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(16% 14% at 14% 34%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(20% 10% at 70% 90%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(14% 12% at 10% 12%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 36% 76%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(13% 11% at 20% 52%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(150% 150% at 100% 0%,#f4ead6 0 62%,rgba(244,234,214,0) 90%)}
+.cvMist .m-bl{left:-8%;bottom:-6%;background:radial-gradient(20% 13% at 72% 42%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(22% 12% at 52% 20%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(16% 14% at 86% 66%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(20% 10% at 30% 10%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(14% 12% at 90% 88%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 64% 24%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(13% 11% at 80% 48%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(150% 150% at 0% 100%,#f4ead6 0 62%,rgba(244,234,214,0) 90%)}
+.cvMist .m-br{right:-8%;bottom:-6%;background:radial-gradient(20% 13% at 28% 42%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(22% 12% at 48% 20%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(16% 14% at 14% 66%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(20% 10% at 70% 10%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(14% 12% at 10% 88%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 36% 24%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(13% 11% at 20% 48%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(150% 150% at 100% 100%,#f4ead6 0 62%,rgba(244,234,214,0) 90%)}
+.cvMist .m.art{width:100%;height:72%;background-size:contain;background-repeat:no-repeat}   /* Gemini 的雲：整團放進框裡、貼在自己的角落 */
+.cvMist .m-tl.art{background-position:left top}.cvMist .m-tr.art{background-position:right top}.cvMist .m-bl.art{background-position:left bottom}.cvMist .m-br.art{background-position:right bottom}
+.cvMist .cvBase{inset:0;opacity:0;background:radial-gradient(80% 60% at 50% 45%,#fffaf0,#f1e6cf)}   /* 四團雲底下共用的一層霧：雲合攏時把縫補滿，散開時跟著淡掉 */
+.cvMist .cvDawn{inset:0;opacity:0;background:radial-gradient(70% 45% at 50% 0,rgba(255,238,170,.95) 0,rgba(255,214,140,.6) 38%,rgba(255,240,210,0) 72%),linear-gradient(180deg,rgba(255,236,190,.55),rgba(255,248,230,0) 60%)}
 .cover.veil{background:none}
 .cover.veil>:not(.cvMist){visibility:hidden}
 .cvPh{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:calc(24vh + env(safe-area-inset-top))}
