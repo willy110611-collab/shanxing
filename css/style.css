@@ -450,7 +450,6 @@ input[type=range]{width:100%;accent-color:#6fb257}
 /* 封面：淡入、「輕點畫面，進入山林」慢慢呼吸、點下去淡出 */
 .cover.on{animation:cvIn .6s var(--ease) backwards}
 @keyframes cvIn{from{opacity:0}}
-.cover.off{opacity:0;transition:opacity .6s var(--ease);pointer-events:none}
 .cvTap{animation:cvBreath 3.6s ease-in-out infinite}
 @keyframes cvBreath{0%,100%{opacity:.5;transform:scale(.97)}50%{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){
@@ -811,6 +810,17 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .cover.on{display:block}
 .cvArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 50%;pointer-events:none}   /* 窄手機左右會裁掉一點：多裁左邊，登山客（在右邊）和睡墊才完整 */
 .cover.art .cvPh{display:none}
+/* 點封面後撥開迷霧：兩片霧（.mL／.mR）平常在畫面外，合攏蓋住封面、再往兩邊撥開，中間透出曙光（.cvDawn）。
+   有 mist_left／mist_right 美術圖就用圖（game.js 換上），沒有就用下面的柔邊漸層。霧合攏時封面本身藏起來（.veil），撥開後看到的是遊戲畫面 */
+.cvMist{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.cvMist i{position:absolute;top:-4%;bottom:-4%;width:78%;display:block}
+.cvMist .mL{left:0;transform:translateX(-102%);background:radial-gradient(15% 8% at 82% 6%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 77% 19%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 8% at 84% 32%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 78% 45%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 8% at 83% 58%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 10% at 76% 71%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 8% at 81% 84%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 79% 97%,#fbf3e2 55%,rgba(255,250,240,0) 100%),linear-gradient(90deg,#f4ead6 0 66%,rgba(244,234,214,0) 86%)}
+.cvMist .mR{right:0;transform:translateX(102%);background:radial-gradient(15% 8% at 18% 6%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 23% 19%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 8% at 16% 32%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 10% at 22% 45%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 8% at 17% 58%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(21% 10% at 24% 71%,#fbf3e2 55%,rgba(255,250,240,0) 100%),radial-gradient(15% 8% at 19% 84%,#fffaf0 55%,rgba(255,250,240,0) 100%),radial-gradient(18% 10% at 21% 97%,#fbf3e2 55%,rgba(255,250,240,0) 100%),linear-gradient(270deg,#f4ead6 0 66%,rgba(244,234,214,0) 86%)}
+.cvMist .mL.art,.cvMist .mR.art{background-size:cover;background-repeat:no-repeat}
+.cvMist .mL.art{background-position:right center}.cvMist .mR.art{background-position:left center}
+.cvMist .cvDawn{inset:0;width:auto;opacity:0;background:radial-gradient(70% 45% at 50% 0,rgba(255,238,170,.95) 0,rgba(255,214,140,.6) 38%,rgba(255,240,210,0) 72%),linear-gradient(180deg,rgba(255,236,190,.55),rgba(255,248,230,0) 60%)}
+.cover.veil{background:none}
+.cover.veil>:not(.cvMist){visibility:hidden}
 .cvPh{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:calc(24vh + env(safe-area-inset-top))}
 .cvTitle{font-family:var(--fontT);font-size:64px;letter-spacing:14px;padding-left:14px;color:#5a3a22;text-shadow:0 2px 0 rgba(255,250,235,.8)}
 .cvMt{position:absolute;left:-2%;bottom:calc(10vh + env(safe-area-inset-bottom) - 3px);width:104%;height:auto}

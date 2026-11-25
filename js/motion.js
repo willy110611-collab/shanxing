@@ -366,5 +366,29 @@
     return Promise.all(ps).then(() => { if (list._fan !== my) return; if (!open) list.classList.remove('on'); els.forEach(el => { if (el._mFan) { el._mFan.cancel(); el._mFan = null; } }); });
   }
 
-  SX.motion = { EASE, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager, fan };
+  // 封面點下去：迷霧從左右合攏蓋住封面 → 換到遊戲畫面（enter）→ 霧往兩邊撥開、中間透出曙光 → 曙光淡掉。
+  // 再點一下就直接播完。回傳的 Promise 在整段結束時完成（cover 由呼叫的人收起）。減少動態：先換畫面、封面淡出
+  function mist(cover, enter){
+    let entered = false, fast = false; const go = () => { if (!entered) { entered = true; enter(); } };
+    const t = ms => fast ? 1 : ms;   // 點第二下之後每一段都一下子播完
+    const skip = () => { fast = true; cover.getAnimations({ subtree:true }).forEach(a => { if (a.effect && a.effect.getComputedTiming().endTime !== Infinity) a.finish(); }); };   // 一直呼吸的那行字不能「播完」，跳過它
+    cover.addEventListener('click', skip);
+    const end = () => cover.removeEventListener('click', skip);
+    if (calm()) { go(); return run(cover, [{ opacity:1 }, { opacity:0 }], { duration:400, fill:'forwards' }).then(end); }
+    const L = cover.querySelector('.mL'), R = cover.querySelector('.mR'), D = cover.querySelector('.cvDawn');
+    const close = { duration:t(560), easing:'cubic-bezier(.4,0,.2,1)', fill:'forwards' };
+    return Promise.all([
+      run(L, [{ transform:'translateX(-102%)', opacity:.6 }, { transform:'translateX(0)', opacity:1 }], close),
+      run(R, [{ transform:'translateX(102%)', opacity:.6 }, { transform:'translateX(0)', opacity:1 }], close),
+    ]).then(() => {
+      go(); cover.classList.add('veil');
+      const open = { duration:t(950), easing:'cubic-bezier(.45,0,.2,1)', fill:'forwards' };
+      return Promise.all([
+        run(L, [{ transform:'translateX(0)' }, { transform:'translateX(-104%)' }], open),
+        run(R, [{ transform:'translateX(0)' }, { transform:'translateX(104%)' }], open),
+        run(D, [{ opacity:0, transform:'scale(.85)' }, { opacity:1, transform:'scale(1)', offset:.55 }, { opacity:.9, transform:'scale(1.08)' }], { duration:t(950), easing:'ease-out', fill:'forwards' }),
+      ]);
+    }).then(() => run(cover, [{ opacity:1 }, { opacity:0 }], { duration:t(520), easing:'ease-out', fill:'forwards' })).then(end);
+  }
+  SX.motion = { EASE, mist, SPRING, get calm(){ return calm(); }, run, busy, idle, done, beat, progress, toast, toastOff, stagger, shake, rise, fadeIn, slideIn, flip, swipe, pull, skeleton, skeletonGrid, sparks, like, petals, petalKind, burst, pop, morph, toggle, viewOpen, viewClose, viewSwap, settle, pager, fan };
 })();
