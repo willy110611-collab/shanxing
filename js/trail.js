@@ -2824,7 +2824,7 @@ function skirtIn(n1, a){
 const HZB = { z:6, zf:60, fMin:0.3, up:30, dn:40, a:0.75, w:300, k:0.85 }, HZK = 24;   // z：這麼遠以外的地面才算進霧帶的高度（以前 60 公尺：近一點的坡頂整條沒有霧，草地和遠山之間一條硬邊，2026-11-24 轉彎巡檢 玉山東峰 3755、玉山前峰 846 公尺；10 公尺時稜線上往外掉的陡坡，離鏡頭 6～10 公尺那一截跟天空之間還是一條筆直的硬邊，嘉明湖 4496 公尺）；坡頂比 zf 近時霧帶整條縮小（最小 fMin 倍），不會一大片霧蓋在近處的樹叢上
 // 第二條霧帶 gap：比較近的坡頂跟後面更遠的地面之間隔著一段露出背景（轉彎時遠處的地面只在畫面一邊，中間是山谷），那個坡頂也是一條地面和背景的交界，也蓋一段霧
 // （2026-11-24 轉彎巡檢 玉山東峰 782 公尺：以前這種坡頂被舊的外緣霧一塊塊蓋住，外緣霧改順著帶子方向以後露出一條硬邊）
-const hzA = () => ({ y:Infinity, on:false, sky:new Float32Array(HZK + 1), bot:new Float32Array(HZK + 1), lx:0, ly:0, nx:0, ny:0, z:Infinity });
+const hzA = () => ({ y:Infinity, on:false, zd:0, sky:new Float32Array(HZK + 1), bot:new Float32Array(HZK + 1), lx:0, ly:0, nx:0, ny:0, z:Infinity });
 const GAPN = new Float32Array(HZK + 1);   // 這一段新露出來的坡頂（畫完這段的地面馬上蓋霧，在這段的樹、草叢底下，不會一條霧蓋在樹上）
 const HZS = [hzA(), hzA()];   // 現場畫、遠景快取各一份（快取一格只畫一截）
 const SGT = new Float32Array(HZK + 1), SGB = new Float32Array(HZK + 1);   // 這一段地面在每條格線上的上緣（遠端的邊）、下緣（近端的邊）
@@ -2845,6 +2845,30 @@ function skyMerge(S, z){
     if (b > S.bot[k]) S.bot[k] = b;
   }
   return any;
+}
+// 霧帶在由遠到近畫到離鏡頭幾公尺時蓋上去（hzPlan）。以前固定等到離鏡頭 HZB.z 公尺才蓋：天際線在幾十公尺外時，中間那幾十公尺路旁的樹、芒草、草叢都已經畫好，
+// 整條霧蓋在它們上面，再被更近的樹切出一條平的邊，像一層放錯位置的霧（2026-11-25 回報：晚上阿里山坡頂前，霧色比夜裡的樹亮很多，特別明顯）。
+// 現在先量一遍遠處地面的上緣：霧帶的範圍（天際線往下 HZB.dn 像素、照遠近縮小）碰得到的地面裡最近的那一段一畫完就蓋，
+// 霧帶底下的地面跟以前一樣全部都在霧的下面，比那一段近的樹和草叢畫在霧的上面
+const HZT = new Float32Array(DRAW * (HZK + 1)), HZR = Array.from({ length:DRAW }, (_, j) => HZT.subarray(j * (HZK + 1), (j + 1) * (HZK + 1))), HZP = new Float32Array(HZK + 1);
+function hzPlan(b, jHi){
+  let j, k, side, z = Infinity, j0 = jHi + 1; HZP.fill(Infinity);
+  for (j = jHi; j >= 0 && pZ[j] >= HZB.z; j--) {   // 跟 drawWorld 同一套條件：哪幾段的地面算進天際線
+    const R = HZR[j]; R.fill(Infinity); j0 = j;
+    const y2 = pY[j + 1], s2 = pS[j + 1], x2 = pX[j + 1];
+    if (ease01(farA(j, DRAW - 1, FAR_FADE) / FAR_FADE_A) <= 0.05 || y2 - 0.6 * s2 > H + 80 || !(pY[j] - y2 > 0.2)) continue;
+    const i = b + j, DS = j < TDF_J ? TDN : TDF, nS = DS.length, gw2 = gwAt(pZ[j + 1]), mo2 = DS === TDN ? tdMorph(pZ[j + 1]) : 0, dW2 = rwAt(i + 1) - RW;
+    let lx = 0, ly = 0;
+    for (side = -1; side <= 1; side += 2) {
+      bandEnd(i + 1, side, DS, nS, dW2, gw2, mo2, x2, y2, s2, tX2, tY2, tD2, tH2);
+      for (k = 0; k < nS - 1; k++) edgeAt(R, tX2[k], tY2[k], tX2[k + 1], tY2[k + 1], false);
+      if (side > 0) edgeAt(R, lx, ly, tX2[0], tY2[0], false); else { lx = tX2[0]; ly = tY2[0]; }
+    }
+    for (k = 0; k <= HZK; k++) if (R[k] < HZP[k]) { HZP[k] = R[k]; if (pZ[j + 1] < z) z = pZ[j + 1]; }
+  }
+  const dn = HZB.dn * U * clamp((z - HZB.z) / (HZB.zf - HZB.z), HZB.fMin, 1);   // 霧帶下緣離天際線幾像素（跟 horizonBand 同一個縮放）
+  for (j = j0; j <= jHi; j++) { const R = HZR[j]; for (k = 0; k <= HZK; k++) if (R[k] < HZP[k] + dn) return pZ[j]; }
+  return HZB.z;
 }
 let hzbC = null;
 function hzbTex(){
@@ -3991,8 +4015,9 @@ function drawWorld(b, t, jHi, jLo, far){
   const HS = HZS[far ? 1 : 0];   // 遠處地平線的霧帶：從最遠那段開始畫的這一輪才畫（現場畫接在遠景快取後面時，霧帶已經在快取裡）
   if (jHi === DRAW - 1) { HS.y = Infinity; HS.on = true; HS.sky.fill(Infinity); HS.bot.fill(-Infinity); HS.z = Infinity; } else if (!far) HS.on = false;
   if (G3) HS.on = false;   // 立體地面試作：地平線霧帶跟著舊的地面畫法，不畫
+  HS.zd = HS.on && !far ? hzPlan(b, jHi) : HZB.z;   // 這一輪霧帶畫到離鏡頭幾公尺時蓋（遠景快取一格只畫一截、照舊）
   for (j = jHi; j >= jLo; j--) {
-    gmk(0); if (HS.on && pZ[j] < HZB.z) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
+    gmk(0); if (HS.on && pZ[j] < HS.zd) { HS.on = false; horizonBand(HS.y, HZB.a, HS.sky, HS.z); }
     if (G3) ctx.depthAt(pZ[j] * 0.995);   // 立體地面試作：這段的東西在這個遠近（比它近的地面擋得住它）
     // 遠處兩段地面在畫面上加起來不到 LOD_PX 像素高：合成一段畫（在比較遠的那段畫、近的那段跳過），地面的填色少一半，看起來一樣
     const skipG = lodSkip; lodSkip = false; CQ.j = j;
