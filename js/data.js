@@ -385,7 +385,7 @@ SX.fitCanCount = (sv, id, day) => ((sv.fitRep || {})[id] || 0) < SX.FIT.REPEAT_M
 SX.fitDecay = (cond, away) => Math.max(SX.FIT.COND_MIN, cond - SX.FIT.DECAY_PER_DAY * Math.max(0, away - SX.FIT.GRACE_DAYS));   // away：離上次打開隔了幾個整天
 SX.fitRecover = cond => Math.min(SX.FIT.COND_MAX, cond + SX.FIT.RECOVER);
 SX.fitSave = () => ({});   // 目前的存檔，game.js 開機後換成真的存檔
-SX.baseSpeed = m => SX.rawSpeed(m) * SX.fitness(SX.fitSave()) * (1 + SX.partyBoost(m));   // 登山客的步速（公尺／秒）= 山友步調 × 體能 ×（1＋好友好感加速）：遊戲關著時就照這個速度自己走；畫面、離線補走、預估時間都從這裡拿
+SX.baseSpeed = m => SX.rawSpeed(m) * SX.fitness(SX.fitSave()) * (1 + SX.partyBoost(m)) * SX.gearPace();   // 登山客的步速（公尺／秒）= 山友步調 × 體能 ×（1＋好友好感加速）× 裝備（SX.gearPace，沒開裝備系統時是 1）：遊戲關著時就照這個速度自己走；畫面、離線補走、預估時間都從這裡拿
 
 // ───────── 好友好感度 ─────────
 // 等級門檻、每種事件加多少、每天上限只寫在伺服器（server/src/index.js 的 AFF），好友清單會一起回來；這裡只有每一級的獎勵（Lv1～Lv10，跟伺服器的門檻一樣多級）
@@ -844,3 +844,70 @@ SX.REGIONS = [
   // 範例（未啟用）：
   // { id:'japan', name:'日本', coast:'SX.COAST_JP', mountains:'SX.MOUNTAINS_JP', center:[138.7,35.4], zoom:6 },
 ];
+
+// ───────── 裝備系統（試作：網址加 ?gear=1 才開；沒開時遊戲完全照舊）─────────
+// 企劃在 docs/裝備系統.md。裝備清單、價格、耐久、山幣、所有規則的數字只寫在這裡；game.js 只讀這裡的函式。
+// 三個原則：預設裝備（base:true）不會壞；裝備壞了只會變慢或等天亮；修理便宜。
+SX.gearOn = typeof location !== 'undefined' && /[?&]gear=1\b/.test(location.search);
+SX.COIN = { NAME:'山幣', PER_KM:10, SUMMIT_PER_DIFF:30, DAILY:20, SIGNIN:20 };   // 怎麼賺山幣：每公里、登頂 × 難度、每日任務每個、簽到
+// RAIN_SLOW 雨天沒雨衣慢多少；REPAIR_RATE 修滿＝原價的幾成；HUT_MUL 山屋修理貴幾倍；FIRST_REPAIR 每天第一次修理打幾折；SELL_RATE 賣回幾成；
+// LOW 耐久剩多少算「快壞了」；LAST 用到剩這麼多就不再掉（撐到這趟結束）；CAMP_MAX_M 頭燈沒電後最多再走多遠找地方紮營；HUT_NEAR_M 離山屋多近算在山屋；GIFT 送的那件雨衣
+SX.GEAR_RULE = { FULL:100, LAST:1, LOW:20, RAIN_SLOW:0.15, REPAIR_RATE:0.1, HUT_MUL:1.5, FIRST_REPAIR:0.5, SELL_RATE:0.5, CAMP_MAX_M:500, HUT_NEAR_M:150, GIFT:'rain_light' };
+SX.GEAR_SLOTS = [ { id:'hat', name:'帽子' }, { id:'lamp', name:'頭燈' }, { id:'pack', name:'背包' }, { id:'rain', name:'雨衣' }, { id:'pole', name:'登山杖' }, { id:'extra', name:'隨身' } ];
+// wear：耐久照什麼掉（km 走的公里、rainKm 雨中公里、snowKm 雪地公里、nightH 夜路小時）；life：從全新用到 0 可以撐多少（單位跟 wear 一樣）
+// 效果：speed 步速加幾成、stam 體力少掉幾成、temp 體溫少掉幾成、rainOk 雨天不變慢、rainTemp 雨天體溫再少掉幾成、nightH 每趟可以走幾小時夜路、snow 雪季管制的山可以出發
+SX.GEAR = [
+  { id:'hat_old',     slot:'hat',  name:'舊帽子', base:true, text:'陪你很久的帽子，不會壞' },
+  { id:'hat_wool',    slot:'hat',  name:'毛帽', price:300, wear:'km', life:60, temp:0.15, text:'體溫掉得慢 15%' },
+  { id:'hat_wind',    slot:'hat',  name:'防風保暖帽', price:1200, wear:'km', life:120, temp:0.3, text:'體溫掉得慢 30%' },
+  { id:'lamp_old',    slot:'lamp', name:'舊頭燈', base:true, nightH:4, text:'每趟可以走 4 小時夜路，不會壞' },
+  { id:'lamp_led',    slot:'lamp', name:'LED 頭燈', price:500, wear:'nightH', life:40, nightH:8, text:'每趟可以走 8 小時夜路' },
+  { id:'lamp_pro',    slot:'lamp', name:'高亮度頭燈', price:1800, wear:'nightH', life:80, nightH:24, text:'整晚都能走' },
+  { id:'pack_old',    slot:'pack', name:'舊背包', base:true, text:'陪你很久的背包，不會壞' },
+  { id:'pack_light',  slot:'pack', name:'輕量背包', price:400, wear:'km', life:60, stam:0.1, text:'體力掉得慢 10%' },
+  { id:'pack_frame',  slot:'pack', name:'透氣背架背包', price:1500, wear:'km', life:120, stam:0.2, text:'體力掉得慢 20%' },
+  { id:'rain_light',  slot:'rain', name:'輕便雨衣', price:300, wear:'rainKm', life:30, rainOk:true, text:'雨天不變慢' },
+  { id:'rain_pro',    slot:'rain', name:'透氣雨衣', price:1200, wear:'rainKm', life:60, rainOk:true, rainTemp:0.2, text:'雨天不變慢，雨天體溫掉得慢 20%' },
+  { id:'pole_old',    slot:'pole', name:'舊登山杖', base:true, text:'陪你很久的登山杖，不會壞' },
+  { id:'pole_alu',    slot:'pole', name:'鋁合金登山杖', price:500, wear:'km', life:60, speed:0.03, text:'走快 3%' },
+  { id:'pole_carbon', slot:'pole', name:'碳纖維登山杖', price:2000, wear:'km', life:120, speed:0.05, text:'走快 5%' },
+  { id:'crampons',    slot:'extra', name:'冰爪', price:800, wear:'snowKm', life:30, snow:true, text:'雪季管制的山，要帶才能出發' },
+];
+SX.GEAR_BY = {}; SX.GEAR.forEach(x => SX.GEAR_BY[x.id] = x);
+SX.gearBlank = () => ({ own:{}, on:{}, repDay:null });   // 存檔形狀：own 買了的裝備 → 耐久 0～100；on 每一格穿哪件；repDay 最近一次用掉「每天第一次半價」的日期
+SX.gearBase = slot => SX.GEAR.find(x => x.slot === slot && x.base) || null;
+SX.gearBroken = (g, id) => g.own[id] != null && g.own[id] <= 0;   // 待修理
+// 這一格現在真的在用的那件：穿著、還沒壞的那件；不然就是預設裝備（雨衣、隨身沒有預設 → null）
+SX.gearWorn = (g, slot) => { const it = SX.GEAR_BY[g.on[slot]]; return it && it.slot === slot && g.own[it.id] > 0 ? it : SX.gearBase(slot); };
+SX.gearFx = g => {
+  const fx = { speed:0, stam:0, temp:0, rainOk:false, rainTemp:0, nightH:0, snow:false };
+  SX.GEAR_SLOTS.forEach(s => { const it = SX.gearWorn(g, s.id); if (!it) return;
+    fx.speed += it.speed || 0; fx.stam += it.stam || 0; fx.temp += it.temp || 0; fx.rainTemp += it.rainTemp || 0; fx.nightH = Math.max(fx.nightH, it.nightH || 0); fx.rainOk = fx.rainOk || !!it.rainOk; fx.snow = fx.snow || !!it.snow; });
+  return fx;
+};
+SX.gearSave = () => SX.gearBlank();   // 目前存檔裡的裝備，game.js 開機後換成真的
+SX.gearWx = null;                     // 現在要算的那一刻的天氣 { kind, time }（game.js 的 simulate 每一步放進來；離線補走放的是「當時」的天氣）
+// 裝備讓步速變成幾倍：登山杖加速、雨天沒雨衣變慢。步速只從 SX.baseSpeed 這個入口乘進去
+SX.gearPace = () => { if (!SX.gearOn) return 1; const fx = SX.gearFx(SX.gearSave()), w = SX.gearWx; return (1 + fx.speed) * (w && w.kind === 'rain' && !fx.rainOk ? 1 - SX.GEAR_RULE.RAIN_SLOW : 1); };
+// 走了 d 公尺、其中夜路 nightSec 秒：穿著的裝備照自己的 wear 掉耐久，掉到 LAST 就停（最後 1% 撐到這趟結束）
+SX.gearUse = (g, d, w, nightSec) => {
+  const R = SX.GEAR_RULE, km = d / 1000;
+  SX.GEAR_SLOTS.forEach(s => { const it = SX.gearWorn(g, s.id); if (!it || it.base) return;
+    const n = it.wear === 'km' ? km : it.wear === 'rainKm' ? (w && w.kind === 'rain' ? km : 0) : it.wear === 'snowKm' ? (w && w.kind === 'snow' ? km : 0) : it.wear === 'nightH' ? nightSec / 3600 : 0;
+    if (n > 0) g.own[it.id] = Math.max(R.LAST, g.own[it.id] - n / it.life * R.FULL); });
+};
+// 這趟結束（登頂或下山）：用到只剩最後 1% 的變成待修理，回傳它們的名字
+SX.gearTripEnd = g => Object.keys(g.own).filter(id => SX.GEAR_BY[id] && g.own[id] > 0 && g.own[id] <= SX.GEAR_RULE.LAST).map(id => { g.own[id] = 0; return SX.GEAR_BY[id].name; });
+// 修理要多少山幣：缺多少修多少；hut 在山屋修；day 今天的日期（今天還沒修過就半價）。不用修回 0
+SX.gearRepairCost = (g, id, hut, day) => {
+  const it = SX.GEAR_BY[id], R = SX.GEAR_RULE; if (!it || it.base || g.own[id] == null || g.own[id] >= R.FULL) return 0;
+  return Math.max(1, Math.ceil(it.price * R.REPAIR_RATE * (R.FULL - g.own[id]) / R.FULL * (hut ? R.HUT_MUL : 1) * (g.repDay !== day ? R.FIRST_REPAIR : 1)));
+};
+SX.gearSellPrice = id => { const it = SX.GEAR_BY[id]; return it && !it.base ? Math.floor(it.price * SX.GEAR_RULE.SELL_RATE) : 0; };
+// 雪季入山管制的山（SX.permitNeed 說要管制的那些）還要帶沒壞的冰爪；可以出發回 null
+SX.gearNeed = (id, date, g) => SX.permitNeed(id, date) && !SX.gearFx(g).snow ? { reason:'雪季管制：要帶冰爪才能出發' } : null;
+SX.isHut = name => /山莊|山屋/.test(name);
+// 現在是不是在山屋（可以修理、換裝）：回那個路標，不在就 null
+SX.hutAt = (m, dist) => (m.waypoints || []).find(w => SX.isHut(w.name) && Math.abs(w.m - dist) <= SX.GEAR_RULE.HUT_NEAR_M) || null;
+// 頭燈沒電了要走到哪裡紮營：前面最近的路標（太遠就在 CAMP_MAX_M 內的路邊），不會走到山頂
+SX.campSpot = (m, dist) => { const lim = Math.min(dist + SX.GEAR_RULE.CAMP_MAX_M, m.dist - 3), w = (m.waypoints || []).find(x => x.m > dist && x.m <= lim); return w ? { m:w.m, name:w.name } : { m:Math.max(dist, lim), name:null }; };

@@ -105,14 +105,14 @@
   }
   A.on = SV.set.sound; A.vol = SV.set.vol;
 
-  const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null, seg:null });   // seg：這次的小目標 { m 在哪, name }
+  const newProg = () => ({ dist:0, stam:100, temp:100, sleep:false, rest:false, last:Date.now(), ms:0, fast:false, fin:false, got:{}, stopAt:null, restType:'bench', encT:200 + Math.random() * 160, away:null, seg:null, nightSec:0, camp:false, campAt:null, glog:null });   // seg：這次的小目標 { m 在哪, name }
   const P = id => { const p = SV.prog[id] || (SV.prog[id] = newProg()), d = newProg(); for (const k in d) if (p[k] === undefined) p[k] = d[k]; if (!p.got || typeof p.got !== 'object') p.got = {}; ['dist','stam','temp','ms','last','encT'].forEach(k => { if (typeof p[k] !== 'number' || !isFinite(p[k])) p[k] = d[k]; }); return p; };
   // 一次只能爬一座山（跟真實一樣）：onTrail＝正在爬、還沒登頂的那座；舊存檔裡同時爬到一半的別座山只留目前這座
   // 好友跟隨的那一趟（q.team）從隊長出發那一刻就算在路上（還沒打開遊戲、一步都還沒補走也是）
   const onTrail = () => { const id = SV.cur, m = id && SX.M[id], q = m && SV.prog[id]; return q && (q.dist > 0 || q.team) && q.dist < m.dist && !q.fin ? id : null; };
   for (const k in SV.prog) { const q = SV.prog[k]; if (k !== SV.cur && q && q.dist > 0 && !q.fin) SV.prog[k] = newProg(); }
   // 下山：這次的進度歸零，下次從登山口重新出發（路上拿到的寶物、照片都留著）
-  function goDown(id){ SV.prog[id] = newProg(); if (SV.cur === id) SV.cur = null; save(); }
+  function goDown(id){ gearEnd(); SV.prog[id] = newProg(); if (SV.cur === id) SV.cur = null; save(); }
 
   // ───────── 畫面切換 ─────────
   let screen = 'map', prevScreen = 'map';
@@ -200,6 +200,21 @@
   function holdNotice(){ if (!bgNote || !$('#toast').classList.contains('on')) return; noticeQ.unshift(bgNote); bgNote = null; MO.toastOff(); }
   function fitNotice(){ if (!fitDecayed) return; fitDecayed = false; notice('好久沒運動，體能掉了一點，多爬幾趟就會回來', 3600); }
   fitNotice();
+  // ───────── 裝備系統（試作：SX.gearOn，網址加 ?gear=1 才開）─────────
+  // 規則、數字、算法都在 data.js（SX.GEAR、SX.GEAR_RULE、SX.COIN、SX.gear*）；這裡只有存檔（SV.gear、SV.coin）和畫面
+  let gearChecked = null;   // 看過「出發前檢查」、按了出發的那座山
+  function gearGive(why){ const g = SX.gearSave(), id = SX.GEAR_RULE.GIFT; if (g.own[id] != null) return; g.own[id] = SX.GEAR_RULE.FULL; if (!g.on.rain) g.on.rain = id; notice(`${why}送你一件${SX.GEAR_BY[id].name}，下雨天不會變慢`, 3600); }
+  function gearCoin(n, kind){ if (!SX.gearOn) return; SV.coin = (SV.coin || 0) + n; if (kind === 'streak3') gearGive('連續 3 天，'); }
+  function gearBadge(){ if (!SX.gearOn) return; const g = SX.gearSave(), n = Object.keys(g.own).filter(k => SX.gearBroken(g, k)).length; $$('[data-go="bag"]').forEach(b => b.dataset.badge = n ? String(n) : ''); }
+  // 這趟結束（登頂或下山）：用到最後 1% 的裝備變成待修理
+  function gearEnd(){ if (!SX.gearOn) return; const L = SX.gearTripEnd(SX.gearSave()); if (L.length) notice(`${L.join('、')}該修理了，先換回舊的`, 3600); gearBadge(); }
+  if (SX.gearOn) {
+    SX.gearSave = () => { const g = SV.gear && typeof SV.gear === 'object' ? SV.gear : (SV.gear = SX.gearBlank()); if (!g.own || typeof g.own !== 'object') g.own = {}; if (!g.on || typeof g.on !== 'object') g.on = {}; return g; };
+    const first = !SV.gear, qc = location.search.match(/[?&]coin=(\d+)/);
+    SX.gearSave(); SV.coin = qc ? +qc[1] : +SV.coin || 0;
+    if (first && Object.keys(SV.done).length) gearGive('');   // 本來就在玩的人：直接送雨衣，雨天才不會突然比以前慢
+    gearBadge();
+  }
   $('#toast').addEventListener('transitionend', e => { if (e.propertyName === 'opacity' && !e.target.classList.contains('on')) pumpNotice(); });
   // 動態效果（漣漪、星星、花瓣、交錯出場…）都在 js/motion.js；這裡只記最後點的位置，出發時的圓形展開從那裡開始
   let lastTap = { x: 0, y: 0 };
@@ -545,10 +560,14 @@
     const tr = onTrail(); if (!force && tr && tr !== id) { toast(`你還在${SX.M[tr].name}上，先登頂或下山`); return; }
     const tb = !force && tr !== id && SX.social && SX.social.teamBlock && SX.social.teamBlock(); if (tb) { toast(tb, 3600); return; }   // 好友跟隨：在隊伍裡就跟著隊長選的山走
     const pb = !force && permitBlock(id); if (pb) { toast(`${pb.reason}（目前 ${pb.have} 人）`, 3200); return; }
+    if (SX.gearOn && !force && tr !== id) {   // 裝備系統：雪季管制的山要帶冰爪；出發前先看一眼「出發前檢查」
+      const gb = SX.gearNeed(id, testDate || new Date(), SX.gearSave()); if (gb) { toast(`${gb.reason}（背包裡的「裝備」可以買）`, 3600); return; }
+      if (gearChecked !== id) { gearCheck(id); return; }
+    }
     if (!force && !quotaOk && tr !== id) { quotaGate(id, () => startClimb(id, false, true)); return; }   // 熱門山：先登記今天的入園名額
     if (!artOk) { artWait('climb', m, () => startClimb(id, force, quotaOk, true)); return; }   // 登山畫面的圖先解開好（要等的話蓋上這座山的小山讀取畫面）
     const cont = onTrail() === id;   // 只有「正在爬的那座」接著走、補算離開的時間；其他一律從登山口重新出發（不會帶到舊進度、舊日記）
-    M = m; SV.cur = id; st = P(id); etaV = 0; etaT = 0;   // 換山：預計時間的平均速度重算
+    M = m; SV.cur = id; st = P(id); etaV = 0; etaT = 0; gearChecked = null;   // 換山：預計時間的平均速度重算
     if (!cont) Object.assign(st, newProg());
     arrived = false; paused = false; ptrHold = false; keyHold = false; t = 0;
     segDoneT = 0; segEl.classList.remove('done');   // 小目標：新的一趟沒有；離開一分鐘以上回來，catchUp 會清掉重新定
@@ -614,27 +633,47 @@
     if (w.m >= SX.FIT.RECOVER_M && w.rec !== t) { w.rec = t; SV.cond = SX.fitRecover(SX.fitCond(SV)); }
   }
   // 往前模擬 dt 秒，回傳走了幾公尺。offline：離線補走（不會自己登頂，留最後 2 公尺給玩家看）；dry：只是試算（不記里程、不算每日任務）
-  function simulate(p, m, dt, boost, offline, dry, pace){   // pace：登山畫面的步態給的速度倍率（累了慢走、停下來喝水時 0），離線補走不用
+  function simulate(p, m, dt, boost, offline, dry, pace, ts){   // pace：登山畫面的步態給的速度倍率（累了慢走、停下來喝水時 0），離線補走不用；ts：這一步是什麼時候（離線補走、試算用，裝備系統照「當時」的天氣和日夜算）
+    const gw = SX.gearOn ? (ts ? calcWx(m.id, ts, p.dist / m.dist) : wx) : null, gfx = gw && SX.gearFx(SX.gearSave());   // 裝備系統沒開：gw 是 null，下面每一處都照舊
+    if (gw && gearCamp(p, m, dt, gw, gfx, offline, dry)) return 0;
     if (p.sleep) { p.stam = Math.min(100, p.stam + NAP * dt); p.temp = Math.min(100, p.temp + 2 * dt); if (p.stam >= 60 && p.temp >= 50) p.sleep = false; return 0; }
     if (p.rest) { p.stam = Math.min(100, p.stam + REST * dt); p.temp = Math.min(100, p.temp + 4 * dt); if (offline && p.stam >= 100 && p.temp >= 95) p.rest = false; return 0; }
     const dev = devX();
-    let v = baseSpeed(m) * dev; if (p.temp < 25) v *= 0.7; if (boost) v *= BOOST; if (pace != null) v *= pace;
+    if (gw) SX.gearWx = gw; let v = baseSpeed(m) * dev; if (gw) SX.gearWx = wx; if (p.temp < 25) v *= 0.7; if (boost) v *= BOOST; if (pace != null) v *= pace;
     const lim = offline ? Math.max(p.dist, m.dist - 2) : m.dist;
     let d = Math.max(0, Math.min(lim - p.dist, v * dt)), stop = false;
+    if (gw && p.campAt != null) d = Math.min(d, Math.max(0, p.campAt - p.dist));   // 頭燈沒電：只走到紮營的地方
     if (p.stopAt != null && p.stopAt - 1 - p.dist <= d) { d = Math.max(0, p.stopAt - 1 - p.dist); stop = true; }
     p.dist += d; if (!dry && !offline) fitWalk(d);
-    if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) { daily('walk', d); SV.stats.walkSec = (SV.stats.walkSec || 0) + dt; } } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1);
-    p.temp = clamp(p.temp + ((boost ? 0.15 : 0) - chill(m, p.dist / m.dist, wx) * 0.08) * dt, 0, 100);
+    if (!dry) { SV.stats.walked = (SV.stats.walked || 0) + d; if (d > 0) { daily('walk', d); SV.stats.walkSec = (SV.stats.walkSec || 0) + dt; } } p.stam -= d / DRAIN * 100 / dev * (boost ? 1.8 : 1) * (gw ? 1 - gfx.stam : 1);
+    p.temp = clamp(p.temp + ((boost ? 0.15 : 0) - chill(m, p.dist / m.dist, wx) * 0.08 * (gw ? Math.max(0, 1 - gfx.temp - (gw.kind === 'rain' ? gfx.rainTemp : 0)) : 1)) * dt, 0, 100);
+    if (gw && d > 0) {
+      const ns = gw.time === 'night' ? dt : 0; p.nightSec = (p.nightSec || 0) + ns;
+      if (!dry) { SV.coin = (SV.coin || 0) + d / 1000 * SX.COIN.PER_KM; SX.gearUse(SX.gearSave(), d, gw, ns); if (offline && gw.kind === 'rain' && !gfx.rainOk) { const L = p.glog || (p.glog = {}); L.rainM = (L.rainM || 0) + d; } }
+    }
     if (stop) { p.rest = true; p.stopAt = null; p.stam = Math.max(0, p.stam); return d; }
     if (p.stam <= 0 || p.temp <= 0) { p.stam = Math.max(0, p.stam); p.sleep = true; }
     return d;
+  }
+  // 裝備系統：晚上頭燈的時數用完 → 走到前面最近的路標紮營，回體力體溫，天亮自動繼續。回 true＝這一步在紮營、不走
+  function gearCamp(p, m, dt, w, fx, offline, dry){
+    if (w.time !== 'night' || (p.nightSec || 0) < fx.nightH * 3600) { if (p.camp) { p.camp = false; p.sleep = false; } p.campAt = null; return false; }
+    if (!p.camp) {
+      if (p.rest) return false;
+      if (p.campAt == null) { const c = SX.campSpot(m, p.dist); p.campAt = c.m; p.campName = c.name; }
+      if (p.dist < p.campAt - 0.5) return false;
+      p.camp = true; p.stopAt = null;
+      if (!dry) { if (offline) (p.glog || (p.glog = {})).camp = p.campName || ''; else toast(`頭燈沒電了，${p.campName ? `在「${p.campName}」` : '在路邊'}紮營等天亮`, 3600); }
+    }
+    p.sleep = true; p.stam = Math.min(100, p.stam + REST * dt); p.temp = Math.min(100, p.temp + 4 * dt);
+    return true;
   }
   // 關掉遊戲後，登山客大概什麼時候走到山頂前（給推播「快到山頂了」用）；48 小時內走不到就回 null
   function summitEta(){
     if (!SV.cur || !SX.M[SV.cur]) return null;
     const m = SX.M[SV.cur], p = JSON.parse(JSON.stringify(P(SV.cur)));
     if (p.fin || p.dist >= m.dist - 2.5) return null;
-    for (let t = 0; t < OFFLINE_CAP; t += 30) { simulate(p, m, 30, false, true, true); if (p.dist >= m.dist - 2.5) return { mountain:m.id, name:m.name, at:Date.now() + (t + 30) * 1000 }; }
+    for (let t = 0; t < OFFLINE_CAP; t += 30) { simulate(p, m, 30, false, true, true, null, Date.now() + t * 1000); if (p.dist >= m.dist - 2.5) return { mountain:m.id, name:m.name, at:Date.now() + (t + 30) * 1000 }; }
     return null;
   }
   // 離線／離開畫面的時間補走（最多 48 小時，兩天一夜的大山也走得完）
@@ -646,8 +685,8 @@
     p.last = now;
     if (sec < 3 || p.dist >= m.dist - 2) return;
     const before = p.dist, total = sec;
-    let naps = 0, rests = 0;
-    while (sec > 0 && p.dist < m.dist - 2) { const dt = Math.min(5, sec), z = p.sleep, r = p.rest; sec -= dt; simulate(p, m, dt, false, true); if (!z && p.sleep) naps++; if (!r && p.rest) rests++; }
+    let naps = 0, rests = 0; p.glog = null;
+    while (sec > 0 && p.dist < m.dist - 2) { const dt = Math.min(5, sec), z = p.sleep, r = p.rest; sec -= dt; simulate(p, m, dt, false, true, false, null, now - sec * 1000); if (!z && p.sleep) naps++; if (!r && p.rest) rests++; }
     if (total >= 60) {
       SV.stats.away = Math.max(SV.stats.away || 0, total / 60);
       const gained = p.dist - before, sg = segsAway(p, m, before);   // 離開時自己走到的小目標
@@ -672,6 +711,7 @@
     a.to = p.dist; a.sec += sec; a.t1 = now; a.naps += naps; a.rests += rests; a.v++;
     a.segs = (a.segs || []).concat(sg.names); a.segItems = (a.segItems || []).concat(sg.items);   // 小目標：走到哪幾個、撿到什麼
     for (let k = Math.floor(from / 500) * 500 + 500; k <= p.dist && k < m.dist; k += 500) if (!a.marks.includes(k)) a.marks.push(k);
+    if (p.glog) { a.rainM = (a.rainM || 0) + (p.glog.rainM || 0); if (p.glog.camp != null) a.camp = p.glog.camp; p.glog = null; }   // 裝備系統：這段路雨中走慢了多少、在哪紮營
     if (a.marks.length) p.ms = Math.max(p.ms || 0, a.marks[a.marks.length - 1]);   // 回來時不要再跳一次「走了 X 公里，拍一張」
   }
   // 登山畫面畫好之後才整理日記（要用到這座山的路旁道具和拍照）；每次打開日記都跑一次：
@@ -708,6 +748,8 @@
     for (let ts = a.t0; ts <= a.t1; ts += 1200000) { const f = (a.from + (a.to - a.from) * (ts - a.t0) / Math.max(1, a.t1 - a.t0)) / m.dist, w = calcWx(m.id, ts, f), s = wxText(w) || '晴'; if (!seq.length || seq[seq.length - 1].s !== s) seq.push({ s, w }); }   // f：那時大概走到哪（照時間平均推算）
     const sh = (seq.length > 3 ? [seq[0], seq[seq.length >> 1], seq[seq.length - 1]] : seq).filter((x, i, l) => !i || l[i - 1].s !== x.s);   // 變很多次：只寫開頭、中間、現在
     if (sh.length > 1) { const w = sh[sh.length - 1].w; L.push([ HUD.wxArt(w.kind, w.time), `山上的天氣：${sh.map(x => x.s).join(' → ')}。` ]); }
+    if (a.camp != null) L.push([ 'icon_rest', `頭燈沒電了，${a.camp ? `在「${a.camp}」` : '在路邊找了塊平地'}紮營，等天亮再走。` ]);
+    if (a.rainM > 50) L.push([ HUD.wxArt('rain', 'day'), '雨有點大，沒帶雨衣，走得慢了些。' ]);
     (a.enc || []).forEach(id => { const e = SX.ENCOUNTERS.find(x => x.id === id); if (e) L.push([ 'face_happy', `路上的小插曲：${firstSentence(e.text)}。` ]); });
     const sn = (a.segs || []).length, si = a.segItems || [];
     if (sn) L.push([ 'summit_marker', `完成 ${sn} 個小目標：${a.segs.slice(-3).join('、')}${sn > 3 ? ' 等' : ''}${si.length ? `，順手撿到「${si.join('」「')}」` : ''}。` ]);
@@ -1299,7 +1341,7 @@
   }
   function openBag(back, from){   // back：從寶物放大卡回來時，捲回原本的位置；from：{ id, rect } 大卡片的位置，圖飛回格子
     const have = SX.TREASURES.filter(x => SV.bag[x.id] > 0).length;
-    modal(`<button class="cbtn sm mBack" id="bagOk">← 返回</button><h3>背包</h3>
+    modal(`<button class="cbtn sm mBack" id="bagOk">← 返回</button><h3>背包</h3>${SX.gearOn ? `<div class="mBtns" style="margin:0 0 10px"><button class="cbtn sm" id="bagGear">裝備・${SX.COIN.NAME} ${Math.floor(SV.coin || 0).toLocaleString('en-US')}</button></div>` : ''}
       ${SV.titles.length ? `<div class="grp" style="margin-top:0">稱號（點一個掛在身上）</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${SV.titles.map(x => `<button class="chip" data-title="${x}"${SV.title === x ? ' style="background:#ffe08a"' : ''}>${x}</button>`).join('')}</div>` : ''}
       <div class="grp" style="margin-top:0">寶物 ${have} / ${SX.TREASURES.length}</div>
       <div class="bag">${SX.TREASURES.map(x => SV.bag[x.id] > 0 ? `<button class="slot${x.rarity !== '普通' ? ' rare' : ''} ${RAR_CLS[x.rarity] || ''}" data-tr="${x.id}" style="${RAR_BG[x.rarity] || ''}">${trSvg(x)}${SV.bag[x.id] > 1 ? `<b>×${SV.bag[x.id]}</b>` : ''}</button>`
@@ -1314,9 +1356,58 @@
     });
     $$('#mCard [data-title]').forEach(b => b.onclick = () => { A.pop(); SV.title = b.dataset.title; save(); $$('#mCard [data-title]').forEach(k => { k.style.background = k === b ? '#ffe08a' : ''; }); });
     $('#bagOk').onclick = () => { A.pop(); closeModal(); };
+    if ($('#bagGear')) $('#bagGear').onclick = () => { A.pop(); openGear(); };
     if (typeof back === 'number') $('#mCard').scrollTop = back;
     else MO.stagger($('#mCard'), '.bag .slot');
     if (from) MO.flip($(`#mCard [data-tr="${from.id}"]`), from.rect, { lift:true });
+  }
+
+  // ───────── 裝備（試作：背包裡的「裝備」）─────────
+  // 買、換上、修理、賣回。正在山上時只有走到山屋才能換裝和修理（山屋修理比較貴）；價錢都問 data.js
+  function openGear(keep){
+    const g = SX.gearSave(), day = SX.twDay(), tr = onTrail(), hut = tr ? SX.hutAt(SX.M[tr], P(tr).dist) : null, lock = !!tr && !hut, N = SX.COIN.NAME;
+    const dis = x => x ? ' disabled style="opacity:.45"' : '';
+    const row = it => {
+      const own = g.own[it.id], has = it.base || own != null, worn = SX.gearWorn(g, it.slot) === it, rc = SX.gearRepairCost(g, it.id, !!hut, day);
+      const state = worn ? '使用中' : it.base ? '' : own == null ? '' : own <= 0 ? '待修理' : '', dur = !it.base && own != null ? `・耐久 ${Math.ceil(own)}%` : '';
+      const btn = [ !has ? `<button class="chip" data-buy="${it.id}">買 ${it.price}</button>` : '',
+        has && !worn && (it.base || own > 0) ? `<button class="chip" data-on="${it.id}"${dis(lock)}>換上</button>` : '',
+        rc > 0 ? `<button class="chip" data-fix="${it.id}"${dis(lock)}>修理 ${rc}</button>` : '',
+        !it.base && own != null ? `<button class="chip" data-sell="${it.id}"${dis(lock && worn)}>賣 ${SX.gearSellPrice(it.id)}</button>` : '' ].join('');
+      return `<div class="gearRow${worn ? ' on' : ''}"><span class="gearN"><b>${it.name}</b>${state ? `<i>${state}</i>` : ''}<small>${it.text}${dur}</small></span><span class="gearB">${btn}</span></div>`;
+    };
+    const tip = lock ? '正在山上：走到山屋才能換裝和修理。' : hut ? `在${hut.name}：可以換裝和修理，山屋修理貴一點。` : g.repDay !== day ? '今天第一次修理半價。' : '';
+    modal(`<button class="cbtn sm mBack" id="grX">← 返回</button><h3>裝備</h3>
+      <p class="summitBig" style="margin:0 0 6px">${N} <b>${Math.floor(SV.coin || 0).toLocaleString('en-US')}</b>${tip ? `<br><small>${tip}</small>` : ''}</p>
+      ${SX.GEAR_SLOTS.map(s => `<div class="grp">${s.name}</div>${SX.GEAR.filter(x => x.slot === s.id).map(row).join('')}`).join('')}`);
+    if (typeof keep === 'number') $('#mCard').scrollTop = keep;
+    const again = () => { save(); gearBadge(); openGear($('#mCard').scrollTop); }, pay = n => { if ((SV.coin || 0) < n) { toast(`${N}不夠，再多走一點路吧`); return false; } SV.coin -= n; return true; };
+    $('#grX').onclick = () => { A.pop(); openBag(); };
+    $$('#mCard [data-buy]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.buy]; if (!pay(it.price)) return; A.sparkle(); g.own[it.id] = SX.GEAR_RULE.FULL; if (!lock) g.on[it.slot] = it.id; again(); });
+    $$('#mCard [data-on]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.on]; A.pop(); g.on[it.slot] = it.id; again(); });
+    $$('#mCard [data-fix]').forEach(b => b.onclick = () => { const id = b.dataset.fix; if (!pay(SX.gearRepairCost(g, id, !!hut, day))) return; A.sparkle(); g.own[id] = SX.GEAR_RULE.FULL; g.repDay = day; again(); });
+    $$('#mCard [data-sell]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.sell]; A.pop(); if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = '確定賣？'; return; } SV.coin = (SV.coin || 0) + SX.gearSellPrice(it.id); delete g.own[it.id]; if (g.on[it.slot] === it.id) delete g.on[it.slot]; again(); });
+  }
+  // 出發前檢查：照現在的裝備試走一遍（跟離線補走同一套 simulate），看天氣、會不會走到晚上、哪件裝備快壞了
+  function gearCheck(id){
+    const m = SX.M[id], g = SX.gearSave(), fx = SX.gearFx(g), now = Date.now(), p = newProg(), kinds = [];
+    let t = 0, rain = false, night = 0, camp = false;
+    for (; t < OFFLINE_CAP && p.dist < m.dist - 2.5; t += 60) {
+      const w = calcWx(id, now + t * 1000, p.dist / m.dist), n = WX_NAMES[w.kind];
+      if (kinds[kinds.length - 1] !== n) kinds.push(n); if (w.kind === 'rain') rain = true; if (w.time === 'night') night += 60;
+      simulate(p, m, 60, false, true, true, null, now + t * 1000); if (p.camp) camp = true;
+    }
+    const worn = SX.GEAR_SLOTS.map(s => SX.gearWorn(g, s.id)).filter(it => it && !it.base), low = worn.filter(it => g.own[it.id] <= SX.GEAR_RULE.LOW), broken = Object.keys(g.own).filter(k => SX.gearBroken(g, k)).map(k => SX.GEAR_BY[k].name);
+    const li = (ok, a, b) => `<div class="gearRow${ok ? '' : ' warn'}"><span class="gearN"><b>${a}</b><small>${b}</small></span></div>`;
+    modal(`<button class="cbtn sm mBack" id="gcX">← 返回</button><h3>出發前檢查</h3>
+      <p class="summitBig" style="margin:0 0 6px">${m.name}・大約 ${fmtMin(Math.round(t / 60))}到山頂</p>
+      ${li(!rain || fx.rainOk, `天氣：${kinds.slice(0, 4).join(' → ')}`, !rain ? '路上應該不會下雨' : fx.rainOk ? '可能下雨，有帶雨衣' : '可能下雨，沒有雨衣會走慢一點')}
+      ${li(!camp, night ? `會走到晚上（大約 ${fmtMin(Math.round(night / 60))}）` : '天黑前走得完', !night ? '用不到頭燈' : camp ? `頭燈只夠 ${fx.nightH} 小時，沒電後會紮營等天亮` : '頭燈夠用')}
+      ${li(!low.length && !broken.length, '裝備', low.length ? `${low.map(it => it.name).join('、')}快要修理了，這趟還撐得住` : broken.length ? `${broken.join('、')}待修理，這趟先用舊的` : '都沒問題')}
+      <div class="mBtns" style="margin-top:12px"><button class="cbtn" id="gcGear">看裝備</button><button class="cbtn go" id="gcGo">出發</button></div>`);
+    $('#gcX').onclick = () => { A.pop(); closeModal(); };
+    $('#gcGear').onclick = () => { A.pop(); openGear(); };
+    $('#gcGo').onclick = () => { A.pop(); gearChecked = id; closeModal(); startClimb(id); };
   }
 
   // ───────── 寶物放大卡（背包裡點寶物）─────────
@@ -1478,14 +1569,14 @@
       <div class="mBtns">${nClaim ? `<button class="cbtn go" id="dyAll">一鍵領取 ${nClaim}</button>` : ''}<button class="cbtn" id="dyX">← 返回</button></div>`);
     MO.progress($('#mCard')); MO.stagger($('#mCard'), '.dyTask');
     // 領完都回到每日畫面
-    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; claimRewards([signKind]); };
-    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; claimRewards(['common']); });
+    $('#dyIn').onclick = () => { if (D.streakGot) return; D.streakGot = true; gearCoin(SX.COIN.SIGNIN, signKind); claimRewards([signKind]); };
+    $$('[data-dy]').forEach(b => b.onclick = () => { const tk = D.tasks[+b.dataset.dy]; if (!tk.done || tk.got) return; tk.got = true; gearCoin(SX.COIN.DAILY); claimRewards(['common']); });
     // 一鍵領取：簽到＋所有完成的任務，一次收進背包，卡片一張一張看
     if (nClaim) $('#dyAll').onclick = e => MO.beat(e.currentTarget).then(on => {   // 轉圈、打勾（不到 0.4 秒）；視窗已經關掉就不領
       if (!on) return;
       const list = [];
-      if (!D.streakGot) { D.streakGot = true; list.push(signKind); }
-      D.tasks.forEach(tk => { if (tk.done && !tk.got) { tk.got = true; list.push('common'); } });
+      if (!D.streakGot) { D.streakGot = true; gearCoin(SX.COIN.SIGNIN, signKind); list.push(signKind); }
+      D.tasks.forEach(tk => { if (tk.done && !tk.got) { tk.got = true; gearCoin(SX.COIN.DAILY); list.push('common'); } });
       claimRewards(list);
     });
     $('#dyX').onclick = () => { A.pop(); closeModal(); };
@@ -1541,6 +1632,7 @@
     if (wx.kind === 'fog') S.fogTop = (S.fogTop || 0) + 1;   // 霧中登頂（徽章用）
     if (wx.kind === 'snow') S.snowTop = (S.snowTop || 0) + 1;   // 雪中登頂（徽章用）
     daily('summit');
+    if (SX.gearOn) { const c = SX.COIN.SUMMIT_PER_DIFF * M.diff; gearCoin(c); notice(`登頂拿到 ${c} ${SX.COIN.NAME}`); gearEnd(); }
     const stamp = SX.TREASURES.find(x => x.id === SUMMIT_STAMP); if (stamp) gainTreasure(stamp, 'quiet');
     const gift = giftTreasure('summit', M.id); if (gift) gainTreasure(gift, 'quiet');   // 第一次登頂：保證一件還沒有的稀有寶物
     const tq = st.team ? followDone(st.team) : null;   // 好友跟隨：這一趟登頂了，分到全隊寶物裡我的那幾件、告訴伺服器

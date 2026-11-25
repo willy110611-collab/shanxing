@@ -898,3 +898,12 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .mlCv{display:block}
 .mlPct{font-family:var(--fontB);font-size:26px;color:#5a3a22;letter-spacing:1px}
 .mlTo{font-family:var(--fontB);font-size:17px;color:#6a4e3a;white-space:nowrap}
+
+/* 裝備（試作，?gear=1）：裝備店每一件一列、出發前檢查每一項一列 */
+.gearRow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:6px 0;padding:8px 10px;border:1.5px solid rgba(58,42,32,.25);border-radius:10px;background:rgba(255,250,240,.7);text-align:left}
+.gearRow.on{background:#fff0bd;border-color:rgba(58,42,32,.5)}
+.gearRow.warn{background:#ffe3c2;border-color:#c9772b}
+.gearN{flex:1 1 130px;min-width:0}
+.gearN i{font-style:normal;font-size:12px;margin-left:6px;padding:1px 6px;border-radius:8px;background:rgba(58,42,32,.12)}
+.gearN small{display:block;font-size:12px;opacity:.75;margin-top:2px}
+.gearB{display:flex;gap:4px;white-space:nowrap}
