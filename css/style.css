@@ -544,8 +544,11 @@ input[type=range]{width:100%;accent-color:#6fb257}
 .carved{font-family:var(--fontT);letter-spacing:1px}
 .partyBox{position:absolute;left:10px;max-width:calc(100% - 20px);top:calc(var(--hudB) + 6px);display:none;transition:opacity .3s;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:rgba(255,248,230,.94);border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(58,42,32,.4);font-size:13px;color:var(--ink);z-index:6}
 .partyBox.on{display:flex}
-.partyBox b{flex:none}
-.partyBox span{flex:1;min-width:0;color:var(--ink2)}
+/* 左邊：第一行「和誰一起爬」（名字多了自己換行）、第二行隊友狀態；右邊加油鈕不被擠、不換行（以前三樣排成一橫排，三位隊友時狀態被擠成一個字一行） */
+.partyBox .pbTxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.partyBox b{line-height:1.35}
+.partyBox span{color:var(--ink2);line-height:1.35}
+.partyBox .cbtn{flex:none;white-space:nowrap}
 /* 爬山聊天泡泡：右下「收起畫面資訊」鈕上面一顆小聊天鈕，點開才是輸入框（紀錄、輸入框跟廣場同一套 .plzLog／.chatIn） */
 .tcBtn{position:absolute;right:12px;bottom:calc(132px + env(safe-area-inset-bottom));z-index:5;width:38px;height:38px;padding:0;border-radius:50%;background:rgba(255,247,228,.92);border:2px solid var(--ink);font-size:18px;line-height:1;box-shadow:0 2px 4px rgba(40,25,10,.3);display:none}
 .tcBtn.on{display:block}

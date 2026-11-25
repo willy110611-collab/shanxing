@@ -634,7 +634,7 @@
     if (!on) { if (el) el.classList.remove('on'); teamDraw = []; drawMates(); chatUi(false); return; }
     if (!el) {
       el = document.createElement('div'); el.id = 'partyBox'; el.className = 'partyBox'; $('#scrClimb').appendChild(el);
-      el.innerHTML = '<b id="pbName"></b><span id="pbInfo"></span><button class="cbtn sm" id="cheerBtn">幫他加油</button>';
+      el.innerHTML = '<div class="pbTxt"><b id="pbName"></b><span id="pbInfo"></span></div><button class="cbtn sm" id="cheerBtn">幫他加油</button>';   // 左邊兩行字（和誰一起爬／隊友狀態）、右邊加油鈕
       $('#cheerBtn').onclick = () => {
         if (!party) return; const t = Date.now(); if (t - (partyBox._c || 0) < 3000) { toast('剛剛才加油過，等一下下'); return; } partyBox._c = t;
         if (pRoom) pRoom.send({ type: 'cheer' }); if (A().sparkle) A().sparkle(); toast('加油送出了！'); if (SX.game) SX.game.daily('cheer');
