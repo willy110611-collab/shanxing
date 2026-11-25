@@ -3112,13 +3112,13 @@ function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX)
 const G3M = { v:new Float32Array(8 * 60000), idx:new Uint32Array(360000) };
 const G3_RISER = 0.5;   // 階梯立面的明暗
 const G3_ROAD = [0.45, 0.85, 1], G3_SIDE = [0.2, 0.5, 0.9, 1.4, 2.1, 3, 4.2, 5.6, 7.4, 9.6, 12.2, 15.2, 18.6, 22.4, 26.6, 31];
-// 地面最外緣再往外延伸兩圈（gwAt 的幾倍），照最外那段的坡度繼續升或降；gl2d 著色器從 gwAt 淡到 G3_EXT 最後一圈（舊畫法用 skirtEdge 霧帶做同一件事）：
-// 地面不會在天空、雲海前面突然切成一條直的邊
-const G3_EXT = [1.6, 2.5];
+// 地面最外緣再往外延伸幾圈（GW 的幾倍，最外約 300 公尺，多半已在畫面外），照最外那段的坡度繼續升或降、坡度慢慢變緩，再加上大片的起伏（遠處的小山頭）；
+// 不再變透明（2026-11-25 決定：照人眼看到的，地面一路連到遠處），遠的地方由 gl2d 著色器照真正的距離越來越霧（空氣透視：變淡、偏霧色、明暗差變小）
+const G3_EXT = [1.6, 2.5, 4, 6.5, 10];
 const G3_NS = G3_ROAD.length + 2 + G3_SIDE.length + G3_EXT.length, G3_NC = 1 + G3_NS * 2;   // 每一排幾個點
 // 每一段近端那一排：每個點離路中心多遠（d）、比路面高多少（地形 terrH，跟鏡頭無關）。只在第一次用到那一段時算一次存起來（換山清掉），
 // 每格只做位置換算：以前每格每個點都重算 terrH，整格一半以上的時間花在這裡
-const G3C = { id:null, m:new Map() };
+const G3C = { id:null, m:new Map() }, G3_EL = [8, 30];
 function g3Seg(i){
   let e = G3C.m.get(i); if (e) return e;
   e = new Float32Array(G3_NC * 3); const rw = rwAt(i);
@@ -3130,7 +3130,7 @@ function g3Seg(i){
     else {
       const bw = bankWd(i, side), r = q - G3_ROAD.length, ext = r - 2 - G3_SIDE.length;
       if (ext < 0) { d = r === 0 ? rw + bw * 0.5 : r === 1 ? rw + bw : rw + bw + G3_SIDE[r - 2]; h = terrH(i, side, d); }
-      else { const ge = rw + bw + G3_SIDE[G3_SIDE.length - 1], h1 = terrH(i, side, ge), h0 = terrH(i, side, ge * 0.85); d = GW * G3_EXT[ext]; h = h1 + (h1 - h0) / (ge * 0.15) * (d - ge); }   // 外緣延伸：照最外那段的坡度
+      else { const ge = rw + bw + G3_SIDE[G3_SIDE.length - 1], h1 = terrH(i, side, ge), h0 = terrH(i, side, ge * 0.85); d = GW * G3_EXT[ext]; const x = d - ge, sl = clamp((h1 - h0) / (ge * 0.15), -1.2, 1.2); let L; L = sl > 0 ? G3_EL[0] : G3_EL[1]; h = h1 + sl * L * (1 - Math.exp(-x / L)) + (vn2(i * 0.03, d * 0.015, side > 0 ? 83 : 89) - 0.65) * 0.2 * x; }   // 外緣延伸：照最外那段的坡度、越外越緩（往上的很快變平，不會在旁邊立起一大片草牆擋住遠山），加上遠處低一點的小山頭
     }
     e[c * 2] = d; e[c * 2 + 1] = h; e[G3_NC * 2 + c] = G3B && k !== 0 && q >= G3_ROAD.length ? g3b(i, side, d) : 0;   // 草地小起伏多高（低窪處壓暗用）
   }
@@ -3183,8 +3183,8 @@ function meshGround(b){
   const far = DRAW * SEG, PX = G3PX, PY = G3PY;
   for (let r = 0; r < rows; r++) {
     const o0 = r * nc * 8, Z = V[o0 + 2]; if (Z < HZB.z) continue;   // 跟舊畫法一樣：這麼近的地面不算進霧帶
-    const gwz = GW * (1 - 0.6 * clamp((Z - 40) / 120, 0, 1)), fz = (1 - ease01((Z - 0.7 * far) / (0.3 * far))) * V[o0 + 7], k = F / Z;
-    for (let c = 0; c < nc; c++) { const o = o0 + c * 8; PX[c] = fz * (1 - ease01((Math.abs(V[o + 3]) - gwz) / (1.4 * gwz))) > 0.5 ? W / 2 + V[o] * k : NaN; PY[c] = HOR - V[o + 1] * k; }   // 跟著色器同一套淡出：看得到一半以上的點才算天際線
+    const fz = (1 - ease01((Z - 0.7 * far) / (0.3 * far))) * V[o0 + 7], k = F / Z;
+    for (let c = 0; c < nc; c++) { const o = o0 + c * 8; PX[c] = fz > 0.5 ? W / 2 + V[o] * k : NaN; PY[c] = HOR - V[o + 1] * k; }   // 跟著色器同一套淡出（只有最遠那段）：看得到一半以上的點才算天際線
     for (let c = 0; c < nc - 1; c++) { if (PX[c] !== PX[c] || PX[c + 1] !== PX[c + 1]) continue; edgeAt(SK, PX[c], PY[c], PX[c + 1], PY[c + 1], false); if (PY[c] < yT) { yT = PY[c]; zT = Z; } }
   }
   if (yT < H) horizonBand(yT, HZB.a, SK, zT);
