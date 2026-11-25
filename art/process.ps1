@@ -19,7 +19,7 @@ $opaque = '^(sky_|ground_|enc_|scene_|plaza_|load_|cover_|ui_page$|summit_(' + (
 # 透明邊在轉檔時就裁掉（art\trim.js），遊戲不再先解成畫布再裁。
 # 要畫在畫布上的圖不能放進來（tools/check.js 會擋）：face_ 狀態臉、wx_ 右上天氣、emo_ 廣場頭上的表情、map_ 地圖、icon_lock 地圖木牌上的鎖
 # icon_locate（地圖左下「我的位置」圓木牌，第 27 批）是網頁按鈕的背景圖：照 icon_ 這組走（只在網頁上、用到才下載、讀取畫面先下載），去洋紅底存透明 webp
-$htmlOnly = '^(t_|stamp_|ui_|icon_(?!lock$)|rarity_|badge_|title_logo$|encounter_frame$|cover_(portrait|key)$|mist_(left|right)$)'
+$htmlOnly = '^(t_|gear_|stamp_|ui_|icon_(?!lock$)|rarity_|badge_|title_logo$|encounter_frame$|cover_(portrait|key)$|mist_(left|right)$)'
 # 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖＋出發前的小山讀取圖（load_<山>，按下出發才下載那一座的，js/mtload.js）
 $lazy = '^(enc_|scene_|load_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
 # 介面的按鈕、木框、圖示每個畫面都看得到：讀取畫面時就先下載好（manifest 標 pre），只下載、不解開放記憶體
