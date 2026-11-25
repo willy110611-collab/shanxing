@@ -344,6 +344,24 @@
     const m = Math.floor(ms / 60e3), h = Math.floor(ms / 36e5), d = Math.floor(ms / 864e5);
     return ms < ONLINE_AGO ? '在線上' : m < 60 ? `${m} 分鐘前` : h < 24 ? `${h} 小時前` : d < 2 ? '昨天' : d <= 30 ? `${d} 天前` : '好久不見';
   }
+  // 好友資訊卡（點好友名單上的名字）：在不在線、正在爬哪座山、帶的夥伴、登山紀錄、跟我的好感。
+  // 資料都是好友清單已經拿回來的（伺服器 friendPub＋affPub），不另外問伺服器；刪除好友照舊放在名單上，不放進卡片
+  function friendCard(f){
+    const on = agoOf(f) < ONLINE_AGO, canInv = !team || team.leader === acct.id, mate = team && team.members.some(x => x.id === f.id);
+    const pet = f.pet && SX.PETS.find(p => p.id === f.pet), a = f.aff;
+    const now = on ? (f.mountain ? `正在爬<b>${esc(mName(f.mountain))}</b>・${km(f.dist)}` : '在線上') : (t => t === '好久不見' ? t : t + '在線')(agoText(agoOf(f)));
+    const mc = $('#mCard'); $('#modal').classList.add('on');
+    mc.innerHTML = `<button class="cbtn sm mBack" id="fcX">← 返回</button><h3>${esc(f.name)}</h3>
+      <p class="frNow"><i class="dot${on ? ' on' : ''}"></i>${now}</p>
+      ${pet ? `<div class="frPet">${SX.art.img('pet_' + pet.id + '_face', '', 'frPetImg')}<span>夥伴：<b>${esc(pet.name)}</b></span></div>` : ''}
+      <div class="affStats frStats"><span>總共走了<b>${km(f.walked)}</b></span><span>登頂<b>${f.summits || 0} 次</b></span><span>本週<b>${km(f.week)}</b></span></div>
+      ${a ? `<div class="frAff"><span class="affTag${SX.affHas(a.lv, 'heart') ? ' pink' : ''}">♥ Lv${a.lv}</span><span>一起走了 <b>${(a.km || 0).toFixed(1)} km</b>・一起登頂 <b>${a.tops || 0} 次</b></span><button class="cbtn sm" id="fcAff">好感詳情</button></div>` : ''}
+      <div class="mBtns">${mate ? '<span class="tmTag">隊友</span>' : canInv ? '<button class="cbtn go" id="fcInv">邀請跟隨</button>' : ''}<button class="cbtn" id="fcOk">關閉</button></div>`;
+    const close = () => $('#modal').classList.remove('on');
+    $('#fcX').onclick = close; $('#fcOk').onclick = close;
+    if ($('#fcAff')) $('#fcAff').onclick = () => affCard(f);
+    if ($('#fcInv')) $('#fcInv').onclick = () => { close(); teamInvite(f.id); };
+  }
   // 移除好友：先問一下；伺服器兩邊一起刪，兩人之間還沒回覆的邀請也取消，已經在一起爬的隊伍不受影響
   function removeCard(f){
     const mc = $('#mCard'); $('#modal').classList.add('on');
@@ -376,7 +394,7 @@
         .map((p, i) => `<div class="rankRow${p.id === acct.id ? ' me' : ''}"><i>${i + 1}</i><b>${esc(p.name)}</b><span>${((p.week || 0) / 1000).toFixed(1)} km</span></div>`).join('')}
         <p class="tiny">每週一凌晨重新計算。</p></div>` : ''}
       <div class="setRow"><h4>好友（${friends.length}${friendMax ? ` / ${friendMax}` : ''}）</h4>
-        ${friends.length ? [...friends].sort((a, b) => agoOf(a) - agoOf(b)).map(f => { const on = agoOf(f) < ONLINE_AGO; return `<div class="frRow"><span><i class="dot${on ? ' on' : ''}"></i><b>${esc(f.name)}</b>${affTag(f)}
+        ${friends.length ? [...friends].sort((a, b) => agoOf(a) - agoOf(b)).map(f => { const on = agoOf(f) < ONLINE_AGO; return `<div class="frRow"><span class="frWho" data-fr="${esc(f.id)}" role="button" tabindex="0" aria-label="看${esc(f.name)}的資訊"><i class="dot${on ? ' on' : ''}"></i><b>${esc(f.name)}</b>${affTag(f)}
           <small>${on && f.mountain ? `在${esc(mName(f.mountain))}・${km(f.dist)}` : agoText(agoOf(f))}${full ? `<button class="frDel" data-del="${f.id}">刪除</button>` : ''}</small></span>
           <span>${mateOf(f.id) ? '<i class="tmTag">隊友</i>' : canInv ? `<button class="cbtn sm" data-inv="${f.id}">邀請跟隨</button>` : ''}</span></div>`; }).join('')
         : `<p>${full ? '還沒有好友，先把好友碼傳給朋友吧。' : '還沒有好友。到山友大廳的「好友」，把好友碼傳給朋友吧。'}</p>`}</div>`;
@@ -389,6 +407,7 @@
     q('[data-inv]').forEach(b => b.onclick = () => teamInvite(b.dataset.inv));
     q('[data-del]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.del); if (f) removeCard(f); });
     q('[data-aff]').forEach(b => b.onclick = () => { const f = friends.find(x => x.id === b.dataset.aff); if (f) affCard(f); });
+    q('[data-fr]').forEach(el => el.onclick = e => { if (e.target.closest('button')) return; const f = friends.find(x => x.id === el.dataset.fr); if (f) { if (A().pop) A().pop(); friendCard(f); } });   // 點好友名字：好友資訊卡（按到好感、刪除按鈕照原本的）
     q('[data-acc]').forEach(b => b.onclick = () => answer(b.dataset.acc, true));
     q('[data-dec]').forEach(b => b.onclick = () => answer(b.dataset.dec, false));
     q('[data-tm="pick"]').forEach(b => b.onclick = () => { if (A().pop) A().pop(); teamPicker(); });
