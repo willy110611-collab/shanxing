@@ -3110,8 +3110,18 @@ function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX)
 // ───────── 立體地面試作（方案 B）─────────
 // 每一段的近端（階梯段再切成一階一階：踏面平的、立面直的）一排點，左右從路中間往外：路面幾個點、路緣、土坎、山坡越外面越疏，到 gwAt 為止
 // 高度：路面用路的高度（階梯是一階一階的），路外面用 terrH（跟路旁植物種的地面同一個）。貼圖座標用公尺（走路時貼圖跟著地面不會滑）
-const G3M = { v:new Float32Array(8 * 60000), idx:new Uint32Array(360000) };
-const G3_RISER = 0.5, G3_STEPW = 1.5;   // 階梯立面的明暗
+// 長段連續階梯（每階 4 排點）看得到很遠時一格要 6 萬個點以上：以前 6 萬個點就停，最遠的地面、立體欄杆畫不出來
+const G3M = { v:new Float32Array(9 * 120000), idx:new Uint32Array(720000) };
+const G3_RISER = 0.5, G3_STEPW = 1.5;   // 階梯立面的明暗（沒有立面圖時：積雪）
+// 立體階梯：每一階的立面貼橫木（土路）／石塊（石階、碎石路）立面圖，一階用圖上的一排（每階隨機挑一排，看不出重複）；立面上緣亮、下緣暗（踏面前緣受光、腳下陰影），看得出每一階的厚度
+const G3_RTOP = 0.95, G3_RBOT = 0.6;
+function g3Riser(){
+  if (snowAmt > 0.5) return null;
+  if (TEX.riser) return TEX.riser.c ? TEX.riser : null;
+  if (TH.trail !== 'scree') return null;
+  if (!TEX.riser3) { const R = RISER.stairs, t = mkTex(R.id, R.m); if (t) { t.rows = R.rows; t.hx = 1; } TEX.riser3 = t; }   // 碎石路舊畫法沒有立面圖：立體地面借石階的石塊立面
+  return TEX.riser3;
+}
 const G3_ROAD = [0.45, 0.85, 1], G3_SIDE = [0.2, 0.5, 0.9, 1.4, 2.1, 3, 4.2, 5.6, 7.4, 9.6, 12.2, 15.2, 18.6, 22.4, 26.6, 31];
 // 地面最外緣再往外延伸幾圈（GW 的幾倍，最外約 300 公尺，多半已在畫面外），照最外那段的坡度繼續升或降、坡度慢慢變緩，再加上大片的起伏（遠處的小山頭）；
 // 不再變透明（2026-11-25 決定：照人眼看到的，地面一路連到遠處），遠的地方由 gl2d 著色器照真正的距離越來越霧（空氣透視：變淡、偏霧色、明暗差變小）
@@ -3142,20 +3152,21 @@ function meshGround(b){
   const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road, GT = TEX.grass;
   if (!RT || !GT || !RT.c || !GT.c) return;
   if (G3C.id !== M.id) { G3C.id = M.id; G3C.m.clear(); }
-  const V = G3M.v, I = G3M.idx, nSide = G3_NS, nc = G3_NC, off = offG;
+  const V = G3M.v, I = G3M.idx, nSide = G3_NS, nc = G3_NC, off = offG, RZ = g3Riser();
   let nv = 0, ni = 0, prev = -1;
   // rs：階梯立面那兩排（同一個遠近、上下兩個高度）：路面那幾點標成立面（整面暗），不用猜
   // 兩側地面的點不再跟著遠近收窄（以前照 gwAt 切）：gwAt 以外由 gl2d 著色器慢慢淡掉
-  function row(j, f, hr, rs){
-    if ((nv + nc) * 8 > V.length) return;
+  // rv：立面那兩排在立面圖上的直向位置（上緣、下緣）
+  function row(j, f, hr, rs, rv){
+    if ((nv + nc) * 9 > V.length) return;
     const i = b + j, A = g3Seg(i), B = f > 0 ? g3Seg(i + 1) : A, rwr = lerp(rwAt(i), rwAt(i + 1), f), zr = (j + f - off) * SEG, xc = lerp(pC[j], pC[j + 1], f), ht = lerp(pW[j], pW[j + 1], f), za = (i + f) * SEG;
     const fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A), base = nv;
     for (let c = 0; c < nc; c++) {
-      const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1, road = q < G3_ROAD.length, o = nv * 8;
+      const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1, road = q < G3_ROAD.length, o = nv * 9;
       const d = lerp(A[c * 2], B[c * 2], f), sw = road ? 0 : ease01((d - rwr) / G3_STEPW), h = road ? hr : lerp(hr, ht, sw) + lerp(A[c * 2 + 1], B[c * 2 + 1], f);   // 階梯兩旁的土坡也跟著一階一階（離路緣 G3_STEPW 公尺內慢慢接回平順的坡）：石階像切進山坡裡
       const w = k === 0 ? 1 : road ? (q === G3_ROAD.length - 1 ? 0.5 : 1) : 0;
       V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && (road || sw < 0.5) ? 2 : 0); V[o + 6] = 1;
-      V[o + 7] = fade; G3BV[nv] = lerp(A[nc * 2 + c], B[nc * 2 + c], f);
+      V[o + 7] = fade; V[o + 8] = rv || 0; G3BV[nv] = lerp(A[nc * 2 + c], B[nc * 2 + c], f);
       nv++;
     }
     if (prev >= 0) for (let c = 0; c < nc - 1; c++) { const a = prev + c, a2 = a + 1, d0 = base + c, d1 = d0 + 1; I[ni++] = a; I[ni++] = a2; I[ni++] = d1; I[ni++] = a; I[ni++] = d1; I[ni++] = d0; }
@@ -3165,33 +3176,85 @@ function meshGround(b){
     const i = b + j;
     if (sAt(i) !== 1) { row(j, 0, pW[j]); continue; }
     const n = stairN(j), rise = pW[j + 1] - pW[j];
-    for (let q = 0; q < n; q++) { const h = pW[j] + rise * q / n, h2 = pW[j] + rise * (q + 1) / n, fb = (q + 1) / n; row(j, q / n, h); row(j, fb, h); row(j, fb, h, true); row(j, fb, h2, true); }   // 踏面兩排、立面兩排（同位置的兩排之間面積是 0，不會畫出東西）
+    for (let q = 0; q < n; q++) {
+      const h = pW[j] + rise * q / n, h2 = pW[j] + rise * (q + 1) / n, fb = (q + 1) / n, rh = RZ ? 1 / RZ.rows : 0, rk = RZ ? ((Hh(i * 5 + q, 917) * RZ.rows) | 0) * rh : 0;
+      row(j, q / n, h); row(j, fb, h); row(j, fb, h, true, rk + rh * 0.97); row(j, fb, h2, true, rk + rh * 0.03);
+    }   // 踏面兩排、立面兩排（同位置的兩排之間面積是 0，不會畫出東西）
   }
   row(DRAW, 0, pW[DRAW]);
   // 明暗：每個點的坡面朝向（左右、前後的高度差）對著右上來的光
   const rows = nv / nc, Lx = 0.6, Ly = 0.8;
   for (let r = 0; r < rows; r++) for (let c = 0; c < nc; c++) {
-    const o = (r * nc + c) * 8, oL = (r * nc + Math.max(0, c - 1)) * 8, oR = (r * nc + Math.min(nc - 1, c + 1)) * 8, oB = (Math.max(0, r - 1) * nc + c) * 8, oF = (Math.min(rows - 1, r + 1) * nc + c) * 8;
+    const o = (r * nc + c) * 9, oL = (r * nc + Math.max(0, c - 1)) * 9, oR = (r * nc + Math.min(nc - 1, c + 1)) * 9, oB = (Math.max(0, r - 1) * nc + c) * 9, oF = (Math.min(rows - 1, r + 1) * nc + c) * 9;
     const dx = V[oR] - V[oL], dy = V[oR + 1] - V[oL + 1], gx = Math.abs(dx) > 1e-4 ? dy / dx : 0, dz = V[oF + 2] - V[oB + 2], gz = dz > 0.02 ? (V[oF + 1] - V[oB + 1]) / dz : 0;   // 階梯立面那幾排（同一個遠近）：明暗交給著色器（立面整面暗）
     const nl = 1 / Math.sqrt(gx * gx + 1 + gz * gz), dt = (-gx * Lx + Ly) * nl;
-    V[o + 6] = V[o + 5] >= 1.5 ? G3_RISER : clamp((1 + 0.6 * (dt - Ly)) * (1 + G3_AO * G3BV[r * nc + c]), 0.42, 1.25);   // 草地小起伏：凹下去的地方暗一點、凸起來的亮一點
+    V[o + 6] = V[o + 5] >= 1.5 ? (RZ && V[o + 5] > 2.01 ? (V[o + 8] * RZ.rows % 1 < 0.5 ? G3_RTOP : G3_RBOT) : G3_RISER) : clamp((1 + 0.6 * (dt - Ly)) * (1 + G3_AO * G3BV[r * nc + c]), 0.42, 1.25);   // 草地小起伏：凹下去的地方暗一點、凸起來的亮一點
   }
-  const hz = hazeRgb;
-  ctx.mesh({ v:V, nv, idx:I, ni, road:RT.c, grass:GT.c, rs:[1 / RT.m, RT.c.width / (RT.m * RT.c.height), 1 / GT.m, GT.c.width / (GT.m * GT.c.height)],
+  if (g3RailOk()) { const r = g3Rails(b, V, I, nv, ni); nv = r[0]; ni = r[1]; }
+  const hz = hazeRgb, RP = g3RailOk();
+  ctx.mesh({ v:V, nv, idx:I, ni, road:RT.c, grass:GT.c, riser:RZ ? RZ.c : null, ss:RZ ? 1 / (RZ.m * RZ.hx) : 1, post:RP ? SPR.railPost[0].c : null, bar:RP ? SPR.railBar[0].c : null, rs:[1 / RT.m, RT.c.width / (RT.m * RT.c.height), 1 / GT.m, GT.c.width / (GT.m * GT.c.height)],
     k:[2 * F / W, 2 * F / H, 1 - 2 * HOR / H], gw:GW, far:DRAW * SEG, fog:[hz[0] / 255, hz[1] / 255, hz[2] / 255, 0.85], fd:[fogD0, fogD], soil:[0.46, 0.36, 0.26] });
   // 地平線霧帶：跟舊畫法同一條 horizonBand，天際線（每條格線上地面最上緣）改從網格量。坡頂、高原邊緣跟天空、雲海的交界蓋一段霧，不會切出一條直的硬邊
   const SK = G3SK; SK.fill(Infinity); let yT = Infinity, zT = Infinity;
   const far = DRAW * SEG, PX = G3PX, PY = G3PY;
   for (let r = 0; r < rows; r++) {
-    const o0 = r * nc * 8, Z = V[o0 + 2]; if (Z < HZB.z) continue;   // 跟舊畫法一樣：這麼近的地面不算進霧帶
+    const o0 = r * nc * 9, Z = V[o0 + 2]; if (Z < HZB.z) continue;   // 跟舊畫法一樣：這麼近的地面不算進霧帶
     const fz = (1 - ease01((Z - 0.7 * far) / (0.3 * far))) * V[o0 + 7], k = F / Z;
-    for (let c = 0; c < nc; c++) { const o = o0 + c * 8; PX[c] = fz > 0.5 ? W / 2 + V[o] * k : NaN; PY[c] = HOR - V[o + 1] * k; }   // 跟著色器同一套淡出（只有最遠那段）：看得到一半以上的點才算天際線
+    for (let c = 0; c < nc; c++) { const o = o0 + c * 9; PX[c] = fz > 0.5 ? W / 2 + V[o] * k : NaN; PY[c] = HOR - V[o + 1] * k; }   // 跟著色器同一套淡出（只有最遠那段）：看得到一半以上的點才算天際線
     for (let c = 0; c < nc - 1; c++) { if (PX[c] !== PX[c] || PX[c + 1] !== PX[c + 1]) continue; edgeAt(SK, PX[c], PY[c], PX[c + 1], PY[c + 1], false); if (PY[c] < yT) { yT = PY[c]; zT = Z; } }
   }
   if (yT < H) horizonBand(yT, HZB.a, SK, zT);
 }
-const G3BV = new Float32Array(60000), G3_AO = 1.5;
+const G3BV = new Float32Array(120000), G3_AO = 1.5;
 const G3SK = new Float32Array(HZK + 1), G3PX = new Float32Array(G3_NC), G3PY = new Float32Array(G3_NC);
+// 立體欄杆（立體地面的山）：柱子、扶手、中間橫木做成真的圓木（八角柱），貼 Gemini 畫的 rail_post／rail_bar（從正面看就是原圖），跟地面一起比遠近；
+// 柱子位置、間距照 railArt（每兩段一根、欄杆起點終點一定有），RAIL_ART_J 段以內（最後 10 段淡出）；明暗照圓柱每一面朝向右上的光
+const G3_RN = 8, G3_PR = 0.09, G3_BR = 0.045, G3_PU = [0.06, 0.94], G3_BU = [0.04, 0.96];
+const G3L = (function(){ const x = 0.6, y = 0.75, z = -0.28, l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; })();
+function g3RailOk(){ return !!(SPR.railPost && SPR.railBar && SPR.railPost[0].c && SPR.railBar[0].c); }
+function g3Rails(b, V, I, nv, ni){
+  const off = offG, PH = RAIL_H + 0.06;
+  const at = (j, i, side, up) => { const d = railD(i); return [pC[j] + side * d - camX, pW[j] + terrH(i, side, d) + up - camY, (j - off) * SEG, side * d]; };
+  // 一根圓木：a、e 兩端中心（[x, y, z, 離路中心]），post：柱子（橫向繞一圈、直向沿著柱子）／橫木（橫向沿著木頭、直向繞一圈）
+  function cyl(a, e, r, post, al, cap){
+    if ((nv + (G3_RN + 1) * 2 + 1) * 9 > V.length || ni + G3_RN * 9 > I.length) return;
+    const ax = e[0] - a[0], ay = e[1] - a[1], az = e[2] - a[2], L = Math.hypot(ax, ay, az) || 1, tx = ax / L, ty = ay / L, tz = az / L;
+    let px = -ty * tx, py = 1 - ty * ty, pz = -ty * tz, l = Math.hypot(px, py, pz);
+    if (l < 1e-3) { px = 0; py = 0; pz = -1; l = 1; }   // 直立的柱子：第一個方向朝鏡頭
+    px /= l; py /= l; pz /= l;
+    const qx = ty * pz - tz * py, qy = tz * px - tx * pz, qz = tx * py - ty * px, base = nv;
+    for (let s = 0; s < 2; s++) {
+      const c = s ? e : a;
+      for (let k = 0; k <= G3_RN; k++) {
+        const an = k / G3_RN * TAU, cs = Math.cos(an), sn = Math.sin(an), nx = cs * px + sn * qx, ny = cs * py + sn * qy, nz = cs * pz + sn * qz, o = nv * 9;
+        V[o] = c[0] + nx * r; V[o + 1] = c[1] + ny * r; V[o + 2] = c[2] + nz * r; V[o + 3] = c[3];
+        if (post) { V[o + 4] = s ? 0.02 : 0.98; V[o + 8] = lerp(G3_PU[0], G3_PU[1], 0.5 - 0.5 * sn); }   // 從正面看：圖的左右＝柱子的左右（投影貼上去）
+        else { V[o + 4] = 0.5 - 0.45 * cs; V[o + 8] = lerp(G3_BU[0], G3_BU[1], s); }
+        V[o + 5] = post ? 4 : 5; V[o + 6] = clamp(0.8 + 0.35 * (nx * G3L[0] + ny * G3L[1] + nz * G3L[2]), 0.55, 1.12); V[o + 7] = al;
+        nv++;
+      }
+    }
+    for (let k = 0; k < G3_RN; k++) { const a0 = base + k, a1 = a0 + 1, b0 = a0 + G3_RN + 1, b1 = b0 + 1; I[ni++] = a0; I[ni++] = a1; I[ni++] = b1; I[ni++] = a0; I[ni++] = b1; I[ni++] = b0; }
+    if (cap) {   // 柱子頂：蓋起來（鏡頭比柱子高，看得到頂面），用柱子頂端那一圈的顏色
+      const o = nv * 9, t0 = (base + G3_RN + 1) * 9; V[o] = e[0]; V[o + 1] = e[1]; V[o + 2] = e[2]; V[o + 3] = e[3]; V[o + 4] = 0.03; V[o + 5] = 4; V[o + 6] = 1.05; V[o + 7] = al; V[o + 8] = 0.5; nv++;
+      for (let k = 0; k < G3_RN; k++) { I[ni++] = nv - 1; I[ni++] = t0 / 9 + k; I[ni++] = t0 / 9 + k + 1; }
+    }
+  }
+  const J = Math.min(DRAW - 2, RAIL_ART_J);
+  for (let j = 0; j < J; j++) {
+    const i = b + j; if (!railOn(i)) continue;
+    const A = farA(j, RAIL_ART_J, 10); if (A < 0.01) continue;
+    const half = i & 1, post = !railOn(i - 1) || !half, sp = !half && railOn(i + 1) ? 2 : 1;
+    for (let side = -1; side <= 1; side += 2) {
+      if (post) {
+        cyl(at(j, i, side, -0.05), at(j, i, side, PH), G3_PR, true, A, true);
+        for (let q = 0; q < 2; q++) { const hk = q ? RAIL_H * 0.5 : RAIL_H; cyl(at(j, i, side, hk), at(j + sp, i + sp, side, hk), G3_BR, false, q ? A * farA(j, 30, 6) : A, false); }
+      }
+      if (!railOn(i + 1)) cyl(at(j + 1, i + 1, side, -0.05), at(j + 1, i + 1, side, PH), G3_PR, true, A, true);   // 欄杆終點
+    }
+  }
+  return [nv, ni];
+}
 function farA(j, J, n){ return clamp((J * SEG - pZ[j]) / (n * SEG), 0, 1); }
 // 樹影與光斑：右上來的陽光被路邊的樹擋住，路上落下一片一片柔和的樹影（往左下斜）；森林段再有幾個慢慢飄動的光斑
 // 位置只跟這段路是第幾段有關（走近時不會重新洗牌）；遠處跟著霧淡掉、70 段外慢慢淡出
@@ -3783,8 +3846,9 @@ function root(i, j, fade){
 // 連續欄杆：木棧道整條都有、石階步道在階梯段才有，兩邊都架。每段一根柱子，柱頂之間連扶手＋中間一根橫木，跟著坡度往上斜
 function railD(i){ return rwAt(i) + RAIL_GAP; }
 function railOn(i){ return endK(i) <= 0 && ctAt(i) < 0.3 && (TH.trail === 'wood' || (TH.trail === 'stairs' && (sAt(i) === 1 || sAt(i + 1) === 1))); }
-function drawRail(i, j, fi, fade, fq){
-  if (SPR.railPost && SPR.railBar) { railArt(i, j, fade, fq); return; }
+// g3：立體地面的山，柱子和橫木已經在地面網格裡畫成立體圓木（g3Rails），這裡只畫柱腳的土、陰影和小草
+function drawRail(i, j, fi, fade, fq, g3){
+  if (SPR.railPost && SPR.railBar) { railArt(i, j, fade, fq, g3); return; }
   const lit = LUT[28 * FOGN + fi], dk = LUT[31 * FOGN + fi], ink = farA(j, 30, 6), A = fade * farA(j, RAIL_J, 10), AI = A * ink;   // 遠處整道欄杆慢慢淡入，近處才加的墨線也是淡入
   for (let side = -1; side <= 1; side += 2) {
     proj(j + 1, 0, false); const xb = gx + side * railD(i + 1) * gs, yb = gy - terrH(i + 1, side, railD(i + 1)) * gs, sb = gs;
@@ -3804,7 +3868,7 @@ function drawRail(i, j, fi, fade, fq){
 }
 // 美術圖欄杆：柱子（rail_post）照原本的間距，扶手和中間橫木（rail_bar）從這段起點拉到終點、跟著坡度斜
 // 一根橫木從一根柱子拉到下一根柱子（通常跨兩段），整根畫一次
-function railArt(i, j, fade, fq){
+function railArt(i, j, fade, fq, feet){
   const A = fade * farA(j, RAIL_ART_J, 10), P = SPR.railPost[0], B = SPR.railBar[0], half = i & 1;
   const post = !railOn(i - 1) || !half;   // 這段起點有沒有柱子：每兩段一根，欄杆起點一定有
   if (A < 0.01) return;
@@ -3813,7 +3877,7 @@ function railArt(i, j, fade, fq){
     proj(j, 0, false); const xa = gx + side * railD(i) * gs, ya = gy - terrH(i, side, railD(i)) * gs, sa = gs;
     const rm = cullPad(RAIL_H * Math.max(sa, s1), RAIL_H * Math.max(sa, s1));
     if (side < 0 ? Math.max(xa, x1) < -rm : Math.min(xa, x1) > W + rm) continue;
-    if (post) {   // 從這根柱子拉一整根橫木到下一根柱子（一根圖畫一次，柱子之間是直的）
+    if (post && !feet) {   // 從這根柱子拉一整根橫木到下一根柱子（一根圖畫一次，柱子之間是直的）
       const sp = !half && railOn(i + 1) ? 2 : 1;
       proj(j + sp, 0, false); const xb = gx + side * railD(i + sp) * gs, yb = gy - terrH(i + sp, side, railD(i + sp)) * gs, sb = gs;
       const th = SCALE.railBar * (sa + sb) * 0.5, len = Math.hypot(xb - xa, yb - ya);
@@ -3831,8 +3895,8 @@ function railArt(i, j, fade, fq){
       ctx.setTransform(DPR, 0, 0, DPR, OX, OY);
     }
     const ps = 0.5 * farA(j, 24, 6);   // 柱子的影子只畫近處（遠處柱子細到看不出影子）
-    if (!railOn(i + 1)) { proj(j + 1, 0, false); postFoot(x1, y1, s1, A, j); drawSpr(P, x1, y1, s1, fq, ps, A); postGrass(i + 1, side, x1, y1, s1, fq, A, j); }   // 欄杆終點
-    if (post) { proj(j, 0, false); postFoot(xa, ya, sa, A, j); drawSpr(P, xa, ya, sa, fq, ps, A); postGrass(i, side, xa, ya, sa, fq, A, j); }
+    if (!railOn(i + 1)) { proj(j + 1, 0, false); postFoot(x1, y1, s1, A, j); if (!feet) drawSpr(P, x1, y1, s1, fq, ps, A); postGrass(i + 1, side, x1, y1, s1, fq, A, j); }   // 欄杆終點
+    if (post) { proj(j, 0, false); postFoot(xa, ya, sa, A, j); if (!feet) drawSpr(P, xa, ya, sa, fq, ps, A); postGrass(i, side, xa, ya, sa, fq, A, j); }
   }
   ctx.globalAlpha = fade;
 }
@@ -4298,7 +4362,7 @@ function drawWorld(b, t, jHi, jLo, far){
       const m = 0.9 + 0.25 * Hh(i, 234), P = seatAt(i, side, xo, sp.w * m * 0.5), ta = clamp((sp.hm * m * gs - P.y) / (90 * U), 0, 1);
       if (ta > 0.01) drawSpr(sp, P.x, P.y, gs * m, fq, farA(j, 50, 8), hA * ta);
     }
-    if (farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq);   // 欄杆有一公尺多高：這段地面在畫面下面時欄杆可能還看得到，照畫（畫面外判斷在 drawRail 裡）
+    if (farA(j, RAIL_J, 10) > 0 && railOn(i)) drawRail(i, j, fi, fade, fq, G3 && g3RailOk());   // 欄杆有一公尺多高：這段地面在畫面下面時欄杆可能還看得到，照畫（畫面外判斷在 drawRail 裡）
     // 路緣的草叢／蕨類：故意往路面內側蓋過路緣 15～25% 的寬度，路邊才不會是一條筆直的線
     const eA = cleared(i, 0) && z0 > total ? 0 : fade * farA(j, EDGE_J, 8);   // 路緣草叢：最遠 8 段慢慢淡入；山頂再過去沒有
     if (eA > 0.005) for (let side = -1; side <= 1; side += 2) {
