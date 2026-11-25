@@ -38,7 +38,7 @@ in vec3 aP; in vec2 aU; in vec3 aA;
 uniform vec3 uK; uniform vec2 uZ;
 out vec2 vU; out vec3 vA; out float vD;
 void main(){ vU = aU; vA = aA; vD = aP.z; gl_Position = vec4(aP.x * uK.x, aP.y * uK.y + aP.z * uK.z, aP.z * uZ.x + uZ.y, aP.z); }`;
-// 著色器裡：近處（40 公尺內，110 公尺外完全不分）草地明暗分成四層色塊（相鄰兩層之間一小段柔邊，像插畫上色，不是電腦的平滑漸層）；路緣（路面跟土坡交界那一圈）描一條淡淡的深色線，跟人物、植物的描邊一致；
+// 著色器裡：近處（40 公尺內，110 公尺外完全不分）草地明暗分成四層色塊（相鄰兩層之間一小段柔邊，像插畫上色，不是電腦的平滑漸層）（路緣不描深色線：2026-11-25 試過，看起來不自然，維持原本柔和的路緣）；
 // 最遠那一段（uFar 的 55%～100%）先變霧色、70% 以後再變透明（地平線不會切出一條直的邊，跟 trail.js 舊畫法「最遠幾段先變霧色再淡掉」一樣）；rs＝階梯立面（trail.js 標的，整面暗）；霧照真正的距離（前方和側邊一起算）：兩側地面不變透明，越遠越霧（空氣透視）
 const MFS = `#version 300 es
 precision highp float;
@@ -53,7 +53,6 @@ void main(){
   c = mix(c, uSoil * (0.8 + 0.4 * r), e * 0.55);
   float sb = vA.y * 4.0, sq = (floor(sb) + smoothstep(0.75, 1.0, fract(sb))) / 4.0;
   c *= mix(vA.y, sq, (1.0 - w) * (1.0 - smoothstep(40.0, 110.0, vD)));
-  c *= 1.0 - 0.45 * smoothstep(0.7, 1.0, e) * (1.0 - rs);
   float dd = length(vec2(vD, vU.x)), f = clamp((dd - uFD.x) / (uFD.y - uFD.x), 0.0, 1.0); f = f * (2.0 - f);
   c = mix(c, uFog.rgb, f * uFog.a);
   float fe = smoothstep(0.55 * uFar, uFar, dd); c = mix(c, uFog.rgb, fe);
