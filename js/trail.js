@@ -3112,7 +3112,7 @@ function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX)
 // 高度：路面用路的高度（階梯是一階一階的），路外面用 terrH（跟路旁植物種的地面同一個）。貼圖座標用公尺（走路時貼圖跟著地面不會滑）
 // 長段連續階梯（每階 4 排點）看得到很遠時一格要 6 萬個點以上：以前 6 萬個點就停，最遠的地面、立體欄杆畫不出來
 const G3M = { v:new Float32Array(9 * 120000), idx:new Uint32Array(720000) };
-const G3_RISER = 0.5, G3_STEPW = 1.5;   // 階梯立面的明暗（沒有立面圖時：積雪）
+const G3_RISER = 0.5;   // 階梯立面的明暗（沒有立面圖時：積雪）
 // 立體階梯：每一階的立面貼橫木（土路）／石塊（石階、碎石路）立面圖，一階用圖上的一排（每階隨機挑一排，看不出重複）；立面上緣亮、下緣暗（踏面前緣受光、腳下陰影），看得出每一階的厚度
 const G3_RTOP = 0.95, G3_RBOT = 0.6;
 function g3Riser(){
@@ -3163,9 +3163,9 @@ function meshGround(b){
     const fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A), base = nv;
     for (let c = 0; c < nc; c++) {
       const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1, road = q < G3_ROAD.length, o = nv * 9;
-      const d = lerp(A[c * 2], B[c * 2], f), sw = road ? 0 : ease01((d - rwr) / G3_STEPW), h = road ? hr : lerp(hr, ht, sw) + lerp(A[c * 2 + 1], B[c * 2 + 1], f);   // 階梯兩旁的土坡也跟著一階一階（離路緣 G3_STEPW 公尺內慢慢接回平順的坡）：石階像切進山坡裡
+      const d = lerp(A[c * 2], B[c * 2], f), h = road ? hr : ht + lerp(A[c * 2 + 1], B[c * 2 + 1], f);   // 階梯兩旁的山坡是平順的斜坡（不跟著一階一階：2026-11-25 主人說真的步道旁草皮不會長成一階一階）；階梯比坡面低一點點，像切進山坡裡，交界是土坎
       const w = k === 0 ? 1 : road ? (q === G3_ROAD.length - 1 ? 0.5 : 1) : 0;
-      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && (road || sw < 0.5) ? 2 : 0); V[o + 6] = 1;
+      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && road ? 2 : 0); V[o + 6] = 1;
       V[o + 7] = fade; V[o + 8] = rv || 0; G3BV[nv] = lerp(A[nc * 2 + c], B[nc * 2 + c], f);
       nv++;
     }
