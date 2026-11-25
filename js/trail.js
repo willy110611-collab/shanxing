@@ -92,7 +92,7 @@ let FGRIM = {};         // 前景框輪廓光貼圖快取（依尺寸）
 // 投影暫存（每幀重用）
 const pC = new Float32Array(DRAW + 3), pW = new Float32Array(DRAW + 3), pZ = new Float32Array(DRAW + 3),
       pS = new Float32Array(DRAW + 3), pX = new Float32Array(DRAW + 3), pY = new Float32Array(DRAW + 3);
-let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, jhG = 3, fhG = 0, offG = 0;
+let bG = 0, camX = 0, camY = 0, gx = 0, gy = 0, gs = 1, gz = 1, gf = 0, gj = 0, jhG = 3, fhG = 0, offG = 0;
 const hits = []; let hitN = 0;
 const hero = { ph:0, pd:-1, stair:0, up:0, walkV:0, gr:0, crK:0, crD:0, pan:0, lift:0, mv:0, py:0, pv:0, mga:0, mgv:0, lean:0, turn:0, st:-1, stepL:0, pph:0, fly:1, sx:187, sy:650, u:0.75, top:520 };
 const TURN_LOOK = 5, TURN_FULL = 0.02, TURN_X = 0.07;   // 轉彎：看腳下往前幾段的彎度、彎到多少算全彎、腳往內側偏幾公尺（身體不傾斜，正背面的人一歪就很怪）
@@ -2541,6 +2541,7 @@ S.hashStr = hashStr;
 // 深度用真正的距離算（不用 pZ 那個「最近 1.2 公尺」的下限）：鏡頭旁邊、後面的東西才會一路被推出畫面邊緣，
 // 不會卡在 1.2 公尺不動、下一段才突然消失。gz：這個點離鏡頭幾公尺（物件靠太近時拿來淡出）
 function proj(j, f, flat){
+  gf = f; gj = j;
   const dz = Math.max(0.05, (j - offG + f) * SEG); gz = dz; gs = F / dz;
   gx = W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX) * gs;
   gy = HOR - ((flat ? pW[j] : pW[j] + (pW[j + 1] - pW[j]) * f) - camY) * gs;
@@ -3071,6 +3072,7 @@ function seatAt(i, side, xo, hw){
   const sd = side > 0 ? 1 : 0, k = clamp((Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)) - 0.04) / 0.16, 0, 1), rw = rwAt(i);
   const bw = bankWd(i, side);
   if (k > 0) { const lo = rw + bw + hw * SEAT_IN; if (xo < lo) xo = lerp(xo, lo, k); }
+  if (G3B) { SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = HOR - (pW[gj] + (pW[gj + 1] - pW[gj]) * gf + g3Ht(i, gf, side, Math.max(xo, rw + bw)) - camY) * gs; return SEAT; }   // 立體地面：照網格畫出來的地面高度種（同一段前後兩排、左右兩個格點之間照直線內插，跟顯示卡畫的一樣），階梯段兩旁也照平順的斜坡（不是踏面高度）；有深度遮擋所以不用往外抬（2026-11-25 回報植物漂浮）
   const hc = terrH(i, side, Math.max(xo, rw + bw)), ho = terrH(i, side, Math.max(xo + hw * SEAT_UP, rw + bw));   // ho：往外半個身寬那裡的地面（山坡往外升高時，大叢的植物外側那半邊不會埋進坡裡、被近一段的坡面切成一條直線）
   SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = gy - Math.max(hc, ho) * gs;
   return SEAT;
@@ -3148,6 +3150,9 @@ function g3Seg(i){
   if (G3C.m.size > 600) for (const key of G3C.m.keys()) if (key < bG - 4) G3C.m.delete(key);
   G3C.m.set(i, e); return e;
 }
+// 立體地面網格上某一點的地面高度（比路面高多少）：第 i 段近端那一排和下一排，各自在 d 兩邊的格點之間直線內插，再照段內位置 f 內插（跟 meshGround 畫的一樣）
+function g3Col(A, side, d){ let p = G3_NS, pd = 0, ph = 0; for (let q = 0; q < G3_NS; q++) { const c = G3_NS + side * (q + 1), cd = A[c * 2], ch = A[c * 2 + 1]; if (cd >= d) return cd > pd ? lerp(ph, ch, (d - pd) / (cd - pd)) : ch; pd = cd; ph = ch; p = c; } return ph; }
+function g3Ht(i, f, side, d){ return lerp(g3Col(g3Seg(i), side, d), g3Col(g3Seg(i + 1), side, d), f); }
 function meshGround(b){
   const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road, GT = TEX.grass;
   if (!RT || !GT || !RT.c || !GT.c) return;
@@ -4267,7 +4272,7 @@ function drawWorld(b, t, jHi, jLo, far){
           ctx.strokeStyle = 'rgba(255,236,196,0.35)'; ctx.lineWidth = lw * 0.6; ctx.beginPath();
           for (k = 1; k <= PLANKS; k++) { proj(j, k / PLANKS, stp); ctx.moveTo(gx - rw * gs, gy + lw); ctx.lineTo(gx + rw * gs, gy + lw); }
           ctx.stroke();
-        } else for (k = 0; k < nPeb; k++) {            // 小石子
+        } else if (!(stp && TEX.steps)) for (k = 0; k < nPeb; k++) {            // 小石子（換成階梯貼圖的那段不撒：小石子落在一階階木頭踏面上，看起來是一顆顆白點加黑框，2026-11-25 合歡北峰回報「很多黑點」）
           if (Hh(i, 60 + k * 4) > 0.7) continue;
           proj(j, Hh(i, 61 + k * 4), stp);
           const pr = (0.035 + 0.05 * Hh(i, 62 + k * 4)) * gs;
