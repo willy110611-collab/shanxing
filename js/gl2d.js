@@ -38,22 +38,25 @@ in vec3 aP; in vec2 aU; in vec3 aA;
 uniform vec3 uK; uniform vec2 uZ;
 out vec2 vU; out vec3 vA; out float vD;
 void main(){ vU = aU; vA = aA; vD = aP.z; gl_Position = vec4(aP.x * uK.x, aP.y * uK.y + aP.z * uK.z, aP.z * uZ.x + uZ.y, aP.z); }`;
+// 著色器裡：最遠那一段（uFar 的 55%～100%）先變霧色、70% 以後再變透明（地平線不會切出一條直的邊，跟 trail.js 舊畫法「最遠幾段先變霧色再淡掉」一樣）；rs＝階梯立面（trail.js 標的，整面暗）；gw＝兩側地面最外緣（跟 trail.js gwAt 同一個算法），從這裡到外緣延伸那圈（trail.js G3_EXT）慢慢淡進背景，不會切出一條直的邊
 const MFS = `#version 300 es
 precision highp float;
 in vec2 vU; in vec3 vA; in float vD;
-uniform sampler2D tR, tG; uniform vec4 uRS; uniform vec4 uFog; uniform vec2 uFD; uniform vec3 uSoil;
+uniform sampler2D tR, tG; uniform vec4 uRS; uniform vec4 uFog; uniform vec2 uFD; uniform vec3 uSoil; uniform float uGW; uniform float uFar;
 out vec4 o;
 void main(){
   vec3 r = texture(tR, vec2(vU.x * uRS.x + 0.5, vU.y * uRS.y)).rgb;
   vec3 g = texture(tG, vec2(vU.x * uRS.z, vU.y * uRS.w)).rgb;
-  float w = clamp(vA.x, 0.0, 1.0), e = clamp(1.0 - abs(vA.x * 2.0 - 1.0), 0.0, 1.0);
+  float rs = step(1.5, vA.x), w = clamp(vA.x - 2.0 * rs, 0.0, 1.0), e = clamp(1.0 - abs(w * 2.0 - 1.0), 0.0, 1.0);
   vec3 c = mix(g, r, w);
   c = mix(c, uSoil * (0.8 + 0.4 * r), e * 0.55);
-  float rs = 1.0 - smoothstep(0.0, 0.0004 * vD, fwidth(vD));   // 階梯立面（整面同一個遠近）：比踏面暗
-  c *= vA.y * mix(1.0, 0.45, rs);
+  c *= vA.y;
   float f = clamp((vD - uFD.x) / (uFD.y - uFD.x), 0.0, 1.0); f = f * (2.0 - f);
   c = mix(c, uFog.rgb, f * uFog.a);
-  o = vec4(c * vA.z, vA.z);
+  float gw = uGW * (1.0 - 0.6 * clamp((vD - 40.0) / 120.0, 0.0, 1.0));
+  float fe = smoothstep(0.55 * uFar, uFar, vD); c = mix(c, uFog.rgb, fe);
+  float a = vA.z * (1.0 - smoothstep(gw, 2.4 * gw, abs(vU.x))) * (1.0 - smoothstep(0.7 * uFar, uFar, vD));
+  o = vec4(c * a, a);
 }`;
 const ZN = 0.3, ZF = 420;   // 立體地面的近、遠裁切面（公尺）
 const FS = `#version 300 es
@@ -193,7 +196,7 @@ P.init = function(){
     gl.enableVertexAttribArray(ma('aP')); gl.vertexAttribPointer(ma('aP'), 3, gl.FLOAT, false, 32, 0);
     gl.enableVertexAttribArray(ma('aU')); gl.vertexAttribPointer(ma('aU'), 2, gl.FLOAT, false, 32, 12);
     gl.enableVertexAttribArray(ma('aA')); gl.vertexAttribPointer(ma('aA'), 3, gl.FLOAT, false, 32, 20);
-    gl.useProgram(this.mprog); this.mu = {}; ['tR', 'tG', 'uRS', 'uFog', 'uFD', 'uK', 'uZ', 'uSoil'].forEach(k => { this.mu[k] = gl.getUniformLocation(this.mprog, k); });
+    gl.useProgram(this.mprog); this.mu = {}; ['tR', 'tG', 'uRS', 'uFog', 'uFD', 'uK', 'uZ', 'uSoil', 'uGW', 'uFar'].forEach(k => { this.mu[k] = gl.getUniformLocation(this.mprog, k); });
     gl.uniform1i(this.mu.tR, 0); gl.uniform1i(this.mu.tG, 1);
   }
   gl.bindVertexArray(this.vao); gl.useProgram(this.prog);
@@ -602,7 +605,7 @@ P.mesh = function(m){
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tR); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tG); gl.activeTexture(gl.TEXTURE0);
   const U = this.mu;
   gl.uniform4f(U.uRS, m.rs[0], m.rs[1], m.rs[2], m.rs[3]); gl.uniform3f(U.uK, m.k[0], m.k[1], m.k[2]); gl.uniform2f(U.uZ, (ZF + ZN) / (ZF - ZN), -2 * ZF * ZN / (ZF - ZN));
-  gl.uniform4f(U.uFog, m.fog[0], m.fog[1], m.fog[2], m.fog[3]); gl.uniform2f(U.uFD, m.fd[0], m.fd[1]); gl.uniform3f(U.uSoil, m.soil[0], m.soil[1], m.soil[2]);
+  gl.uniform4f(U.uFog, m.fog[0], m.fog[1], m.fog[2], m.fog[3]); gl.uniform2f(U.uFD, m.fd[0], m.fd[1]); gl.uniform3f(U.uSoil, m.soil[0], m.soil[1], m.soil[2]); gl.uniform1f(U.uGW, m.gw || 30); gl.uniform1f(U.uFar, m.far || 240);
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); this.setBlend('source-over');
   gl.drawElements(gl.TRIANGLES, m.ni, gl.UNSIGNED_INT, 0);
   gl.depthMask(false); gl.disable(gl.DEPTH_TEST);

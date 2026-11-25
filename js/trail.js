@@ -1766,13 +1766,16 @@ function drawFG(t){
 // ═════════ 對外：初始化／尺寸／換山 ═════════
 // 畫筆：能用 WebGL 就用（js/gl2d.js，一格幾十批送顯示卡），不支援或建立失敗就用 Canvas 2D（跟以前一樣）
 // 網址加 ?gl=0（或 localStorage sx_gl = '0'）強制用 Canvas 2D：開發者測試、比對兩邊畫面用，玩家看不到
-// 立體地面試作（方案 B）：網址加 ?g3d=1 才開，只在象山。地面（路、階梯、兩側山坡）改成一整片真正的 3D 網格，植物、人物、天空照舊
-const G3D_Q = /[?&]g3d=(1|all)\b/.test(location.search), G3D_ALL = /[?&]g3d=all\b/.test(location.search), G3D_IDS = ['xiangshan'];   // g3d=all：測試用，每座山都用立體地面
-function g3On(){ return G3D_Q && ctx && ctx.gpu && ctx.hasDepth && M && (G3D_ALL || G3D_IDS.indexOf(M.id) >= 0); }
+// 立體地面（方案 B）：地面（路、階梯、兩側山坡）改成一整片真正的 3D 網格，植物、人物、天空照舊。要顯示卡（WebGL）：退回 Canvas 2D 的手機照舊畫
+// G3D_IDS：玩家預設就用立體地面的山（2026-11-25 決定：舊畫法彎道裡小坡頂破圖修不好的那兩座先換）
+// 測試用網址（玩家看不到）：?g3d=1 再加上象山、?g3d=all 每座山都用、?g3d=0 全部用舊的地面
+const G3D_IDS = ['yushan_east', 'hh_west'], G3D_TEST = ['xiangshan'];
+const G3D_P = (location.search.match(/[?&]g3d=(0|1|all)\b/) || [])[1] || '';
+function g3On(){ return G3D_P !== '0' && ctx && ctx.gpu && ctx.hasDepth && M && (G3D_P === 'all' || G3D_IDS.indexOf(M.id) >= 0 || (G3D_P === '1' && G3D_TEST.indexOf(M.id) >= 0)); }
 const GL_OFF = /[?&]gl=0\b/.test(location.search) || (function(){ try { return localStorage.getItem('sx_gl') === '0'; } catch (e) { return false; } })();
 S.init = function(canvas){
   cv = canvas; if (!SHADOW) buildStatic();
-  glc = !GL_OFF && SX.gl2d ? SX.gl2d.create(cv, { depth:G3D_Q }) : null;
+  glc = !GL_OFF && SX.gl2d ? SX.gl2d.create(cv, { depth:true }) : null;   // 遠近緩衝一律要（立體地面的山才用得到；其他山不開遠近比較，畫面不變）
   if (glc) { glc.onLost = function(){ useGL(false); }; glc.onRestored = function(){ useGL(true); }; }   // 顯示卡掉了：馬上換 Canvas 2D 接著畫；恢復了再換回來
   useGL(!!glc);
 };
@@ -3099,25 +3102,51 @@ function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX)
 // 每一段的近端（階梯段再切成一階一階：踏面平的、立面直的）一排點，左右從路中間往外：路面幾個點、路緣、土坎、山坡越外面越疏，到 gwAt 為止
 // 高度：路面用路的高度（階梯是一階一階的），路外面用 terrH（跟路旁植物種的地面同一個）。貼圖座標用公尺（走路時貼圖跟著地面不會滑）
 const G3M = { v:new Float32Array(8 * 60000), idx:new Uint32Array(360000) };
+const G3_RISER = 0.5;   // 階梯立面的明暗
 const G3_ROAD = [0.45, 0.85, 1], G3_SIDE = [0.2, 0.5, 0.9, 1.4, 2.1, 3, 4.2, 5.6, 7.4, 9.6, 12.2, 15.2, 18.6, 22.4, 26.6, 31];
+// 地面最外緣再往外延伸兩圈（gwAt 的幾倍），照最外那段的坡度繼續升或降；gl2d 著色器從 gwAt 淡到 G3_EXT 最後一圈（舊畫法用 skirtEdge 霧帶做同一件事）：
+// 地面不會在天空、雲海前面突然切成一條直的邊
+const G3_EXT = [1.6, 2.5];
+const G3_NS = G3_ROAD.length + 2 + G3_SIDE.length + G3_EXT.length, G3_NC = 1 + G3_NS * 2;   // 每一排幾個點
+// 每一段近端那一排：每個點離路中心多遠（d）、比路面高多少（地形 terrH，跟鏡頭無關）。只在第一次用到那一段時算一次存起來（換山清掉），
+// 每格只做位置換算：以前每格每個點都重算 terrH，整格一半以上的時間花在這裡
+const G3C = { id:null, m:new Map() };
+function g3Seg(i){
+  let e = G3C.m.get(i); if (e) return e;
+  e = new Float32Array(G3_NC * 2); const rw = rwAt(i);
+  for (let c = 0; c < G3_NC; c++) {
+    const k = c - G3_NS, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1;
+    let d, h = 0;
+    if (k === 0) d = 0;
+    else if (q < G3_ROAD.length) d = G3_ROAD[q] * rw;
+    else {
+      const bw = bankWd(i, side), r = q - G3_ROAD.length, ext = r - 2 - G3_SIDE.length;
+      if (ext < 0) { d = r === 0 ? rw + bw * 0.5 : r === 1 ? rw + bw : rw + bw + G3_SIDE[r - 2]; h = terrH(i, side, d); }
+      else { const ge = rw + bw + G3_SIDE[G3_SIDE.length - 1], h1 = terrH(i, side, ge), h0 = terrH(i, side, ge * 0.85); d = GW * G3_EXT[ext]; h = h1 + (h1 - h0) / (ge * 0.15) * (d - ge); }   // 外緣延伸：照最外那段的坡度
+    }
+    e[c * 2] = d; e[c * 2 + 1] = h;
+  }
+  if (G3C.m.size > 600) for (const key of G3C.m.keys()) if (key < bG - 4) G3C.m.delete(key);
+  G3C.m.set(i, e); return e;
+}
 function meshGround(b){
   const RT = snowAmt > 0.5 && TEX.snow ? TEX.snow : TEX.road, GT = TEX.grass;
   if (!RT || !GT || !RT.c || !GT.c) return;
-  const V = G3M.v, I = G3M.idx, nSide = G3_ROAD.length + 2 + G3_SIDE.length, nc = 1 + nSide * 2, off = offG;
+  if (G3C.id !== M.id) { G3C.id = M.id; G3C.m.clear(); }
+  const V = G3M.v, I = G3M.idx, nSide = G3_NS, nc = G3_NC, off = offG;
   let nv = 0, ni = 0, prev = -1;
-  function row(j, f, hr){
+  // rs：階梯立面那兩排（同一個遠近、上下兩個高度）：路面那幾點標成立面（整面暗），不用猜
+  // 兩側地面的點不再跟著遠近收窄（以前照 gwAt 切）：gwAt 以外由 gl2d 著色器慢慢淡掉
+  function row(j, f, hr, rs){
     if ((nv + nc) * 8 > V.length) return;
-    const i = b + j, rw = rwF ? rwF(i, f) : rwAt(i), zr = (j + f - off) * SEG, xc = lerp(pC[j], pC[j + 1], f), ht = lerp(pW[j], pW[j + 1], f), za = (i + f) * SEG;
-    const gw = gwAt(Math.max(zr, 0)), fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A), base = nv;
+    const i = b + j, A = g3Seg(i), B = f > 0 ? g3Seg(i + 1) : A, zr = (j + f - off) * SEG, xc = lerp(pC[j], pC[j + 1], f), ht = lerp(pW[j], pW[j + 1], f), za = (i + f) * SEG;
+    const fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A), base = nv;
     for (let c = 0; c < nc; c++) {
-      const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1;
-      let d, w;
-      if (k === 0) { d = 0; w = 1; }
-      else if (q < G3_ROAD.length) { d = G3_ROAD[q] * rw; w = q === G3_ROAD.length - 1 ? 0.5 : 1; }
-      else { const bw = bankWd(i, side), r = q - G3_ROAD.length; d = r === 0 ? rw + bw * 0.5 : r === 1 ? rw + bw : rw + bw + G3_SIDE[r - 2]; d = Math.min(d, Math.max(gw, rw + bw + 0.5)); w = 0; }
-      const h = q < G3_ROAD.length ? hr : ht + terrH(i, side, d), o = nv * 8;
-      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w; V[o + 6] = 1;
-      V[o + 7] = fade * (Math.abs(k) === nSide ? 0 : Math.abs(k) === nSide - 1 ? 0.55 : 1);
+      const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1, road = q < G3_ROAD.length, o = nv * 8;
+      const d = lerp(A[c * 2], B[c * 2], f), h = road ? hr : ht + lerp(A[c * 2 + 1], B[c * 2 + 1], f);
+      const w = k === 0 ? 1 : road ? (q === G3_ROAD.length - 1 ? 0.5 : 1) : 0;
+      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && road ? 2 : 0); V[o + 6] = 1;
+      V[o + 7] = fade;
       nv++;
     }
     if (prev >= 0) for (let c = 0; c < nc - 1; c++) { const a = prev + c, a2 = a + 1, d0 = base + c, d1 = d0 + 1; I[ni++] = a; I[ni++] = a2; I[ni++] = d1; I[ni++] = a; I[ni++] = d1; I[ni++] = d0; }
@@ -3127,7 +3156,7 @@ function meshGround(b){
     const i = b + j;
     if (sAt(i) !== 1) { row(j, 0, pW[j]); continue; }
     const n = stairN(j), rise = pW[j + 1] - pW[j];
-    for (let q = 0; q < n; q++) { const h = pW[j] + rise * q / n; row(j, q / n, h); row(j, (q + 1) / n, h); }
+    for (let q = 0; q < n; q++) { const h = pW[j] + rise * q / n, h2 = pW[j] + rise * (q + 1) / n, fb = (q + 1) / n; row(j, q / n, h); row(j, fb, h); row(j, fb, h, true); row(j, fb, h2, true); }   // 踏面兩排、立面兩排（同位置的兩排之間面積是 0，不會畫出東西）
   }
   row(DRAW, 0, pW[DRAW]);
   // 明暗：每個點的坡面朝向（左右、前後的高度差）對著右上來的光
@@ -3136,12 +3165,23 @@ function meshGround(b){
     const o = (r * nc + c) * 8, oL = (r * nc + Math.max(0, c - 1)) * 8, oR = (r * nc + Math.min(nc - 1, c + 1)) * 8, oB = (Math.max(0, r - 1) * nc + c) * 8, oF = (Math.min(rows - 1, r + 1) * nc + c) * 8;
     const dx = V[oR] - V[oL], dy = V[oR + 1] - V[oL + 1], gx = Math.abs(dx) > 1e-4 ? dy / dx : 0, dz = V[oF + 2] - V[oB + 2], gz = dz > 0.02 ? (V[oF + 1] - V[oB + 1]) / dz : 0;   // 階梯立面那幾排（同一個遠近）：明暗交給著色器（立面整面暗）
     const nl = 1 / Math.sqrt(gx * gx + 1 + gz * gz), dt = (-gx * Lx + Ly) * nl;
-    V[o + 6] = clamp(1 + 0.6 * (dt - Ly), 0.42, 1.25);
+    V[o + 6] = V[o + 5] >= 1.5 ? G3_RISER : clamp(1 + 0.6 * (dt - Ly), 0.42, 1.25);
   }
   const hz = hazeRgb;
   ctx.mesh({ v:V, nv, idx:I, ni, road:RT.c, grass:GT.c, rs:[1 / RT.m, RT.c.width / (RT.m * RT.c.height), 1 / GT.m, GT.c.width / (GT.m * GT.c.height)],
-    k:[2 * F / W, 2 * F / H, 1 - 2 * HOR / H], fog:[hz[0] / 255, hz[1] / 255, hz[2] / 255, 0.85], fd:[fogD0, fogD], soil:[0.46, 0.36, 0.26] });
+    k:[2 * F / W, 2 * F / H, 1 - 2 * HOR / H], gw:GW, far:DRAW * SEG, fog:[hz[0] / 255, hz[1] / 255, hz[2] / 255, 0.85], fd:[fogD0, fogD], soil:[0.46, 0.36, 0.26] });
+  // 地平線霧帶：跟舊畫法同一條 horizonBand，天際線（每條格線上地面最上緣）改從網格量。坡頂、高原邊緣跟天空、雲海的交界蓋一段霧，不會切出一條直的硬邊
+  const SK = G3SK; SK.fill(Infinity); let yT = Infinity, zT = Infinity;
+  const far = DRAW * SEG, PX = G3PX, PY = G3PY;
+  for (let r = 0; r < rows; r++) {
+    const o0 = r * nc * 8, Z = V[o0 + 2]; if (Z < HZB.z) continue;   // 跟舊畫法一樣：這麼近的地面不算進霧帶
+    const gwz = GW * (1 - 0.6 * clamp((Z - 40) / 120, 0, 1)), fz = (1 - ease01((Z - 0.7 * far) / (0.3 * far))) * V[o0 + 7], k = F / Z;
+    for (let c = 0; c < nc; c++) { const o = o0 + c * 8; PX[c] = fz * (1 - ease01((Math.abs(V[o + 3]) - gwz) / (1.4 * gwz))) > 0.5 ? W / 2 + V[o] * k : NaN; PY[c] = HOR - V[o + 1] * k; }   // 跟著色器同一套淡出：看得到一半以上的點才算天際線
+    for (let c = 0; c < nc - 1; c++) { if (PX[c] !== PX[c] || PX[c + 1] !== PX[c + 1]) continue; edgeAt(SK, PX[c], PY[c], PX[c + 1], PY[c + 1], false); if (PY[c] < yT) { yT = PY[c]; zT = Z; } }
+  }
+  if (yT < H) horizonBand(yT, HZB.a, SK, zT);
 }
+const G3SK = new Float32Array(HZK + 1), G3PX = new Float32Array(G3_NC), G3PY = new Float32Array(G3_NC);
 function farA(j, J, n){ return clamp((J * SEG - pZ[j]) / (n * SEG), 0, 1); }
 // 樹影與光斑：右上來的陽光被路邊的樹擋住，路上落下一片一片柔和的樹影（往左下斜）；森林段再有幾個慢慢飄動的光斑
 // 位置只跟這段路是第幾段有關（走近時不會重新洗牌）；遠處跟著霧淡掉、70 段外慢慢淡出
