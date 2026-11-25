@@ -1767,9 +1767,9 @@ function drawFG(t){
 // 畫筆：能用 WebGL 就用（js/gl2d.js，一格幾十批送顯示卡），不支援或建立失敗就用 Canvas 2D（跟以前一樣）
 // 網址加 ?gl=0（或 localStorage sx_gl = '0'）強制用 Canvas 2D：開發者測試、比對兩邊畫面用，玩家看不到
 // 立體地面（方案 B）：地面（路、階梯、兩側山坡）改成一整片真正的 3D 網格，植物、人物、天空照舊。要顯示卡（WebGL）：退回 Canvas 2D 的手機照舊畫
-// G3D_IDS：玩家預設就用立體地面的山（2026-11-25 決定：舊畫法彎道裡小坡頂破圖修不好的那兩座先換）
+// G3D_IDS：玩家預設就用立體地面的山（2026-11-25 決定：舊畫法彎道裡小坡頂破圖修不好的那兩座先換；同一天再加上舊畫法轉彎巡檢還有破圖的向陽山、三叉山、嘉明湖、玉山主峰）
 // 測試用網址（玩家看不到）：?g3d=1 再加上象山、?g3d=all 每座山都用、?g3d=0 全部用舊的地面
-const G3D_IDS = ['yushan_east', 'hh_west'], G3D_TEST = ['xiangshan'];
+const G3D_IDS = ['yushan_east', 'hh_west', 'xiangyang', 'sancha', 'jiaming', 'yushan'], G3D_TEST = ['xiangshan'];
 const G3D_P = (location.search.match(/[?&]g3d=(0|1|all)\b/) || [])[1] || '';
 function g3On(){ return G3D_P !== '0' && ctx && ctx.gpu && ctx.hasDepth && M && (G3D_P === 'all' || G3D_IDS.indexOf(M.id) >= 0 || (G3D_P === '1' && G3D_TEST.indexOf(M.id) >= 0)); }
 const GL_OFF = /[?&]gl=0\b/.test(location.search) || (function(){ try { return localStorage.getItem('sx_gl') === '0'; } catch (e) { return false; } })();
