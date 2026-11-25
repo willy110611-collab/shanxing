@@ -2638,7 +2638,7 @@ const LIP_FEATHER = 0.75, LIP_FEATHER_J = 10, MOSS_SOIL = 37, MOSS_SHADE = 36, S
 function rwSide(i, side, f){ const g = Math.max(0, Math.min((N + 2) * SOFT_K, Math.round((i + f) * SOFT_K))); return rwF(i, f) - softE[(g * 2 + (side > 0 ? 1 : 0)) * SOFT_V + 11]; }
 // 立體地面的山的草地小起伏（G3B：這座山這一格用立體地面才有）：路緣土坎外半公尺內慢慢長出來，幾公尺一個的小凸小凹（約 ±0.2 公尺），網格明暗照坡面朝向就有深淺陰影；
 // 加在 terrH 本身，所以路旁植物、欄杆、座位也跟著站在同一個起伏上。舊畫法（Canvas 2D）的山不加，畫面不變
-let G3B = false;
+let G3B = false; const G3_PJ = 6, G3_PITCH = 0.05;   // 鏡頭抬頭：看前面幾段的坡度、坡度 1（45 度）時地平線往下移畫面高的幾成
 const G3_BUMP = [0.3, 0.12];
 function vn2(x, y, k){ const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), r = iy * 7919;
   return lerp(lerp(Hh(ix + r, k), Hh(ix + 1 + r, k), u), lerp(Hh(ix + r + 7919, k), Hh(ix + 1 + r + 7919, k), u), v); }
@@ -3110,7 +3110,7 @@ function stepX(j, f, s){ return W / 2 + (pC[j] + (pC[j + 1] - pC[j]) * f - camX)
 // 每一段的近端（階梯段再切成一階一階：踏面平的、立面直的）一排點，左右從路中間往外：路面幾個點、路緣、土坎、山坡越外面越疏，到 gwAt 為止
 // 高度：路面用路的高度（階梯是一階一階的），路外面用 terrH（跟路旁植物種的地面同一個）。貼圖座標用公尺（走路時貼圖跟著地面不會滑）
 const G3M = { v:new Float32Array(8 * 60000), idx:new Uint32Array(360000) };
-const G3_RISER = 0.5;   // 階梯立面的明暗
+const G3_RISER = 0.5, G3_STEPW = 1.5;   // 階梯立面的明暗
 const G3_ROAD = [0.45, 0.85, 1], G3_SIDE = [0.2, 0.5, 0.9, 1.4, 2.1, 3, 4.2, 5.6, 7.4, 9.6, 12.2, 15.2, 18.6, 22.4, 26.6, 31];
 // 地面最外緣再往外延伸幾圈（GW 的幾倍，最外約 300 公尺，多半已在畫面外），照最外那段的坡度繼續升或降、坡度慢慢變緩，再加上大片的起伏（遠處的小山頭）；
 // 不再變透明（2026-11-25 決定：照人眼看到的，地面一路連到遠處），遠的地方由 gl2d 著色器照真正的距離越來越霧（空氣透視：變淡、偏霧色、明暗差變小）
@@ -3147,13 +3147,13 @@ function meshGround(b){
   // 兩側地面的點不再跟著遠近收窄（以前照 gwAt 切）：gwAt 以外由 gl2d 著色器慢慢淡掉
   function row(j, f, hr, rs){
     if ((nv + nc) * 8 > V.length) return;
-    const i = b + j, A = g3Seg(i), B = f > 0 ? g3Seg(i + 1) : A, zr = (j + f - off) * SEG, xc = lerp(pC[j], pC[j + 1], f), ht = lerp(pW[j], pW[j + 1], f), za = (i + f) * SEG;
+    const i = b + j, A = g3Seg(i), B = f > 0 ? g3Seg(i + 1) : A, rwr = lerp(rwAt(i), rwAt(i + 1), f), zr = (j + f - off) * SEG, xc = lerp(pC[j], pC[j + 1], f), ht = lerp(pW[j], pW[j + 1], f), za = (i + f) * SEG;
     const fz = farA(j, DRAW - 1, FAR_FADE), fade = ease01(fz / FAR_FADE_A), base = nv;
     for (let c = 0; c < nc; c++) {
       const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1, road = q < G3_ROAD.length, o = nv * 8;
-      const d = lerp(A[c * 2], B[c * 2], f), h = road ? hr : ht + lerp(A[c * 2 + 1], B[c * 2 + 1], f);
+      const d = lerp(A[c * 2], B[c * 2], f), sw = road ? 0 : ease01((d - rwr) / G3_STEPW), h = road ? hr : lerp(hr, ht, sw) + lerp(A[c * 2 + 1], B[c * 2 + 1], f);   // 階梯兩旁的土坡也跟著一階一階（離路緣 G3_STEPW 公尺內慢慢接回平順的坡）：石階像切進山坡裡
       const w = k === 0 ? 1 : road ? (q === G3_ROAD.length - 1 ? 0.5 : 1) : 0;
-      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && road ? 2 : 0); V[o + 6] = 1;
+      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && (road || sw < 0.5) ? 2 : 0); V[o + 6] = 1;
       V[o + 7] = fade; G3BV[nv] = lerp(A[nc * 2 + c], B[nc * 2 + c], f);
       nv++;
     }
@@ -4738,6 +4738,8 @@ S.render = function(s){
   const hj = HZ / SEG + off; jhG = Math.floor(hj); fhG = hj - jhG;
   camX = lerp(pC[jhG], pC[jhG + 1], fhG) - SQ_HERO * coF(b + jhG, fhG) + hero.pan + Math.sin(hero.ph) * 0.012 * bob;   // 鏡頭只跟一半的 coAt：路一邊變窄時登山客（走在剩下的路中間）在畫面上微微往另一邊移（SQ_HERO）
   camY = lerp(pW[jhG], pW[jhG + 1], fhG) + CAMH - Math.abs(Math.sin(hero.ph)) * 0.022 * bob;
+  // 立體地面的山：鏡頭跟著前面十公尺的坡度微微抬頭（上坡、上石階）或低頭（下坡），慢慢轉過去；地平線跟著上下移，爬階梯時看得出在往上爬。舊畫法的山不轉
+  { const g = G3B ? clamp((eAt(b + jhG + G3_PJ) - eAt(b + jhG)) / (G3_PJ * SEG), -0.6, 0.8) : 0; hero.pitch = (hero.pitch || 0) + (g * G3_PITCH * H - (hero.pitch || 0)) * Math.min(1, dt * 1.5); HOR = HOR0 - Math.round(hero.lift) + Math.round(hero.pitch); }
   for (j = 0; j <= DRAW + 1; j++) {
     const dz = Math.max((j - off) * SEG, NEAR_Z), sc = F / dz;
     pZ[j] = dz; pS[j] = sc; pX[j] = W / 2 + (pC[j] - camX) * sc; pY[j] = HOR - (pW[j] - camY) * sc;
