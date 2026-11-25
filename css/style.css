@@ -951,3 +951,21 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 .gearTeam{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 8px}
 .gearTeam>span{flex:1;text-align:left;font-size:13px}
 .gearTeam>span small{display:block;font-size:11px;opacity:.7}
+
+/* 新手引導：四塊半透明擋板圍出一個亮的洞（洞裡的東西照常可以點），洞外一圈會呼吸的框，柴柴的對話框 */
+#guide{position:fixed;inset:0;z-index:9000;pointer-events:none;display:none}
+#guide.on{display:block}
+#guide .gdB{position:fixed;background:rgba(40,28,20,.62);pointer-events:auto}
+#guide.free .gdB{display:none}
+#guide .gdRing{position:fixed;border:3px solid #ffe08a;border-radius:14px;box-shadow:0 0 0 3px rgba(58,42,32,.55);pointer-events:none;animation:gdPulse 1.2s ease-in-out infinite}
+#guide.tap .gdRing,#guide.free .gdRing{display:none}
+#guide.tap .gdB{cursor:pointer}
+#guide .gdSay{position:fixed;left:14px;right:14px;max-width:420px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:10px 12px;border:2.5px solid var(--ink);border-radius:14px;background:#fff7e2;color:var(--ink);box-shadow:0 4px 0 rgba(58,42,32,.35);pointer-events:auto}
+#guide.free .gdSay{pointer-events:none}
+#guide.free .gdSay .gdSkip{pointer-events:auto}
+#guide .gdFace{flex:0 0 48px;height:48px;display:grid;place-items:center}
+#guide .gdFace img{width:48px;height:48px;object-fit:contain}
+#guide .gdSay p{flex:1;margin:0;font-size:15px;line-height:1.5;text-align:left}
+#guide .gdSkip{flex:none}
+@keyframes gdPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@media (prefers-reduced-motion:reduce){#guide .gdRing{animation:none}}

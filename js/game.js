@@ -173,7 +173,7 @@
     moodNow();
   }
   document.addEventListener('click', e => {
-    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else if (g.dataset.go === 'find') findMt(); else go(g.dataset.go); }
+    const g = e.target.closest('[data-go]'); if (g) { A.unlock(); A.pop(); if (g.dataset.go === 'bag') openBag(); else if (g.dataset.go === 'daily') openDaily(); else if (g.dataset.go === 'help') openHelp(); else if (g.dataset.go === 'guide') guideReplay(); else if (g.dataset.go === 'find') findMt(); else go(g.dataset.go); }
     const b = e.target.closest('[data-back]'); if (b) { A.pop(); go(prevScreen === 'climb' && !st ? 'map' : prevScreen); }
   });
   // 手指一按下切畫面的按鈕就先開始解開那個畫面的圖（放開才切過去，多一點時間）
@@ -2237,7 +2237,7 @@
       <div class="setRow"><h4>通知<button class="tgl ${SX.social && SX.social.pushOn ? 'on' : ''}" id="sPush"></button></h4>
         <p>山友邀你一起爬、對方接受邀請，或關掉遊戲後快到山頂時，手機會跳通知。iPhone 要先「加入主畫面」，從主畫面打開才收得到。</p></div>
       <div class="setRow"><h4 id="tipsH">操作小抄</h4>
-        <p>${tutIntro().map(x => x.t).join('')}</p><button class="cbtn sm" data-go="help">看新手教學</button></div>
+        <p>${tutIntro().map(x => x.t).join('')}</p><button class="cbtn sm" data-go="help">看新手教學</button> <button class="cbtn sm" data-go="guide">跟柴柴走一遍</button></div>
       ${sourcesHtml()}
       ${s.dev || devPeek ? `<div class="setRow"><h4>開發者選項</h4>
         ${s.dev ? `<p>已解鎖</p><div class="devBtns">
@@ -2355,7 +2355,7 @@
   function enterNow(){
     if (entered) return; entered = true; clearTimeout(slowLoadT);
     const L = $('#loading'); if (L) { const f = $('#ldFill'), d = $('#ldDog'); if (f) f.style.width = '100%'; if (d) d.style.left = '100%'; L.classList.add('done'); }
-    showCover(() => { const tr = onTrail(); if (tr) startClimb(tr, true); else go('lobby'); });
+    showCover(() => { if (guideBoot()) return; const tr = onTrail(); if (tr) startClimb(tr, true); else go('lobby'); });   // 全新的存檔先跟柴柴走一遍新手引導
   }
   // 封面：讀取畫面跑完後蓋在最上面（每次打開遊戲一次），輕點任何地方才進去。
   // 點下去就先切到要去的畫面（登山畫面的「你不在的時候」日記照常打開），封面再淡出；淡出完才開始跳排隊的背景通知
@@ -2391,6 +2391,88 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
   // 測試用掛鉤
   // 給連線模組用：雲端存檔、每日任務
+  // ───────── 新手引導（第一次玩強制跟著做一遍）─────────
+  // 畫面變暗、只亮一個地方、柴柴說一句話，要點亮起來的地方才往下走。內容（每一步的話、送幾山幣）在 data.js 的 SX.GUIDE；
+  // 這裡只有每一步「亮哪裡、什麼時候算做完」。只蓋一層在最上面，不改底下任何畫面；找不到要亮的東西（被別的視窗蓋住、還在讀取）就先收起來。
+  // 存檔 SV.guide：{ i 走到第幾步 } 或 { done 走完的日期 }；SV.guideGift：送過山幣的日期。同一步超過 SKIP_MS 還沒做，出現「先跳過」。
+  const vis = e => !!e && e.getClientRects().length > 0, q1 = s => { const e = $(s); return vis(e) ? e : null; };
+  const modalOn = () => $('#modal').classList.contains('on');
+  // 地圖上象山木牌在畫面上的位置（WM.pinScreenPos 給的是木牌插在地上的那一點，木牌本身在它上面）
+  const mapSpot = () => {
+    if (screen !== 'map' || modalOn()) return null;
+    const r = $('#scrMap').getBoundingClientRect(); let p = null; try { p = WM.pinScreenPos('xiangshan'); } catch(e){}
+    return p ? { left:r.left + p.x - 60, top:r.top + p.y - 78, width:120, height:96 } : { left:r.left + r.width * 0.2, top:r.top + r.height * 0.2, width:r.width * 0.6, height:r.height * 0.4 };
+  };
+  // spot：要亮的東西（回元素或方框，回 null＝現在看不到，先收起來）；tap：點任何地方就往下；free：不擋畫面（長按走快那一步）；done：做完了沒
+  const GUIDE_DO = {
+    hello:  { tap:true, when:() => screen === 'map' && !modalOn() },
+    pin:    { enter:() => { menuSet(false); $('#routeCard').classList.remove('on'); try { WM.locate('xiangshan'); } catch(e){} }, spot:mapSpot, done:() => !!q1('#routeCard.on #rcGo') },
+    go:     { spot:() => q1('#routeCard.on #rcGo'), done:() => modalOn() && !!$('#gcGo') },
+    check:  { spot:() => q1('#gcGo'), done:() => screen === 'climb' && !!st && !modalOn() && st.dist > 0 },
+    fast:   { free:true, when:() => screen === 'climb' && !modalOn(), done:() => !!st && !!st.fast },
+    hud:    { spot:() => screen === 'climb' && !modalOn() ? q1('.hudP') : null, done:() => !!SV.set.hudFull },
+    rest:   { spot:() => !modalOn() ? q1('#restBtn') : null, done:() => !!st && !!st.rest },
+    walk:   { spot:() => !modalOn() ? q1('#rsGo') : null, done:() => !!st && !st.rest },
+    bag:    { spot:() => !modalOn() ? q1('#scrClimb [data-go="bag"]') : null, done:() => !!q1('#bagGear') },
+    gear:   { spot:() => q1('#bagGear'), done:() => !!q1('#mCard .gearDoll') },
+    coin:   { tap:true, when:() => !!q1('#mCard .gearDoll'), leave:() => { if (!SV.guideGift) { SV.guideGift = today(); gearCoin(SX.GUIDE_GIFT); } closeModal(); } },
+    bye:    { tap:true, when:() => !modalOn() },
+  };
+  const GUIDE_SKIP_MS = 20000;
+  let gd = null, gdEl = null, gdT = 0;
+  const guideNew = () => !SV.guide && !SV.intro && !Object.keys(SV.done).length && !(SV.stats.walked > 0) && !SV.cur;   // 全新的存檔才強制
+  const guideStep = () => gd && SX.GUIDE[gd.i];
+  function guideStart(i){
+    gd = { i:i || 0, t0:Date.now() }; SV.guide = { i:gd.i }; SV.intro = SV.intro || today(); save();   // 引導取代第一次出發的玩法小卡
+    if (!gdEl) {
+      gdEl = document.createElement('div'); gdEl.id = 'guide';
+      gdEl.innerHTML = `<i class="gdB"></i><i class="gdB"></i><i class="gdB"></i><i class="gdB"></i><i class="gdRing"></i><div class="gdSay"><span class="gdFace">${SX.art.img('pet_shiba_face', '')}</span><p></p><button class="chip gdSkip">先跳過</button></div>`;
+      document.body.appendChild(gdEl);
+      gdEl.addEventListener('click', e => { const s = guideStep(); if (!s) return; if (e.target.closest('.gdSkip')) { A.pop(); guideNext(); } else if (GUIDE_DO[s.id].tap && gdEl.classList.contains('on')) { A.pop(); guideNext(); } });
+    }
+    const d = GUIDE_DO[SX.GUIDE[gd.i].id]; if (d.enter) d.enter();
+    clearInterval(gdT); gdT = setInterval(guideTick, 200); guideTick();
+  }
+  function guideNext(){
+    const d = GUIDE_DO[guideStep().id]; if (d.leave) d.leave();
+    gd.i++; gd.t0 = Date.now();
+    if (gd.i >= SX.GUIDE.length) { SV.guide = { done:today() }; gd = null; clearInterval(gdT); gdEl.classList.remove('on'); save(); if (!SX.social || !SX.social.acct) go('lobby'); return; }   // 走完：還沒取暱稱的去山友大廳
+    SV.guide = { i:gd.i }; save();
+    const n = GUIDE_DO[guideStep().id]; if (n.enter) n.enter();
+    guideTick();
+  }
+  function guideTick(){
+    const s = guideStep(); if (!s) return;
+    const d = GUIDE_DO[s.id], late = Date.now() - gd.t0 > GUIDE_SKIP_MS;
+    if (d.done && d.done()) return guideNext();
+    const L = $('#loading'), busy = (L && !L.classList.contains('done')) || $('#cover').classList.contains('on') || !!$('#mtLoad.on');
+    const t = d.spot ? d.spot() : null, r = t && t.getBoundingClientRect ? t.getBoundingClientRect() : t;
+    const show = !busy && (d.spot ? !!r : !d.when || d.when());
+    if (!show) { gdEl.classList.remove('on'); if (late && !busy) guideNext(); return; }   // 一直等不到要亮的東西：自己跳到下一步，不卡住
+    const vw = innerWidth, vh = innerHeight, P = 6, B = gdEl.querySelectorAll('.gdB'), ring = gdEl.querySelector('.gdRing'), say = gdEl.querySelector('.gdSay');
+    const h = r ? { x:Math.max(0, r.left - P), y:Math.max(0, r.top - P), w:Math.min(vw, r.width + P * 2), h:Math.min(vh, r.height + P * 2) } : null;
+    const box = (el, x, y, w, hh) => { el.style.cssText = `left:${x}px;top:${y}px;width:${Math.max(0, w)}px;height:${Math.max(0, hh)}px`; };
+    gdEl.className = 'on' + (d.free ? ' free' : '') + (d.tap ? ' tap' : '');
+    if (h) { box(B[0], 0, 0, vw, h.y); box(B[1], 0, h.y + h.h, vw, vh - h.y - h.h); box(B[2], 0, h.y, h.x, h.h); box(B[3], h.x + h.w, h.y, vw - h.x - h.w, h.h); box(ring, h.x, h.y, h.w, h.h); }
+    else { box(B[0], 0, 0, vw, vh); [1, 2, 3].forEach(k => box(B[k], 0, 0, 0, 0)); box(ring, 0, 0, 0, 0); }
+    say.querySelector('p').textContent = typeof s.text === 'function' ? s.text(SV) : s.text;
+    say.querySelector('.gdSkip').style.display = late && !d.tap ? '' : 'none';
+    // 話放哪：視窗開著時不蓋住視窗內容（亮按鈕的放最上面、點一下繼續的放最下面）；不然亮的地方在上半部就放它下面、在下半部就放它上面
+    const below = h ? h.y + h.h / 2 < vh * 0.5 : false, inM = modalOn();
+    say.style.top = inM ? (h ? '14px' : 'auto') : h ? (below ? `${Math.min(vh - 150, h.y + h.h + 14)}px` : 'auto') : d.free ? '18%' : '38%';
+    say.style.bottom = inM ? (h ? 'auto' : '16px') : h && !below ? `${Math.max(12, vh - h.y + 14)}px` : 'auto';
+  }
+  // 重看引導（設定頁「跟柴柴走一遍」）：正在爬山時不行（引導要從地圖選象山開始）
+  function guideReplay(){ if (onTrail()) { toast('先登頂或下山，再跟柴柴走一遍'); return; } SV.guide = null; go('map', () => guideStart(0)); }
+  // 開遊戲時：全新的存檔從頭開始；上次走到一半的接著來（還在地圖那幾步就從頭）
+  function guideBoot(){
+    if (guideNew()) { go('map', () => guideStart(0)); return true; }
+    const g = SV.guide; if (!g || g.done || !(g.i >= 0)) return false;
+    const tr = onTrail(), at = SX.GUIDE.findIndex(x => x.id === 'fast');
+    if (tr && g.i >= at) { startClimb(tr, true); guideStart(g.i); } else if (!tr) go('map', () => guideStart(0)); else { SV.guide = { done:today() }; return false; }
+    return true;
+  }
+
   SX.game = { gearGift, gearNote: () => SX.gearOn ? SX.gearNote(SX.gearSave()) : null, daily, updateDailyBadge, follow, teamUnlocks, notice,   // follow、teamUnlocks：好友跟隨（隊伍資料拿回來後補算、我能爬哪幾座山）；notice：背景通知排隊
     getSave:() => JSON.stringify(SV, skipImg), stats:() => SV.stats, summits:() => Object.values(SV.done).reduce((a, b) => a + (b || 0), 0), pet:() => SV.pet || null, summitEta,
     awayPace:m => baseSpeed(m) * devX(),   // 一起爬：遊戲關著時自己走的速度（隊友那邊拿來估離線時走到哪）
