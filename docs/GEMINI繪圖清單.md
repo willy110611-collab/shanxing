@@ -649,6 +649,7 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | 檔名 | 比例 | 內容 |
 |---|---|---|
 | `icon_locate` | 1:1 | 洋紅底。A small round wooden badge icon in the same style as the other round game icons (icon_map, icon_bag, icon_settings): a thick disc of warm honey-brown wood with visible wood grain and a slightly darker carved rim, delicate thin dark-brown ink outline, soft cel shading lit from the upper right. In the center, a hand-inked locate symbol: a cream-white circle drawn in dark-brown ink with four short crosshair ticks pointing up, down, left and right, and a small red-orange dot in the very middle, like a compass sight on an old trail map. Flat front view, simple and readable at 50 pixels, no text, no letters, no arrow, no map pin. |
+| `icon_friend` | 1:1 | 洋紅底。登山畫面下排「好友」按鈕（.i-friend）。A small game UI icon in exactly the same style as the uploaded icon set (hand-drawn ink outline, soft cel shading, warm colors, same size, line weight and framing): two cheerful hiker heads side by side, each wearing a tan bucket hat, one slightly in front of the other, with a tiny red heart between them. Simple, readable at 40 px. Plain flat magenta (#FF00FF) background only, no shadows, boxes or color patches behind the icon, no text. |
 
 ## 第 28 批：山腰步道兩種（泥土小徑、碎石路＋石壁；放進 `02.素材`）
 
