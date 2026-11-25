@@ -1364,29 +1364,46 @@
 
   // ───────── 裝備（試作：背包裡的「裝備」）─────────
   // 買、換上、修理、賣回。正在山上時只有走到山屋才能換裝和修理（山屋修理比較貴）；價錢都問 data.js
+  // 版面：登山客站中間，六格裝備圍在兩邊（每格下面一條耐久）；點一格，下面列出這一格的裝備，一件一顆按鈕（買／換上／修理），點名字展開賣回
+  let gearSel = null, gearOpenId = null;   // 現在看哪一格、哪一件展開了
+  const GEAR_SIDE = [['hat', 'pack', 'pole'], ['lamp', 'rain', 'extra']], GEAR_GLYPH = { hat:'帽', lamp:'燈', pack:'包', rain:'雨', pole:'杖', extra:'爪' };
+  // 裝備小圖：美術圖 gear_<代號> 到了就用，還沒到先畫一顆寫著字的圓牌
+  const gearIco = it => SX.art.img('gear_' + it.id, `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="23" fill="${it.base ? '#ead9b4' : '#f2c35a'}" stroke="${INK}" stroke-width="2.5"/><text x="30" y="38" text-anchor="middle" font-size="22" fill="${INK}">${GEAR_GLYPH[it.slot]}</text></svg>`);
   function openGear(keep){
-    const g = SX.gearSave(), day = SX.twDay(), tr = onTrail(), hut = tr ? SX.hutAt(SX.M[tr], P(tr).dist) : null, lock = !!tr && !hut, N = SX.COIN.NAME;
-    const dis = x => x ? ' disabled style="opacity:.45"' : '';
-    const row = it => {
-      const own = g.own[it.id], has = it.base || own != null, worn = SX.gearWorn(g, it.slot) === it, rc = SX.gearRepairCost(g, it.id, !!hut, day);
-      const state = worn ? '使用中' : it.base ? '' : own == null ? '' : own <= 0 ? '待修理' : '', dur = !it.base && own != null ? `・耐久 ${Math.ceil(own)}%` : '';
-      const btn = [ !has ? `<button class="chip" data-buy="${it.id}">買 ${it.price}</button>` : '',
-        has && !worn && (it.base || own > 0) ? `<button class="chip" data-on="${it.id}"${dis(lock)}>換上</button>` : '',
-        rc > 0 ? `<button class="chip" data-fix="${it.id}"${dis(lock)}>修理 ${rc}</button>` : '',
-        !it.base && own != null ? `<button class="chip" data-sell="${it.id}"${dis(lock && worn)}>賣 ${SX.gearSellPrice(it.id)}</button>` : '' ].join('');
-      return `<div class="gearRow${worn ? ' on' : ''}"><span class="gearN"><b>${it.name}</b>${state ? `<i>${state}</i>` : ''}<small>${it.text}${dur}</small></span><span class="gearB">${btn}</span></div>`;
+    const g = SX.gearSave(), R = SX.GEAR_RULE, day = SX.twDay(), tr = onTrail(), hut = tr ? SX.hutAt(SX.M[tr], P(tr).dist) : null, lock = !!tr && !hut, N = SX.COIN.NAME, coin = Math.floor(SV.coin || 0);
+    const num = n => n.toLocaleString('en-US'), dis = x => x ? ' disabled' : '', items = s => SX.GEAR.filter(x => x.slot === s);
+    const needFix = s => items(s).some(x => g.own[x.id] != null && g.own[x.id] <= R.LOW);
+    if (!gearSel) gearSel = (SX.GEAR_SLOTS.find(s => needFix(s.id)) || SX.GEAR_SLOTS[0]).id;
+    const slot = id => {
+      const s = SX.GEAR_SLOTS.find(x => x.id === id), it = SX.gearWorn(g, id), own = it && !it.base ? g.own[it.id] : null;
+      return `<button class="gearSlot${id === gearSel ? ' sel' : ''}${it ? '' : ' empty'}${needFix(id) ? ' warn' : ''}" data-slot="${id}">${gearIco(it || items(id)[0])}<span>${s.name}</span>${own != null ? `<i class="gearDur${own <= R.LOW ? ' low' : ''}"><b style="width:${Math.max(4, Math.ceil(own))}%"></b></i>` : ''}</button>`;
     };
+    const row = it => {
+      const own = g.own[it.id], mine = !it.base && own != null, has = it.base || mine, worn = SX.gearWorn(g, it.slot) === it, broken = SX.gearBroken(g, it.id), rc = SX.gearRepairCost(g, it.id, !!hut, day);
+      const fix = `<button class="chip" data-fix="${it.id}"${dis(lock)}>修理 ${num(rc)}</button>`, mainFix = broken || (worn && rc > 0 && own <= R.LOW);
+      const main = !has ? `<button class="chip${coin < it.price ? ' poor' : ''}" data-buy="${it.id}">買 ${num(it.price)}</button>` : mainFix ? fix : !worn ? `<button class="chip" data-on="${it.id}"${dis(lock)}>換上</button>` : '';
+      const more = mine && gearOpenId === it.id ? `<span class="gearMore">${rc > 0 && !mainFix ? fix : ''}<button class="chip" data-sell="${it.id}"${dis(lock && worn)}>賣回 ${num(SX.gearSellPrice(it.id))}</button></span>` : '';
+      return `<div class="gearRow${worn ? ' on' : ''}"><span class="gearTop"><span class="gearI">${gearIco(it)}</span><span class="gearN"${mine ? ` data-more="${it.id}"` : ''}><b>${it.name}</b>${worn ? '<i>使用中</i>' : broken ? '<i>待修理</i>' : ''}<small>${it.text}${mine ? `・耐久 ${Math.ceil(own)}%` : ''}</small></span><span class="gearB">${main}</span></span>${more}</div>`;
+    };
+    const all = SX.gearRepairAll(g, !!hut, day), sel = SX.GEAR_SLOTS.find(s => s.id === gearSel);
     const tip = lock ? '正在山上：走到山屋才能換裝和修理。' : hut ? `在${hut.name}：可以換裝和修理，山屋修理貴一點。` : g.repDay !== day ? '今天第一次修理半價。' : '';
     modal(`<button class="cbtn sm mBack" id="grX">← 返回</button><h3>裝備</h3>
-      <p class="summitBig" style="margin:0 0 6px">${N} <b>${Math.floor(SV.coin || 0).toLocaleString('en-US')}</b>${tip ? `<br><small>${tip}</small>` : ''}</p>
-      ${SX.GEAR_SLOTS.map(s => `<div class="grp">${s.name}</div>${SX.GEAR.filter(x => x.slot === s.id).map(row).join('')}`).join('')}`);
+      <p class="gearCoin">${SX.art.img('icon_coin', '')}${N} <b>${num(coin)}</b></p>
+      <div class="gearDoll"><div class="gearCol">${GEAR_SIDE[0].map(slot).join('')}</div><div class="gearMe">${SX.art.img('hiker_walk', '')}</div><div class="gearCol">${GEAR_SIDE[1].map(slot).join('')}</div></div>
+      ${tip ? `<p class="gearTip">${tip}</p>` : ''}
+      <div class="grp">${sel.name}</div>${items(gearSel).map(row).join('')}
+      <p class="gearTip">點買來的裝備名字，可以賣回（半價）。</p>
+      ${all.cost > 0 ? `<div class="mBtns" style="margin-top:8px"><button class="cbtn" id="grAll"${dis(lock)}>全部修好 ${num(all.cost)}</button></div>` : ''}`);
     if (typeof keep === 'number') $('#mCard').scrollTop = keep;
-    const again = () => { save(); gearBadge(); openGear($('#mCard').scrollTop); }, pay = n => { if ((SV.coin || 0) < n) { toast(`${N}不夠，再多走一點路吧`); return false; } SV.coin -= n; return true; };
+    const redo = () => openGear($('#mCard').scrollTop), again = () => { save(); gearBadge(); redo(); }, pay = n => { if ((SV.coin || 0) < n) { toast(`${N}不夠，再多走一點路吧`); return false; } SV.coin -= n; return true; };
     $('#grX').onclick = () => { A.pop(); openBag(); };
-    $$('#mCard [data-buy]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.buy]; if (!pay(it.price)) return; A.sparkle(); g.own[it.id] = SX.GEAR_RULE.FULL; if (!lock) g.on[it.slot] = it.id; again(); });
+    $$('#mCard [data-slot]').forEach(b => b.onclick = () => { A.pop(); gearSel = b.dataset.slot; gearOpenId = null; redo(); });
+    $$('#mCard [data-more]').forEach(b => b.onclick = () => { A.pop(); gearOpenId = gearOpenId === b.dataset.more ? null : b.dataset.more; redo(); });
+    $$('#mCard [data-buy]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.buy]; if (!pay(it.price)) return; A.sparkle(); g.own[it.id] = R.FULL; if (!lock) g.on[it.slot] = it.id; again(); });
     $$('#mCard [data-on]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.on]; A.pop(); g.on[it.slot] = it.id; again(); });
-    $$('#mCard [data-fix]').forEach(b => b.onclick = () => { const id = b.dataset.fix; if (!pay(SX.gearRepairCost(g, id, !!hut, day))) return; A.sparkle(); g.own[id] = SX.GEAR_RULE.FULL; g.repDay = day; again(); });
-    $$('#mCard [data-sell]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.sell]; A.pop(); if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = '確定賣？'; return; } SV.coin = (SV.coin || 0) + SX.gearSellPrice(it.id); delete g.own[it.id]; if (g.on[it.slot] === it.id) delete g.on[it.slot]; again(); });
+    $$('#mCard [data-fix]').forEach(b => b.onclick = () => { const id = b.dataset.fix; if (!pay(SX.gearRepairCost(g, id, !!hut, day))) return; A.sparkle(); SX.gearRepair(g, id, day); again(); });
+    $$('#mCard [data-sell]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.sell]; A.pop(); if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = '確定賣？'; return; } SV.coin = (SV.coin || 0) + SX.gearSellPrice(it.id); delete g.own[it.id]; if (g.on[it.slot] === it.id) delete g.on[it.slot]; gearOpenId = null; again(); });
+    if ($('#grAll')) $('#grAll').onclick = () => { if (!pay(all.cost)) return; A.sparkle(); all.ids.forEach(id => SX.gearRepair(g, id, day)); again(); };
   }
   // 出發前檢查：照現在的裝備試走一遍（跟離線補走同一套 simulate），看天氣、會不會走到晚上、哪件裝備快壞了
   function gearCheck(id){

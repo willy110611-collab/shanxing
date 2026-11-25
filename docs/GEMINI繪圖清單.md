@@ -662,3 +662,29 @@ Redraw hiker_rain_turn16. Copy the 16 poses exactly from the uploaded hiker_turn
 | `grass_tall_slope` | 16:9 | 洋紅 |
 | `canopy_branch` | 16:9 | 洋紅 |
 | `rock_wall_slope` | 16:9 | 洋紅 |
+
+## 第 29 批：裝備小圖與山幣（放進 `06.介面`，全部 1:1、洋紅底）
+
+裝備欄（試作，網址加 `?gear=1` 才看得到）每一格和每一件裝備的小圖，加一枚山幣。現在是程式畫的圓牌寫著「帽／燈／包／雨／杖／爪」，圖到了自動換上。畫法跟背包裡的寶物小圖同一套：單一物件置中、四周留一點空、手繪墨線＋柔和賽璐璐上色、不要文字。
+提示詞：先貼「共通規則」，再貼表格裡的英文，最後加「去背規則」那句。登山杖一律**銀灰或深灰色，不要粉紫色**（見美術風格統一清單）。
+
+| 檔名 | 比例 | 內容 |
+|---|---|---|
+| `gear_hat_old` | 1:1 | 洋紅底。A well-worn soft canvas bucket hat in faded khaki, slightly floppy brim, a small stitched patch on the side. |
+| `gear_hat_wool` | 1:1 | 洋紅底。A chunky knitted wool beanie in warm rust orange with a cream folded cuff and a small pom-pom on top. |
+| `gear_hat_wind` | 1:1 | 洋紅底。A padded windproof mountaineering cap in deep teal with soft fleece ear flaps and a short brim. |
+| `gear_lamp_old` | 1:1 | 洋紅底。An old-fashioned hiking headlamp with a faded olive elastic strap and a small scratched round lamp, a little dim warm glow. |
+| `gear_lamp_led` | 1:1 | 洋紅底。A compact modern LED headlamp with a bright orange elastic strap and a clean white lens, a soft warm glow. |
+| `gear_lamp_pro` | 1:1 | 洋紅底。A high-power hiking headlamp with a wide black-and-yellow strap, a large lens and a small battery pack at the back, a strong warm glow. |
+| `gear_pack_old` | 1:1 | 洋紅底。A well-worn canvas hiking backpack in faded brown with leather straps, a rolled mat on top and a tin cup hanging at the side. |
+| `gear_pack_light` | 1:1 | 洋紅底。A slim lightweight hiking backpack in fresh leaf green with thin straps and a mesh side pocket holding a water bottle. |
+| `gear_pack_frame` | 1:1 | 洋紅底。A tall trekking backpack in deep forest green with a visible curved mesh ventilated back frame, padded hip belt and neatly strapped pockets. |
+| `gear_rain_light` | 1:1 | 洋紅底。A folded lightweight bright yellow hooded rain poncho, neatly folded with the hood on top, a few raindrops on it. |
+| `gear_rain_pro` | 1:1 | 洋紅底。A neatly folded breathable hooded rain jacket in sky blue with sealed zippers and a small chest vent, a few raindrops beading on it. |
+| `gear_pole_old` | 1:1 | 洋紅底。A pair of old wooden-handled trekking poles with silver-grey shafts, worn cork grips and frayed wrist straps, crossed. |
+| `gear_pole_alu` | 1:1 | 洋紅底。A pair of silver aluminium trekking poles with black foam grips and red twist locks, crossed. |
+| `gear_pole_carbon` | 1:1 | 洋紅底。A pair of sleek dark charcoal carbon-fibre trekking poles with cork grips and small gold lever locks, crossed. |
+| `gear_crampons` | 1:1 | 洋紅底。A pair of steel hiking crampons with orange straps and short spikes, placed side by side, a little snow on the spikes. |
+| `icon_coin` | 1:1 | 洋紅底。A single round game coin of warm honey-coloured wood with a gold rim, a tiny mountain peak and a leaf engraved in the centre. |
+
+之後才畫（等裝備清單確定不再改）：組隊的帳篷、爐具小圖 2 張；帽子、背包、登山杖穿在身上的疊圖（步道 24 張、裝備欄正面 6 張）。

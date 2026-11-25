@@ -853,7 +853,7 @@ SX.COIN = { NAME:'山幣', PER_KM:10, SUMMIT_PER_DIFF:30, DAILY:20, SIGNIN:20 };
 // RAIN_SLOW 雨天沒雨衣慢多少；REPAIR_RATE 修滿＝原價的幾成；HUT_MUL 山屋修理貴幾倍；FIRST_REPAIR 每天第一次修理打幾折；SELL_RATE 賣回幾成；
 // LOW 耐久剩多少算「快壞了」；LAST 用到剩這麼多就不再掉（撐到這趟結束）；CAMP_MAX_M 頭燈沒電後最多再走多遠找地方紮營；HUT_NEAR_M 離山屋多近算在山屋；GIFT 送的那件雨衣
 SX.GEAR_RULE = { FULL:100, LAST:1, LOW:20, RAIN_SLOW:0.15, REPAIR_RATE:0.1, HUT_MUL:1.5, FIRST_REPAIR:0.5, SELL_RATE:0.5, CAMP_MAX_M:500, HUT_NEAR_M:150, GIFT:'rain_light' };
-SX.GEAR_SLOTS = [ { id:'hat', name:'帽子' }, { id:'lamp', name:'頭燈' }, { id:'pack', name:'背包' }, { id:'rain', name:'雨衣' }, { id:'pole', name:'登山杖' }, { id:'extra', name:'隨身' } ];
+SX.GEAR_SLOTS = [ { id:'hat', name:'帽子' }, { id:'lamp', name:'頭燈' }, { id:'pack', name:'背包' }, { id:'rain', name:'雨衣' }, { id:'pole', name:'登山杖' }, { id:'extra', name:'冰爪' } ];
 // wear：耐久照什麼掉（km 走的公里、rainKm 雨中公里、snowKm 雪地公里、nightH 夜路小時）；life：從全新用到 0 可以撐多少（單位跟 wear 一樣）
 // 效果：speed 步速加幾成、stam 體力少掉幾成、temp 體溫少掉幾成、rainOk 雨天不變慢、rainTemp 雨天體溫再少掉幾成、nightH 每趟可以走幾小時夜路、snow 雪季管制的山可以出發
 SX.GEAR = [
@@ -902,6 +902,14 @@ SX.gearTripEnd = g => Object.keys(g.own).filter(id => SX.GEAR_BY[id] && g.own[id
 SX.gearRepairCost = (g, id, hut, day) => {
   const it = SX.GEAR_BY[id], R = SX.GEAR_RULE; if (!it || it.base || g.own[id] == null || g.own[id] >= R.FULL) return 0;
   return Math.max(1, Math.ceil(it.price * R.REPAIR_RATE * (R.FULL - g.own[id]) / R.FULL * (hut ? R.HUT_MUL : 1) * (g.repDay !== day ? R.FIRST_REPAIR : 1)));
+};
+// 修好一件：耐久回滿，記下今天修過了（之後今天不再半價）
+SX.gearRepair = (g, id, day) => { g.own[id] = SX.GEAR_RULE.FULL; g.repDay = day; };
+// 全部修好要多少：最貴的那件先修（每天第一次半價用在最貴的），回 { ids 照修的順序, cost }
+SX.gearRepairAll = (g, hut, day) => {
+  const t = { own:Object.assign({}, g.own), on:g.on, repDay:g.repDay }, ids = Object.keys(t.own).filter(id => SX.gearRepairCost(t, id, hut, day) > 0).sort((x, y) => SX.gearRepairCost(t, y, hut, day) - SX.gearRepairCost(t, x, hut, day));
+  let cost = 0; ids.forEach(id => { cost += SX.gearRepairCost(t, id, hut, day); SX.gearRepair(t, id, day); });
+  return { ids, cost };
 };
 SX.gearSellPrice = id => { const it = SX.GEAR_BY[id]; return it && !it.base ? Math.floor(it.price * SX.GEAR_RULE.SELL_RATE) : 0; };
 // 雪季入山管制的山（SX.permitNeed 說要管制的那些）還要帶沒壞的冰爪；可以出發回 null
