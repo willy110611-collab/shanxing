@@ -1757,7 +1757,7 @@
     wxT += dt; if (wxT > 60) { wxT = 0; if (!wxOverride) { const n = wxHere(); if (n.kind !== wx.kind || n.time !== wx.time) { wx = n; moodNow(); } } artRefresh(); }   // 每分鐘看一次之後會不會下雨：會的話先把雨衣版解開
     SC.render({ dist:st.dist, total:M.dist, t, dt, speed: dt > 0 ? Math.min(6, d / dt) : 0, vBase: baseSpeed(M) * devX(), boost, rest:!!st.rest, sleep:!!st.sleep, wx, pet:SV.pet || null, frac:st.dist / M.dist, stam:st.stam, ft:ftNow, fps:fpsNow });   // ft、fps：給自動畫質量真正每格花多久
     if ($('#bubble').classList.contains('on')) placeBubble();
-    if (st.away && !paused && !arrived) showAway();   // 離開時的日記：畫面畫好了才打開（補拍照片要用到畫面）
+    if (st.away && !paused && !arrived && !$('#cover').classList.contains('on')) showAway();   // 離開時的日記：畫面畫好了、封面的迷霧也撥開了才打開（補拍照片要用到畫面）
     updTag();
     hudT -= dt; if (hudT <= 0) { hudT = 0.2; hudTick(); }
   }
@@ -2226,14 +2226,15 @@
     const c = $('#cover'); if (!c) { enter(); pumpNotice(); return; }
     const id = innerWidth > innerHeight && SX.art.url('cover_key') ? 'cover_key' : 'cover_portrait', u = SX.art.url(id);
     if (u) { c.insertAdjacentHTML('afterbegin', `<img class="cvArt" src="${u}" alt="" draggable="false">`); c.classList.add('art'); c.querySelector('.cvArt').onerror = e => { e.target.remove(); c.classList.remove('art'); }; }   // 圖讀不到就回到暫代封面
+    // 撥開的兩片霧：有 Gemini 畫的 mist_left／mist_right 就用圖，沒有就是 style.css 的柔邊漸層
+    [['.mL', 'mist_left'], ['.mR', 'mist_right']].forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });
     let tapped = false;
     const tap = e => {
       if (tapped || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
-      tapped = true; enter(); c.classList.add('off');
+      tapped = true;
+      MO.mist(c, enter).then(() => { c.classList.remove('on', 'veil'); pumpNotice(); });   // 迷霧撥開、看到曙光才收起封面
     };
-    const gone = e => { if (e.target !== c || !c.classList.contains('off')) return; c.classList.remove('on', 'off'); pumpNotice(); };
     c.addEventListener('click', tap); c.addEventListener('keydown', tap);
-    c.addEventListener('transitionend', gone); c.addEventListener('transitioncancel', gone);
     c.classList.add('on'); c.focus({ preventScroll:true });
   }
   // 網路太慢：讀取超過 LOAD_TIMEOUT_MS 還沒好，在讀取畫面告訴玩家，讓他選「再試一次」或「先進去看看」（小柴犬繼續跑）
