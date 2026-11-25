@@ -2226,13 +2226,13 @@
     const c = $('#cover'); if (!c) { enter(); pumpNotice(); return; }
     const id = innerWidth > innerHeight && SX.art.url('cover_key') ? 'cover_key' : 'cover_portrait', u = SX.art.url(id);
     if (u) { c.insertAdjacentHTML('afterbegin', `<img class="cvArt" src="${u}" alt="" draggable="false">`); c.classList.add('art'); c.querySelector('.cvArt').onerror = e => { e.target.remove(); c.classList.remove('art'); }; }   // 圖讀不到就回到暫代封面
-    // 撥開的兩片霧：有 Gemini 畫的 mist_left／mist_right 就用圖，沒有就是 style.css 的柔邊漸層
-    [['.mL', 'mist_left'], ['.mR', 'mist_right']].forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });
+    // 散開的四團雲：有 Gemini 畫的 mist_tl／mist_tr／mist_bl／mist_br 就用圖，沒有就是 style.css 的柔邊漸層
+    ['tl', 'tr', 'bl', 'br'].map(k => ['.m-' + k, 'mist_' + k]).forEach(([sel, id]) => { const m = SX.art.url(id), el = c.querySelector(sel); if (m && el) { el.style.backgroundImage = `url("${m}")`; el.classList.add('art'); } });
     let tapped = false;
     const tap = e => {
       if (tapped || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
       tapped = true;
-      MO.mist(c, enter).then(() => { c.classList.remove('on', 'veil'); pumpNotice(); });   // 迷霧撥開、看到曙光才收起封面
+      MO.mist(c, enter).then(() => { c.classList.remove('on', 'veil'); pumpNotice(); });   // 雲霧散開、看到曙光才收起封面
     };
     c.addEventListener('click', tap); c.addEventListener('keydown', tap);
     c.classList.add('on'); c.focus({ preventScroll:true });
