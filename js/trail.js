@@ -1787,6 +1787,7 @@ function useGL(on){
   if (glc) glc.canvas.style.display = on ? '' : 'none';
   FGRIM = {}; RAYS = null; farReset(); S.resize();
 }
+S.g3d = id => G3D_P !== '0' && (G3D_P === 'all' || G3D_IDS.indexOf(id) >= 0 || (G3D_P === '1' && G3D_TEST.indexOf(id) >= 0));   // 測試掛鉤（轉彎巡檢）：這座山有 WebGL 時是不是用立體地面
 S.gl = function(on, trim){ if (on != null) useGL(on); if (trim != null && glc) glc.trim(trim); return { on:!!(ctx && ctx.gpu), ok:!!glc, stats:ctx && ctx.gpu ? ctx.stats() : null }; };   // trim：測試用，馬上卸下這麼多毫秒沒畫到的貼圖（平常 gl2d 自己 30 秒卸一次）   // 測試掛鉤：現在用哪一種畫筆、這一格送了幾批（給 true／false 直接換）
 S.resize = function(){
   if (!cv || !ocv) return;
