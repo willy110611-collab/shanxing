@@ -3092,13 +3092,14 @@ function heroCover(x0, y0, w, h){   // 這個範圍蓋住登山客身體（腳�
 // 山腰台階切出高土坎的那一邊，根部不能懸在土坎外面（圖的底邊會在半空中露出一條直線）：往平台裡面挪，最多讓半寬的 1 - SEAT_IN 垂到土坎上。
 // hw：這張圖畫出來的半寬（公尺）。結果放在 SEAT（x、y 畫面位置，xo 挪過以後離路中心幾公尺）
 const SEAT_IN = 0.85, SEAT_UP = 0.6, SEAT = { x:0, y:0, xo:0 };
+const SEAT_SINK = [0.14, 0.12];   // 根部埋進土裡一點（2026-11-26：花草樹木、石頭不能浮在地上）：往下沉 半寬 × 第一個數，最多第二個數（公尺）
 function seatAt(i, side, xo, hw){
   const sd = side > 0 ? 1 : 0, k = clamp((Math.max(shelfCut(i, sd), shelfCut(i + 1, sd)) - 0.04) / 0.16, 0, 1), rw = rwAt(i);
   const bw = bankWd(i, side);
   if (k > 0) { const lo = rw + bw + hw * SEAT_IN; if (xo < lo) xo = lerp(xo, lo, k); }
-  if (G3B) { SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = HOR - (pW[gj] + (pW[gj + 1] - pW[gj]) * gf + g3Ht(i, gf, side, Math.max(xo, rw + bw)) - camY) * gs; return SEAT; }   // 立體地面：照網格畫出來的地面高度種（同一段前後兩排、左右兩個格點之間照直線內插，跟顯示卡畫的一樣），階梯段兩旁也照平順的斜坡（不是踏面高度）；有深度遮擋所以不用往外抬（2026-11-25 回報植物漂浮）
+  if (G3B) { SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = HOR - (pW[gj] + (pW[gj + 1] - pW[gj]) * gf + g3Ht(i, gf, side, Math.max(xo, rw + bw)) - Math.min(hw * SEAT_SINK[0], SEAT_SINK[1]) - camY) * gs; return SEAT; }   // 立體地面：照網格畫出來的地面高度種（同一段前後兩排、左右兩個格點之間照直線內插，跟顯示卡畫的一樣），階梯段兩旁也照平順的斜坡（不是踏面高度）；有深度遮擋所以不用往外抬（2026-11-25 回報植物漂浮）
   const hc = terrH(i, side, Math.max(xo, rw + bw)), ho = terrH(i, side, Math.max(xo + hw * SEAT_UP, rw + bw));   // ho：往外半個身寬那裡的地面（山坡往外升高時，大叢的植物外側那半邊不會埋進坡裡、被近一段的坡面切成一條直線）
-  SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = gy - Math.max(hc, ho) * gs;
+  SEAT.xo = xo; SEAT.x = gx + side * xo * gs; SEAT.y = gy - (Math.max(hc, ho) - Math.min(hw * SEAT_SINK[0], SEAT_SINK[1])) * gs;
   return SEAT;
 }
 // 路旁植物（一律經過 seatAt 種在地面上）：m 大小倍率，其他同 drawSpr
@@ -3194,7 +3195,7 @@ function meshGround(b){
       const k = c - nSide, side = k < 0 ? -1 : 1, q = Math.abs(k) - 1, road = q < G3_ROAD.length, o = nv * 9;
       const d = lerp(A[c * 2], B[c * 2], f), h = road ? hr : ht + lerp(A[c * 2 + 1], B[c * 2 + 1], f);   // 階梯兩旁的山坡是平順的斜坡（不跟著一階一階：2026-11-25 主人說真的步道旁草皮不會長成一階一階）；階梯比坡面低一點點，像切進山坡裡，交界是土坎
       const w = k === 0 ? 1 : road ? (q === G3_ROAD.length - 1 ? 0.5 : 1) : 0;
-      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && road ? 2 : 0); V[o + 6] = 1;
+      V[o] = xc + side * d - camX; V[o + 1] = h - camY; V[o + 2] = zr; V[o + 3] = side * d; V[o + 4] = za - h; V[o + 5] = w + (rs && (road || q === G3_ROAD.length) ? 2 : 0); V[o + 6] = 1;   // 立面那兩排：路緣外第一個點也標成立面（路面比例 0）。以前只標到路緣，路緣到土坎那一格裡「是不是立面」從中間切一刀，每一階兩端各多出一塊深色的方塊伸到草地上（夜晚特別明顯，2026-11-26 回報的圖層錯位）
       V[o + 7] = fade; V[o + 8] = rv || 0; G3BV[nv] = lerp(A[nc * 2 + c], B[nc * 2 + c], f);
       nv++;
     }
@@ -3217,7 +3218,7 @@ function meshGround(b){
     const o = (r * nc + c) * 9, oL = (r * nc + Math.max(0, c - 1)) * 9, oR = (r * nc + Math.min(nc - 1, c + 1)) * 9, oB = (Math.max(0, r - 1) * nc + c) * 9, oF = (Math.min(rows - 1, r + 1) * nc + c) * 9;
     const dx = V[oR] - V[oL], dy = V[oR + 1] - V[oL + 1], gx = Math.abs(dx) > 1e-4 ? dy / dx : 0, dz = V[oF + 2] - V[oB + 2], gz = dz > 0.02 ? (V[oF + 1] - V[oB + 1]) / dz : 0;   // 階梯立面那幾排（同一個遠近）：明暗交給著色器（立面整面暗）
     const nl = 1 / Math.sqrt(gx * gx + 1 + gz * gz), dt = (-gx * Lx + Ly) * nl;
-    V[o + 6] = V[o + 5] >= 1.5 ? (RZ && V[o + 5] > 2.01 ? (V[o + 8] * RZ.rows % 1 < 0.5 ? G3_RTOP : G3_RBOT) : G3_RISER) : clamp((1 + 0.6 * (dt - Ly)) * (1 + G3_AO * G3BV[r * nc + c]), 0.42, 1.25);   // 草地小起伏：凹下去的地方暗一點、凸起來的亮一點
+    V[o + 6] = V[o + 5] > 2.01 ? (RZ ? (V[o + 8] * RZ.rows % 1 < 0.5 ? G3_RTOP : G3_RBOT) : G3_RISER) : clamp((1 + 0.6 * (dt - Ly)) * (1 + G3_AO * G3BV[r * nc + c]), 0.42, 1.25);   // 草地小起伏：凹下去的地方暗一點、凸起來的亮一點
   }
   if (g3RailOk()) { const r = g3Rails(b, V, I, nv, ni); nv = r[0]; ni = r[1]; }
   const hz = hazeRgb, RP = g3RailOk();
@@ -3961,8 +3962,7 @@ function edgeLeaves(i, j, stp, n){
     if (Hh(i, 140 + q) > 0.6) continue;
     proj(j, Hh(i, 143 + q), stp);
     const side = Hh(i, 146 + q) < 0.5 ? -1 : 1, x = gx + side * (rwSide(i, side, Hh(i, 143 + q)) - 0.02 - 0.25 * Hh(i, 149 + q)) * gs, r = Math.max(1, 0.06 * gs), a = Hh(i, 152 + q) * TAU;
-    ctx.fillStyle = LEAFC[(Hh(i, 155 + q) * 4) | 0]; leaf(x, gy, r, a);
-    if (r > 2.5) { ctx.lineWidth = Math.min(1, r * 0.15); ctx.strokeStyle = INK; ctx.stroke(); }
+    ctx.fillStyle = LEAFC[(Hh(i, 155 + q) * 4) | 0]; leaf(x, gy, r, a);   // 不描黑邊：夜晚葉子變暗後只剩一圈黑線，像路邊的黑色小記號
   }
 }
 function sparkle(x, y, sc, t, m){
@@ -4297,7 +4297,7 @@ function drawWorld(b, t, jHi, jLo, far){
           ctx.strokeStyle = 'rgba(255,236,196,0.35)'; ctx.lineWidth = lw * 0.6; ctx.beginPath();
           for (k = 1; k <= PLANKS; k++) { proj(j, k / PLANKS, stp); ctx.moveTo(gx - rw * gs, gy + lw); ctx.lineTo(gx + rw * gs, gy + lw); }
           ctx.stroke();
-        } else if (!(stp && TEX.steps)) for (k = 0; k < nPeb; k++) {            // 小石子（換成階梯貼圖的那段不撒：小石子落在一階階木頭踏面上，看起來是一顆顆白點加黑框，2026-11-25 合歡北峰回報「很多黑點」）
+        } else if (!TEX.road && !isWood) for (k = 0; k < nPeb; k++) {            // 程式畫的小石子：只在路面貼圖還沒載好時畫。貼圖本身已經畫了石子；程式畫的是淺色橢圓加黑框，白天混在淺色路面裡看不出來，夜晚路面變暗後變成一顆顆黑框白點（2026-11-25 合歡北峰、11-26 夜晚道路回報「很多黑點」）
           if (Hh(i, 60 + k * 4) > 0.7) continue;
           proj(j, Hh(i, 61 + k * 4), stp);
           const pr = (0.035 + 0.05 * Hh(i, 62 + k * 4)) * gs;

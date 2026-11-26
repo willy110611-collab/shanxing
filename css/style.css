@@ -971,3 +971,6 @@ h1,h2,h3,h4,.ic-h b,.rc-h b,.pTop b,.logo,.ldTitle,.tName,.summitBig{font-family
 @media (prefers-reduced-motion:reduce){#guide .gdRing{animation:none}}
 .gearLay{position:relative;display:block;height:208px;aspect-ratio:378/1110}
 .gearLay img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:fill}
+.gearCoin{display:block;text-align:center}
+.gearCoin img{display:inline-block;vertical-align:-4px;margin-right:6px}
+.gearCoin b{margin-left:4px}
