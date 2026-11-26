@@ -1372,6 +1372,14 @@
   const GEAR_SIDE = [['hat', 'pack', 'pole'], ['lamp', 'rain', 'extra']], GEAR_GLYPH = { hat:'帽', lamp:'燈', pack:'包', rain:'雨', pole:'杖', extra:'爪', tent:'帳', stove:'爐' };
   // 裝備小圖：美術圖 gear_<代號> 到了就用，還沒到先畫一顆寫著字的圓牌
   const gearIco = it => SX.art.img('gear_' + it.id, `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="23" fill="${it.base ? '#ead9b4' : '#f2c35a'}" stroke="${INK}" stroke-width="2.5"/><text x="30" y="38" text-anchor="middle" font-size="22" fill="${INK}">${GEAR_GLYPH[it.slot]}</text></svg>`);
+  // 裝備欄中間的登山客：底圖（gearme_rest）上面疊帽子、背包、登山杖三層，各放現在穿的那一款（圖層由 art/gearme.js 切好，大小都一樣、直接疊）
+  // 沒有那一款的圖（頭燈、雨衣、冰爪看不到；之後新增的裝備還沒畫）就疊預設那一款；整組圖還沒到就照舊用走路背影圖
+  const GEAR_DOLL = ['hat', 'pack', 'pole'];
+  function gearDoll(g){
+    if (!SX.art.url('gearme_rest')) return SX.art.img('hiker_walk', '');
+    const id = s => { const it = SX.gearWorn(g, s), n = it ? it.id.replace(/^[a-z]+_/, '') : 'old'; return SX.art.has(`gearme_${s}_${n}`) ? `gearme_${s}_${n}` : `gearme_${s}_old`; };
+    return `<span class="gearLay">${['gearme_rest', ...GEAR_DOLL.map(id)].map(x => SX.art.img(x, '')).join('')}</span>`;
+  }
   function openGear(keep){
     const g = SX.gearSave(), R = SX.GEAR_RULE, day = SX.twDay(), tr = onTrail(), hut = tr ? SX.hutAt(SX.M[tr], P(tr).dist) : null, lock = !!tr && !hut, N = SX.COIN.NAME, coin = Math.floor(SV.coin || 0);
     const num = n => n.toLocaleString('en-US'), dis = x => x ? ' disabled' : '', items = s => SX.GEAR.filter(x => x.slot === s);
@@ -1392,7 +1400,7 @@
     const tip = lock ? '正在山上：走到山屋才能換裝和修理。' : hut ? `在${hut.name}：可以換裝和修理，山屋修理貴一點。` : g.repDay !== day ? '今天第一次修理半價。' : '';
     modal(`<button class="cbtn sm mBack" id="grX">← 返回</button><h3>裝備</h3>
       <p class="gearCoin">${SX.art.img('icon_coin', '')}${N} <b>${num(coin)}</b></p>
-      <div class="gearDoll"><div class="gearCol">${GEAR_SIDE[0].map(slot).join('')}</div><div class="gearMe">${SX.art.img('hiker_walk', '')}</div><div class="gearCol">${GEAR_SIDE[1].map(slot).join('')}</div></div>
+      <div class="gearDoll"><div class="gearCol">${GEAR_SIDE[0].map(slot).join('')}</div><div class="gearMe">${gearDoll(g)}</div><div class="gearCol">${GEAR_SIDE[1].map(slot).join('')}</div></div>
       <div class="gearTeam"><span>隊伍裝備<small>一個人帶，全隊有效</small></span>${SX.GEAR_SLOTS.filter(s => s.team).map(s => slot(s.id)).join('')}</div>${gearTeamHtml()}
       ${tip ? `<p class="gearTip">${tip}</p>` : ''}
       <div class="grp">${sel.name}</div>${items(gearSel).map(row).join('')}

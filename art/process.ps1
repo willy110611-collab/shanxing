@@ -21,7 +21,7 @@ $opaque = '^(sky_|ground_|enc_|scene_|plaza_|load_|cover_|ui_page$|summit_(' + (
 # icon_locate（地圖左下「我的位置」圓木牌，第 27 批）是網頁按鈕的背景圖：照 icon_ 這組走（只在網頁上、用到才下載、讀取畫面先下載），去洋紅底存透明 webp
 $htmlOnly = '^(t_|gear_|stamp_|ui_|icon_(?!lock$)|rarity_|badge_|title_logo$|encounter_frame$|cover_(portrait|key)$|mist_(tl|tr|bl|br)$)'
 # 不在開遊戲時下載，跳出卡片、打開視窗時才載（manifest 標 lazy）：大插圖＋只在網頁上顯示的圖＋出發前的小山讀取圖（load_<山>，按下出發才下載那一座的，js/mtload.js）
-$lazy = '^(enc_|scene_|load_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
+$lazy = '^(enc_|scene_|load_|gearme_|summit_(' + ($mts -join '|') + ')$)|' + $htmlOnly
 # 介面的按鈕、木框、圖示每個畫面都看得到：讀取畫面時就先下載好（manifest 標 pre），只下載、不解開放記憶體
 # （2026-11-24 改成用到才下載後，更新完第一次打開按鈕透明到圖下載完，決定先下載好）。寶物卡、集印照樣打開背包才下載
 # 封面（cover_portrait 直版、cover_key 橫版，不去背的整張圖）、點封面後往四面散開的四團雲（mist_tl／mist_tr／mist_bl／mist_br，去洋紅底）：讀取畫面跑完就要用，也先下載好
@@ -37,7 +37,8 @@ $tmpDir = Join-Path ([IO.Path]::GetTempPath()) "shanxing_art_$PID"; New-Item -It
 # 解碼後的像素指紋：同一張圖重新轉檔，像素一樣就算沒變
 function PixelSum($f) { (& ffmpeg -v error -i $f -map 0:v -f hash -hash sha256 -) -join '' }
 $node = (Get-Command node -ErrorAction SilentlyContinue).Source; if (-not $node) { $node = 'C:\Program Files\nodejs\node.exe' }
-Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|jpe?g|jfif|webp)$' } | ForEach-Object {
+# art\raw 底下 _src_ 開頭的資料夾是「還要先加工」的來源圖（例如 _src_gearme：裝備欄人物的 7 張原圖，由 art\gearme.js 切成圖層），這裡不處理
+Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|jpe?g|jfif|webp)$' -and $_.FullName -notmatch '\\_src_' } | ForEach-Object {
   # 在檔名裡找第一個清單上有的英文名字
   $name = $null
   foreach ($m in [regex]::Matches($_.BaseName.ToLower(), '[a-z][a-z0-9_]*')) { if ($known.ContainsKey($m.Value)) { $name = $m.Value; break } }
@@ -61,8 +62,14 @@ Get-ChildItem $raw -File -Recurse | Where-Object { $_.Extension -match '^\.(png|
     $max = if ($name -match '^hiker_.*walk$') { 1600 } elseif ($name -match '_walk$') { 800 } elseif ($name -match '^frame_') { 1080 } else { 720 }
     # 去洋紅底：art\despill.js 在原圖尺寸把邊緣的洋紅混色解開（變透明＋換回圖的顏色）、透明處填圖的顏色，再縮圖存 webp
     # 遊戲載入時不再處理，所以洋紅一定要在這裡清乾淨（tools\artscan.js 會檢查）
+    if ($name -like 'gearme_*') {
+      # 裝備欄人物的圖層（art\gearme.js 切好的）：已經去過背、每一層同一個大小，只縮圖（高 640）；不裁透明邊，裁了各層就對不齊
+      ffmpeg -v error -y -i $_.FullName -vf "scale=-2:640,lutrgb=a='if(gte(val,240),255,if(lte(val,10),0,round(val/17)*17))'" -c:v libwebp -quality 82 $tmp
+      if ($LASTEXITCODE) { throw "縮圖失敗：$($_.Name)" }
+    } else {
     & $node (Join-Path $here 'despill.js') $_.FullName $tmp $max | Out-Null
     if ($LASTEXITCODE) { throw "去背失敗：$($_.Name)" }
+    }
     if ($name -match $htmlOnly) { & $node (Join-Path $here 'trim.js') $tmp | Out-Null; if ($LASTEXITCODE) { throw "裁透明邊失敗：$($_.Name)" } }
   }
   if ((Test-Path $out) -and ((PixelSum $out) -eq (PixelSum $tmp))) { Remove-Item $tmp; Write-Host "沒變 $name"; return }

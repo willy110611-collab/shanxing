@@ -697,3 +697,17 @@ Redraw this sprite sheet with the SAME 16 poses, but make every figure smaller s
 | `gear_stove` | 1:1 | 洋紅底。A compact camping gas stove with a small dented aluminium pot on top, a tiny blue flame and a wisp of steam. |
 
 之後才畫（等裝備清單確定不再改）：帽子、背包、登山杖穿在身上的疊圖（步道 24 張、裝備欄正面 6 張）。
+
+## 第 30 批：裝備欄中間的登山客（換裝備會跟著換樣子；只在裝備欄，登山畫面的人不變）
+
+**不是一張一張獨立畫**：要在同一個 Gemini 對話裡，先畫底圖，再叫它「其他都不要動，只換帽子／背包／登山杖」，這樣每張跟底圖只差那一件、位置完全對得上（Gemini 要選 Hydrogen 模式，「自動」模式會拒絕）。7 張原圖放 `art/raw/_src_gearme/`（doll_base、doll_hat_wool、doll_hat_wind、doll_pack_light、doll_pack_frame、doll_pole_alu、doll_pole_carbon，3:4、洋紅底），跑 `node art/gearme.js` 切成下面 10 張圖層（輸出到 `06.介面`），再照常跑 `art/process.ps1`。
+
+底圖提示詞：`Generate one portrait 3:4 image. Game character illustration: a cartoon hiker seen from directly behind, standing still and upright, full body from hat to boots, centered, holding two silver-grey trekking poles planted beside the feet; ` + 主角設定的穿著 + 畫風 + 去背規則。
+換裝提示詞：`Now edit the ORIGINAL base hiker image again (the first image in this chat). Keep everything exactly identical: same pose, same position and size in the frame, … Change ONLY the hat／backpack／two trekking poles: ` + 那一款的描述（跟第 29 批小圖同一段）。
+
+| 檔名（圖層，程式切出來的） | 內容 |
+|---|---|
+| `gearme_rest` | 底圖挖掉帽子、背包、登山杖三塊 |
+| `gearme_hat_old` `gearme_hat_wool` `gearme_hat_wind` | 帽子那一塊：原本的寬邊帽／毛帽／防風保暖帽 |
+| `gearme_pack_old` `gearme_pack_light` `gearme_pack_frame` | 背包那一塊：原本的背包／輕量背包／透氣背架背包 |
+| `gearme_pole_old` `gearme_pole_alu` `gearme_pole_carbon` | 登山杖那一塊：原本的／鋁合金／碳纖維 |

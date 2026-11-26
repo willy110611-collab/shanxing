@@ -10,7 +10,7 @@ const G = SX.ART_GROUPS = {};
 G.WARM = /^hiker_(step8|stairs16)$/;
 // 也會在網頁上顯示（<img>、樣式表、日記小圖示、新手教學）的圖：裁掉透明邊的版本只做一次存起來，
 // 不在這個畫面也拿得到（js/art.js 的 A.url）。新的圖要放進網頁（SX.art.img / url）就加在這裡（tools/check.js 會檢查）
-G.HTML = /^(gear_|icon_coin$|face_|pet_[a-z]+_face$|emo_|wx_|icon_lock$|cairn$|hut_|note_|deck_view$|bench$|treasure_box$|hiker_walk$|sign_wood$|summit_marker$|map_pin$)/;
+G.HTML = /^(gear_|gearme_|icon_coin$|face_|pet_[a-z]+_face$|emo_|wx_|icon_lock$|cairn$|hut_|note_|deck_view$|bench$|treasure_box$|hiker_walk$|sign_wood$|summit_marker$|map_pin$)/;
 // 不畫在畫布上的圖：開遊戲的讀取畫面小柴犬（css 直接用檔案）、寵物大頭照（只在網頁上）
 G.NONE = /^(shiba_run$|pet_[a-z]+_face$)/;
 // 地圖：立體地圖、雲、路標、鎖頭、右上天氣小圖、登山口的人（下雨穿雨衣）＋帶著的寵物走路圖
