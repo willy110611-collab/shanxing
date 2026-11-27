@@ -1366,7 +1366,7 @@
   }
 
   // ───────── 裝備（試作：背包裡的「裝備」）─────────
-  // 買、換上、修理、賣回。正在山上時只有走到山屋才能換裝和修理（山屋修理比較貴）；價錢都問 data.js
+  // 買、換上、修理、賣回。換裝、買、賣隨時都可以（2026-11-27 主人說換裝要打開）；正在山上時修理要走到山屋（山屋修理比較貴）；價錢都問 data.js
   // 版面：登山客站中間，六格裝備圍在兩邊（每格下面一條耐久）；點一格，下面列出這一格的裝備，一件一顆按鈕（買／換上／修理），點名字展開賣回
   let gearSel = null, gearOpenId = null;   // 現在看哪一格、哪一件展開了
   const GEAR_SIDE = [['hat', 'pack', 'pole'], ['lamp', 'rain', 'extra']], GEAR_GLYPH = { hat:'帽', lamp:'燈', pack:'包', rain:'雨', pole:'杖', extra:'爪', tent:'帳', stove:'爐' };
@@ -1392,12 +1392,12 @@
     const row = it => {
       const own = g.own[it.id], mine = !it.base && own != null, has = it.base || mine, worn = SX.gearWorn(g, it.slot) === it, broken = SX.gearBroken(g, it.id), rc = SX.gearRepairCost(g, it.id, !!hut, day);
       const fix = `<button class="chip" data-fix="${it.id}"${dis(lock)}>修理 ${num(rc)}</button>`, mainFix = broken || (worn && rc > 0 && own <= R.LOW);
-      const main = !has ? `<button class="chip${coin < it.price ? ' poor' : ''}" data-buy="${it.id}">買 ${num(it.price)}</button>` : mainFix ? fix : !worn ? `<button class="chip" data-on="${it.id}"${dis(lock)}>換上</button>` : '';
-      const more = mine && gearOpenId === it.id ? `<span class="gearMore">${rc > 0 && !mainFix ? fix : ''}<button class="chip" data-sell="${it.id}"${dis(lock && worn)}>賣回 ${num(SX.gearSellPrice(it.id))}</button></span>` : '';
+      const main = !has ? `<button class="chip${coin < it.price ? ' poor' : ''}" data-buy="${it.id}">買 ${num(it.price)}</button>` : mainFix ? fix : !worn ? `<button class="chip" data-on="${it.id}">換上</button>` : '';
+      const more = mine && gearOpenId === it.id ? `<span class="gearMore">${rc > 0 && !mainFix ? fix : ''}<button class="chip" data-sell="${it.id}">賣回 ${num(SX.gearSellPrice(it.id))}</button></span>` : '';
       return `<div class="gearRow${worn ? ' on' : ''}"><span class="gearTop"><span class="gearI">${gearIco(it)}</span><span class="gearN"${mine ? ` data-more="${it.id}"` : ''}><b>${it.name}</b>${worn ? '<i>使用中</i>' : broken ? '<i>待修理</i>' : ''}<small>${it.text}${mine ? `・耐久 ${Math.ceil(own)}%` : ''}</small></span><span class="gearB">${main}</span></span>${more}</div>`;
     };
     const all = SX.gearRepairAll(g, !!hut, day), sel = SX.GEAR_SLOTS.find(s => s.id === gearSel);
-    const tip = lock ? '正在山上：走到山屋才能換裝和修理。' : hut ? `在${hut.name}：可以換裝和修理，山屋修理貴一點。` : g.repDay !== day ? '今天第一次修理半價。' : '';
+    const tip = lock ? '正在山上：換裝隨時可以，修理要走到山屋。' : hut ? `在${hut.name}：可以修理，山屋修理貴一點。` : g.repDay !== day ? '今天第一次修理半價。' : '';
     modal(`<button class="cbtn sm mBack" id="grX">← 返回</button><h3>裝備</h3>
       <p class="gearCoin">${SX.art.img('icon_coin', '')}${N} <b>${num(coin)}</b></p>
       <div class="gearDoll"><div class="gearCol">${GEAR_SIDE[0].map(slot).join('')}</div><div class="gearMe">${gearDoll(g)}</div><div class="gearCol">${GEAR_SIDE[1].map(slot).join('')}</div></div>
@@ -1411,7 +1411,7 @@
     $('#grX').onclick = () => { A.pop(); openBag(); };
     $$('#mCard [data-slot]').forEach(b => b.onclick = () => { A.pop(); gearSel = b.dataset.slot; gearOpenId = null; redo(); });
     $$('#mCard [data-more]').forEach(b => b.onclick = () => { A.pop(); gearOpenId = gearOpenId === b.dataset.more ? null : b.dataset.more; redo(); });
-    $$('#mCard [data-buy]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.buy]; if (!pay(it.price)) return; A.sparkle(); g.own[it.id] = R.FULL; if (!lock) g.on[it.slot] = it.id; again(); });
+    $$('#mCard [data-buy]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.buy]; if (!pay(it.price)) return; A.sparkle(); g.own[it.id] = R.FULL; g.on[it.slot] = it.id; again(); });
     $$('#mCard [data-on]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.on]; A.pop(); g.on[it.slot] = it.id; again(); });
     $$('#mCard [data-fix]').forEach(b => b.onclick = () => { const id = b.dataset.fix; if (!pay(SX.gearRepairCost(g, id, !!hut, day))) return; A.sparkle(); SX.gearRepair(g, id, day); again(); });
     $$('#mCard [data-sell]').forEach(b => b.onclick = () => { const it = SX.GEAR_BY[b.dataset.sell]; A.pop(); if (!b.dataset.arm) { b.dataset.arm = 1; b.textContent = '確定賣？'; return; } SV.coin = (SV.coin || 0) + SX.gearSellPrice(it.id); delete g.own[it.id]; if (g.on[it.slot] === it.id) delete g.on[it.slot]; gearOpenId = null; again(); });
